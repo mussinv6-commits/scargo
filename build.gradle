@@ -1,0 +1,55 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.3.0' 
+    id 'io.spring.dependency-management' version '1.1.5' 
+}
+
+group = 'com.example'
+version = '0.0.1-SNAPSHOT'
+
+java {
+    sourceCompatibility = '17' 
+}
+
+repositories {
+    mavenCentral() // 라이브러리를 다운로드할 중앙 저장소 설정
+}
+
+dependencies {
+    // 웹 및 MVC 환경
+    implementation 'org.springframework.boot:spring-boot-starter-web'       
+    implementation 'org.springframework.boot:spring-boot-starter-tomcat'   
+
+    //데이터베이스 및 MyBatis 연동
+    implementation 'org.springframework.boot:spring-boot-starter-jdbc'       
+    implementation 'org.mybatis.spring.boot:mybatis-spring-boot-starter:3.0.3' 
+    implementation 'org.mybatis:mybatis:3.5.19'                              
+    runtimeOnly 'org.postgresql:postgresql'                                 
+
+    // 보안 및 유효성 검증
+    implementation 'org.springframework.boot:spring-boot-starter-security'   // 로그인, 권한 부여 및 암호화(BCrypt 등) 보안 기능
+    implementation 'org.springframework.boot:spring-boot-starter-validation' // @Valid, @NotBlank 등 입력값 검증 도구
+
+    // 데이터 직렬화
+    implementation 'com.fasterxml.jackson.core:jackson-databind'           
+
+    //개발 편의 및 설정 도구
+    developmentOnly 'org.springframework.boot:spring-boot-devtools'         // 소스 변경 시 서버 자동 재시작(Reload) 기능
+    annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor' 
+    
+    //롬복(Lombok) 의존성 설정
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+    
+    //화면 렌더링 및 지도 연동
+    implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'  // HTML 화면 렌더링 및 좌표 데이터 전달용
+
+    //테스트 도구
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'  
+    
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+}
+
+tasks.named('test') {
+    useJUnitPlatform() 
+}
