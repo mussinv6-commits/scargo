@@ -34,14 +34,17 @@ public class Account {
     private String userPw;
 
     @Builder.Default
-    @Column(name = "user_type", nullable = false, length = 20)
-    private String userType = "driver";
+    @Column(name = "user_type", nullable = false, length = 30)
+    private String userType = "GENERAL";
 
     @Column(name = "company_id")
     private Long companyId;
 
     @Column(name = "phone_num", length = 20)
     private String phoneNum;
+
+    @Column(name = "business_no", length = 20)
+    private String businessNo;
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false, insertable = false)

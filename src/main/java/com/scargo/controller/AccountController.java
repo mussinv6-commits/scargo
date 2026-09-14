@@ -40,10 +40,19 @@ public class AccountController {
         return ResponseEntity.ok(response);
     }
     
- // 로그인 API (POST /api/accounts/login)
+   // 로그인 API (POST /api/accounts/login)
     @PostMapping("/login")
     public ResponseEntity<AccountResponse> login(@RequestBody LoginRequest request) {
         AccountResponse response = accountService.login(request);
         return ResponseEntity.ok(response);
     }
+    
+   // 관리자의 기업계정 승인 API (PATCH /api/accounts/{id}/approve)
+    @PatchMapping("/{id}/approve")
+    @PreAuthorize("hasRole('ADMIN')") // 관리자만 승인 가능 (테스트 시 주석처리)
+    public ResponseEntity<Void> approveCorporateAccount(@PathVariable("id") Long id) {
+        accountService.approveCorporateAccount(id);
+        return ResponseEntity.ok().build();
+    }
+    
 }

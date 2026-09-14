@@ -7,14 +7,12 @@ build/
 
 ### STS ###
 .apt_generated
-.apt_generated_tests
 .classpath
 .factorypath
 .project
 .settings
 .springBeans
 .sts4-cache
-.metadata
 bin/
 !**/src/main/**/bin/
 !**/src/test/**/bin/

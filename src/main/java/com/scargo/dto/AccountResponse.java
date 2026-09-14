@@ -14,6 +14,7 @@ public class AccountResponse {
     private String userType;
     private Long companyId;
     private String phoneNum;
+    private String businessNo; 
     private OffsetDateTime createdAt;
 
     public AccountResponse(Account account) {
@@ -23,6 +24,7 @@ public class AccountResponse {
         this.userType = account.getUserType();
         this.companyId = account.getCompanyId();
         this.phoneNum = account.getPhoneNum();
+        this.businessNo = account.getBusinessNo(); 
         this.createdAt = account.getCreatedAt();
     }
 }

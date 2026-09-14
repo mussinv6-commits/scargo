@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<title>화물차 이동 경로 데모</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; font-family: "맑은 고딕", sans-serif; }
+  #map { width: 100%; height: 100%; }
+  #status {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    z-index: 10;
+    background: #25262A;
+    color: #fff;
+    padding: 12px 18px;
+    border-radius: 8px;
+    font-size: 15px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    max-width: 320px;
+  }
+  #status .stage { color: #E2A30A; font-weight: bold; }
+  #status .plate { color: #FBEECB; font-size: 13px; margin-top: 4px; }
+  #truck {
+    font-size: 26px;
+    transform: translate(-50%, -50%);
+  }
+  #panel {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    z-index: 10;
+    background: #fff;
+    border: 1px solid #E4E5E8;
+    border-radius: 8px;
+    padding: 14px;
+    font-size: 13px;
+    width: 240px;
+  }
+  #panel h3 { margin: 0 0 8px; font-size: 14px; }
+  #panel input[type="file"] { width: 100%; margin-bottom: 8px; font-size: 12px; }
+  #panel button {
+    width: 100%;
+    margin-bottom: 6px;
+    padding: 8px;
+    border: none;
+    border-radius: 6px;
+    background: #E2A30A;
+    color: #25262A;
+    font-weight: bold;
+    cursor: pointer;
+  }
+  #panel button:disabled { background: #E4E5E8; color: #AEB0B8; cursor: not-allowed; }
+  #panel .result { margin-top: 8px; font-size: 12px; color: #4A4C53; }
+</style>
+</head>
+<body>
+
+<div id="status">현재 단계: <span class="stage">대기 중</span><div class="plate"></div></div>
+
+<div id="panel">
+  <h3>① 게이트 통과 - 번호판 검사</h3>
+  <input type="file" id="plateFile" accept="image/*" />
+  <button id="inspectBtn">사진 업로드해서 검사</button>
+  <div class="result" id="inspectResult"></div>
+  <h3 style="margin-top:14px">② 검사소 이동</h3>
+  <button id="overloadBtn" disabled>과적 체크 진행</button>
+</div>
+
+<div id="map"></div>
+
+<script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=14a84f7c944e699758e0898fb3ada0d4&autoload=false"></script>
+<script>
+// FastAPI 서버 주소 - uvicorn app.main:app --port 8000 로 띄운 상태여야 함
+const FASTAPI_URL = "http://localhost:8000";
+
+kakao.maps.load(function () {
+
+  // 인천신항 대략 좌표 - 실제 위치에 맞게 조정해서 쓰면 됨
+  const CENTER = new kakao.maps.LatLng(37.3400, 126.5450);
+
+  const map = new kakao.maps.Map(document.getElementById("map"), {
+    center: CENTER,
+    level: 4,
+  });
+
+  // 체크포인트 3곳: 적재장 -> 게이트(번호판인식) -> 검사소(과적체크)
+  const checkpoints = [
+    { name: "적재장", lat: 37.3410, lng: 126.5430 },
+    { name: "게이트", lat: 37.3402, lng: 126.5450 },
+    { name: "검사소", lat: 37.3393, lng: 126.5468 },
+  ];
+
+  checkpoints.forEach((cp) => {
+    new kakao.maps.Marker({
+      position: new kakao.maps.LatLng(cp.lat, cp.lng),
+      map: map,
+    });
+    new kakao.maps.CustomOverlay({
+      position: new kakao.maps.LatLng(cp.lat, cp.lng),
+      content: `<div style="background:#fff;padding:4px 8px;border-radius:6px;font-size:12px;border:1px solid #E4E5E8;transform:translateY(-32px)">${cp.name}</div>`,
+      map: map,
+    });
+  });
+
+  const path = checkpoints.map((cp) => new kakao.maps.LatLng(cp.lat, cp.lng));
+  new kakao.maps.Polyline({
+    path: path,
+    strokeWeight: 4,
+    strokeColor: "#E2A30A",
+    strokeOpacity: 0.9,
+    strokeStyle: "solid",
+    map: map,
+  });
+
+  const truckEl = document.createElement("div");
+  truckEl.id = "truck";
+  truckEl.innerText = "🚛";
+  const truckOverlay = new kakao.maps.CustomOverlay({
+    position: path[0],
+    content: truckEl,
+    map: map,
+  });
+
+  function interpolate(a, b, t) {
+    return new kakao.maps.LatLng(
+      a.getLat() + (b.getLat() - a.getLat()) * t,
+      a.getLng() + (b.getLng() - a.getLng()) * t
+    );
+  }
+
+  // 트럭을 fromIdx -> toIdx 구간으로 이동시키고, 끝나면 resolve
+  const STEPS_PER_SEGMENT = 60;
+  function animateSegment(fromIdx, toIdx) {
+    return new Promise((resolve) => {
+      let step = 0;
+      const timer = setInterval(() => {
+        const t = step / STEPS_PER_SEGMENT;
+        truckOverlay.setPosition(interpolate(path[fromIdx], path[toIdx], t));
+        step++;
+        if (step > STEPS_PER_SEGMENT) {
+          clearInterval(timer);
+          resolve();
+        }
+      }, 40);
+    });
+  }
+
+  const statusStage = document.querySelector("#status .stage");
+  const statusPlate = document.querySelector("#status .plate");
+  statusStage.innerText = "적재장 대기 중";
+
+  // ---- ① 번호판 검사: FastAPI(/api/plates/inspect)에 사진 업로드 ----
+  const fileInput = document.getElementById("plateFile");
+  const inspectBtn = document.getElementById("inspectBtn");
+  const inspectResult = document.getElementById("inspectResult");
+  const overloadBtn = document.getElementById("overloadBtn");
+
+  inspectBtn.addEventListener("click", async () => {
+    const file = fileInput.files[0];
+    if (!file) {
+      inspectResult.innerText = "사진을 먼저 선택하세요.";
+      return;
+    }
+
+    inspectBtn.disabled = true;
+    inspectResult.innerText = "검사 중...";
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch(`${FASTAPI_URL}/api/plates/inspect`, {
+        method: "POST",
+        body: formData,
+      });
+      if (!res.ok) throw new Error(`서버 응답 오류 (${res.status})`);
+
+      const data = await res.json();
+      const plate = data.plate_candidates && data.plate_candidates[0];
+
+      if (plate) {
+        inspectResult.innerText = `인식됨: ${plate}`;
+        statusPlate.innerText = `번호판: ${plate}`;
+      } else {
+        inspectResult.innerText = "번호판 후보를 찾지 못함 (판독불가)";
+        statusPlate.innerText = "";
+      }
+
+      // 인식 결과와 상관없이 게이트까지는 이동 (실패 처리 로직은 추후 추가)
+      statusStage.innerText = "게이트 통과 중";
+      await animateSegment(0, 1);
+      statusStage.innerText = "번호판 인식 완료";
+      overloadBtn.disabled = false;
+
+    } catch (err) {
+      inspectResult.innerText = `연결 실패: ${err.message} (FastAPI 서버가 켜져 있는지 확인)`;
+    } finally {
+      inspectBtn.disabled = false;
+    }
+  });
+
+  // ---- ② 과적 체크: 지금은 FastAPI에 해당 로직이 없어 이동만 시뮬레이션 ----
+  overloadBtn.addEventListener("click", async () => {
+    overloadBtn.disabled = true;
+    statusStage.innerText = "검사소로 이동 중";
+    await animateSegment(1, 2);
+    statusStage.innerText = "과적 체크 중 (임시 시뮬레이션)";
+  });
+
+});
+</script>
+
+</body>
+</html>
