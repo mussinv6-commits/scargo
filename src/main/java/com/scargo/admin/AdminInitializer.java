@@ -24,7 +24,7 @@ public class AdminInitializer implements ApplicationRunner {
             Account admin1 = Account.builder()
                     .userName("시스템관리자1")
                     .userId("admin")
-                    .userPw(passwordEncoder.encode("admin1234"))
+                    .userPw(passwordEncoder.encode("admin1234"))  // 알아서 암호화후 DB에 저장(비밀번호 입력:평문  저장:암호문)
                     .userType("ADMIN")
                     .phoneNum("010-1111-1111")
                     .build();
@@ -36,7 +36,7 @@ public class AdminInitializer implements ApplicationRunner {
             Account admin2 = Account.builder()
                     .userName("시스템관리자2")
                     .userId("admin2")
-                    .userPw(passwordEncoder.encode("admin5678"))
+                    .userPw(passwordEncoder.encode("admin5678"))  // 알아서 암호화후 DB에 저장(비밀번호 입력:평문  저장:암호문)
                     .userType("ADMIN")
                     .phoneNum("010-2222-2222")
                     .build();

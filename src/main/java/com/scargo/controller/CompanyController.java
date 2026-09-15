@@ -1,6 +1,7 @@
 package com.scargo.controller;
 
 import com.scargo.dto.CompanyCreateRequest;
+import com.scargo.dto.CompanyOptionResponse;
 import com.scargo.dto.CompanyResponse;
 import com.scargo.service.CompanyService;
 import lombok.RequiredArgsConstructor;
@@ -52,5 +53,10 @@ public class CompanyController {
         List<CompanyResponse> responses = companyService.getCompaniesByCompanyName(companyName);
         System.out.println("전달받은 업체명: " + companyName); // 부트상에서 입력값 확인용
         return ResponseEntity.ok(responses);
+    }
+    // 업체 목록 조회
+    @GetMapping("/options")
+    public ResponseEntity<List<CompanyOptionResponse>> getCompanyOptions() {
+        return ResponseEntity.ok(companyService.getCompanyOptions());
     }
 }

@@ -1,6 +1,7 @@
 package com.scargo.service;
 
 import com.scargo.dto.CompanyCreateRequest;
+import com.scargo.dto.CompanyOptionResponse;
 import com.scargo.dto.CompanyResponse;
 import com.scargo.entity.Company;
 import com.scargo.repository.CompanyRepository;
@@ -64,6 +65,12 @@ public class CompanyService {
     public List<CompanyResponse> getCompaniesByCompanyName(String companyName) {
         return companyRepository.findByCompanyNameContaining(companyName).stream()
                 .map(CompanyResponse::new)
+                .collect(Collectors.toList());
+    }
+    // 업체 목록 조회
+    public List<CompanyOptionResponse> getCompanyOptions() {
+        return companyRepository.findAll().stream()
+                .map(CompanyOptionResponse::new)
                 .collect(Collectors.toList());
     }
 }

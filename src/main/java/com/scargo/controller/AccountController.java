@@ -18,6 +18,7 @@ public class AccountController {
 
     private final AccountService accountService;
 
+    
     // 계정 생성 API (POST /api/accounts)
     @PostMapping
     public ResponseEntity<AccountResponse> createAccount(@RequestBody AccountCreateRequest request) {
@@ -25,6 +26,13 @@ public class AccountController {
         return ResponseEntity.ok(response);
     }
 
+    // 아이디 중복 확인 API (GET /api/accounts/check-id/{userId})
+    @GetMapping("/check-id/{userId}")
+    public ResponseEntity<String> checkUserId(@PathVariable("userId") String userId) {
+        boolean available = accountService.isUserIdAvailable(userId);
+        return ResponseEntity.ok(available ? "YES" : "NO");
+    }
+    
     // 전체 계정 조회 API (GET /api/accounts)
     @GetMapping
     @PreAuthorize("hasRole('ADMIN')")  // 관리자만 전체 회원 조회 가능 , postman이나 프론트에서 직접확인하고 싶을시 주석처리
@@ -54,5 +62,7 @@ public class AccountController {
         accountService.approveCorporateAccount(id);
         return ResponseEntity.ok().build();
     }
+    
+    
     
 }

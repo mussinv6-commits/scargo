@@ -24,42 +24,57 @@ public class AccountService {
     private final CompanyRepository companyRepository;
     private final BCryptPasswordEncoder passwordEncoder;
 
-    // 계정 등록 로직 (일반회원 / 기업회원 분기 처리)
+    // 계정 등록 로직 (관리자 / 일반회원 / 기업회원 구분)
+    // 관리자는 회사명+주소 입력 X 일반회원/기업회원은 필수 기업회원은 추가로 사업자 등록번호
     @Transactional
     public AccountResponse createAccount(AccountCreateRequest request) {
-        // 1. 아이디 중복 체크
         accountRepository.findByUserId(request.getUserId())
                 .ifPresent(a -> {
                     throw new IllegalArgumentException("이미 존재하는 아이디입니다.");
                 });
 
+        String userType = request.getUserType();
+        if (userType == null || userType.isBlank()) {
+            userType = "GENERAL"; // 기본값 일반회원
+        }
+
         Long companyId = null;
-        String userType = "GENERAL"; // 기본값 일반회원
         String businessNo = null;
 
-        // 2. 기업회원 가입인 경우 
-        if (request.getCompanyName() != null && !request.getCompanyName().isBlank()) {
-            Company company = companyRepository.findByCompanyNameAndAddress(request.getCompanyName(), request.getAddress())
-                    .orElseThrow(() -> new IllegalArgumentException("존재하지 않거나 정보가 일치하는 업체가 없습니다."));
-            
-            companyId = company.getCompanyId();
-            userType = "CORPORATE_PENDING"; // 승인 전 대기 상태로 설정
-            businessNo = request.getBusinessNo();
+        // 관리자(ADMIN)가 아닌 경우에만 소속 회사 및 위치(주소) 필수 체크
+        if (!"ADMIN".equals(userType)) {
+            if (request.getCompanyId() == null) {
+                throw new IllegalArgumentException("소속 업체를 선택해주세요.");
+            }
 
-            if (businessNo == null || businessNo.isBlank()) {
-                throw new IllegalArgumentException("기업 회원은 사업자 등록번호입력 필수.");
+            Company company = companyRepository.findById(request.getCompanyId())
+                    .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 업체입니다."));
+
+            companyId = company.getCompanyId();
+
+         // 추가 검증 (기업회원인 경우 사업자 등록번호 필수)
+            if ("CORPORATE_PENDING".equals(userType)) {
+                businessNo = request.getBusinessNo();
+
+                if (businessNo == null || businessNo.isBlank()) {
+                    throw new IllegalArgumentException("기업 회원은 사업자 등록번호 입력이 필수입니다.");
+                }
+
+                if (company.getBusinessNo() == null || !company.getBusinessNo().equals(businessNo)) {
+                    throw new IllegalArgumentException("입력하신 사업자 등록번호가 선택하신 업체 정보와 일치하지 않습니다.");
+                }
             }
         }
 
-        // 3. Account 엔티티 빌드 및 저장
+        // 회원데이터 DB에 저장
         Account account = Account.builder()
                 .userId(request.getUserId())
-                .userPw(passwordEncoder.encode(request.getUserPw())) // 비밀번호 암호화
+                .userPw(passwordEncoder.encode(request.getUserPw()))
                 .userName(request.getUserName())
                 .phoneNum(request.getPhoneNum())
-                .userType(userType)          // 'GENERAL' 또는 'CORPORATE_PENDING'
-                .companyId(companyId)        // 소속 회사 ID
-                .businessNo(businessNo)      // 사업자 등록번호 (기업회원만)
+                .userType(userType)
+                .companyId(companyId)
+                .businessNo(businessNo)
                 .build();
 
         Account savedAccount = accountRepository.save(account);
@@ -108,4 +123,9 @@ public class AccountService {
         // 상태를 승인 완료로 변경
         account.setUserType("CORPORATE_APPROVED");  // 기업계정(대기)-> 기업계정(승인)
     }
+    // 아이디 중복 확인 (사용 가능하면 true)
+    public boolean isUserIdAvailable(String userId) {
+        return !accountRepository.existsByUserId(userId);
+    }
+    
 }
