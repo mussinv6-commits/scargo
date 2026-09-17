@@ -41,4 +41,10 @@ public class Container {
 
     @Column(name = "created_at", insertable = false, updatable = false)
     private OffsetDateTime createdAt; // 컨테이너 정보 생성 일시
+    
+    @Column(name = "assigned_vehicle_no", length = 20)
+    private String assignedVehicleNo;  // 배정된 차량 번호
+
+    @Column(name = "assigned_at")
+    private OffsetDateTime assignedAt;   // 배정된 시간
 }

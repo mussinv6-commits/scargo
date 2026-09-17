@@ -2,12 +2,14 @@ package com.scargo.controller;
 
 import com.scargo.dto.AccountCreateRequest;
 import com.scargo.dto.AccountResponse;
-import com.scargo.service.AccountService;
 import com.scargo.dto.LoginRequest;
+import com.scargo.service.AccountService;
+import jakarta.servlet.http.HttpServletRequest; // 추가
+import jakarta.servlet.http.HttpSession; // 추가
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
@@ -18,7 +20,6 @@ public class AccountController {
 
     private final AccountService accountService;
 
-    
     // 계정 생성 API (POST /api/accounts)
     @PostMapping
     public ResponseEntity<AccountResponse> createAccount(@RequestBody AccountCreateRequest request) {
@@ -32,10 +33,10 @@ public class AccountController {
         boolean available = accountService.isUserIdAvailable(userId);
         return ResponseEntity.ok(available ? "YES" : "NO");
     }
-    
+
     // 전체 계정 조회 API (GET /api/accounts)
     @GetMapping
-    @PreAuthorize("hasRole('ADMIN')")  // 관리자만 전체 회원 조회 가능 , postman이나 프론트에서 직접확인하고 싶을시 주석처리
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<List<AccountResponse>> getAllAccounts() {
         List<AccountResponse> responses = accountService.getAllAccounts();
         return ResponseEntity.ok(responses);
@@ -47,22 +48,29 @@ public class AccountController {
         AccountResponse response = accountService.getAccount(id);
         return ResponseEntity.ok(response);
     }
-    
-   // 로그인 API (POST /api/accounts/login)
+
+    // 로그인 API (POST /api/accounts/login) - 세션 저장 로직 추가
     @PostMapping("/login")
-    public ResponseEntity<AccountResponse> login(@RequestBody LoginRequest request) {
+    public ResponseEntity<AccountResponse> login(
+            @RequestBody LoginRequest request,
+            HttpServletRequest httpRequest // 1. HttpServletRequest 파라미터 추가
+    ) {
         AccountResponse response = accountService.login(request);
+
+        // 2. 세션 생성 및 저장 (기존 세션이 없으면 신규 생성)
+        HttpSession session = httpRequest.getSession(true);
+        
+        // 3. 세션에 accountId 저장 
+        session.setAttribute("accountId", response.getAccountId()); 
+
         return ResponseEntity.ok(response);
     }
-    
-   // 관리자의 기업계정 승인 API (PATCH /api/accounts/{id}/approve)
+
+    // 관리자의 기업계정 승인 API (PATCH /api/accounts/{id}/approve)
     @PatchMapping("/{id}/approve")
-    @PreAuthorize("hasRole('ADMIN')") // 관리자만 승인 가능 (테스트 시 주석처리)
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> approveCorporateAccount(@PathVariable("id") Long id) {
         accountService.approveCorporateAccount(id);
         return ResponseEntity.ok().build();
     }
-    
-    
-    
 }
