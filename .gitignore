@@ -35,3 +35,12 @@ out/
 
 ### VS Code ###
 .vscode/
+
+### Frontend (Vue/Vite) ###
+frontend/node_modules
+frontend/dist
+frontend/dist-ssr
+frontend/*.local
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
