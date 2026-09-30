@@ -1,0 +1,46 @@
+# 학습 산출물 / 대용량 모델 파일 (GitHub 용량 문제로 제외 - 필요하면 Git LFS나 별도 백업으로 관리)
+runs/
+weights/
+*.pt
+*.pth
+ocr_model/
+ocr_model_attn/backup_*.pth
+ocr_model_attn/*backup*.pth
+
+# 데이터셋 / 학습용 대용량 이미지
+ocr_train_data/
+ocr_train_data_synthetic/
+test/
+train/
+valid/
+unlabeled_temp/
+low_confidence_review/
+manual_labels/
+hardbatch_aug/
+frame_check/
+frame_check2/
+frame_check3/
+work_deck1/
+work_deck2/
+work_deck3/
+work_deck4/
+backup_bilstm_v1_20260926/
+cpu_build_env/
+
+# 빌드/배포 산출물
+build/
+dist/
+*.spec
+__pycache__/
+*.pyc
+
+# 런타임 상태 (감시 폴더 - 자동 생성됨)
+게이트_수신함/
+
+# 실험 로그/결과 CSV (재생성 가능, 용량도 있음)
+*_result.csv
+batch_test_result.csv
+
+# 기타
+crash_log.txt
+*.csv.bak

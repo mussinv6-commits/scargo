@@ -1,0 +1,177 @@
+#app {
+  font-family: Avenir, Helvetica, Arial, sans-serif;
+  text-align: center;
+  color: var(--color-text);
+}
+
+.wrapper {
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+a {
+  text-decoration: none !important;
+}
+
+nav.navbar,
+footer {
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
+}
+
+/* ===== 브랜드 컬러 (헤더 / 푸터 공통 - Main 네이비) ===== */
+.bg-brand {
+  background: var(--color-primary) !important;
+}
+
+footer.bg-brand small {
+  color: #b9c3e0;
+}
+
+footer.bg-brand .nav-link {
+  color: var(--color-bg) !important;
+}
+
+footer.bg-brand .nav-link:hover {
+  color: var(--color-accent) !important;
+}
+
+/* ===== 헤더(네비게이션): Main 네이비 배경 + 포인트 오렌지 ===== */
+nav.navbar.bg-brand {
+  background: var(--color-primary) !important;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.08);
+}
+
+.navbar-nav > li {
+  padding-left: 20px;
+  padding-right: 20px;
+}
+
+/* 로고/메뉴: 아이스 화이트, hover: 포인트 오렌지 */
+.navbar-dark .navbar-nav .nav-link {
+  color: var(--color-bg);
+  font-weight: 600;
+  transition: color 0.15s ease;
+}
+
+.navbar-dark .navbar-nav .nav-link:hover {
+  color: var(--color-accent);
+}
+
+/* 선택된(현재) 메뉴: 포인트 오렌지 */
+.navbar-dark .navbar-nav .nav-link.nav-link-active {
+  color: var(--color-accent);
+}
+
+.auth-menu {
+  padding: 0 15px;
+}
+
+.auth-menu .nav-item {
+  padding: 0 8px !important;
+}
+
+.auth-link {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.9rem;
+  color: var(--color-bg) !important;
+}
+
+.auth-link:hover {
+  color: var(--color-accent) !important;
+}
+
+.auth-link i {
+  font-size: 1rem;
+}
+
+.auth-welcome {
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+.auth-divider {
+  color: var(--color-bg);
+  opacity: 0.35;
+  display: flex;
+  align-items: center;
+  padding: 0 !important;
+}
+
+.nav-grid .navbar-collapse {
+  display: flex;
+  align-items: center;
+}
+
+.nav-spacer {
+  flex: 1;
+}
+
+.nav-grid .navbar-nav:not(.auth-menu) {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+}
+
+.auth-menu {
+  flex: 1;
+  display: flex;
+  justify-content: flex-end;
+}
+/* ===== 드롭다운 메뉴 (게시판/관리자/사업자/화물차기사 공통) ===== */
+.dropdown-menu {
+  border: none;
+  border-radius: 10px;
+  box-shadow: 0 14px 34px rgba(10, 37, 64, 0.18);
+  padding: 8px;
+  margin-top: 10px;
+}
+
+.dropdown-item {
+  color: var(--color-text);
+  font-size: 13.5px;
+  font-weight: 600;
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+
+.dropdown-item:hover,
+.dropdown-item:focus {
+  background: rgba(10, 37, 64, 0.06);
+  color: var(--color-primary);
+}
+
+.dropdown-item.router-link-active {
+  color: var(--color-accent);
+  background: rgba(255, 107, 0, 0.08);
+}
+
+/* ===== 역할별 메인 메뉴(관리자/사업자/화물차기사) 강조 ===== */
+.role-menu > .dropdown-toggle {
+  border-radius: 20px;
+  padding: 5px 14px !important;
+}
+
+.role-admin > .dropdown-toggle {
+  background: rgba(255, 107, 0, 0.16);
+  color: #ffd7b0 !important;
+}
+.role-biz > .dropdown-toggle {
+  background: rgba(59, 86, 116, 0.4);
+}
+.role-driver > .dropdown-toggle {
+  background: rgba(16, 185, 129, 0.16);
+}
+
+.pending-hint {
+  opacity: 0.55;
+  font-size: 0.85rem;
+  cursor: default;
+}
+
+/* 부트스트랩 dropdown-toggle 화살표가 흰 배경 기준으로 그려지는 문제 보정 */
+.navbar-dark .dropdown-toggle::after {
+  border-top-color: currentColor;
+}

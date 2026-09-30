@@ -1,0 +1,261 @@
+/* 로그인 화면과 동일한 배경(야간 고속도로) + 오버레이를 사용해 인증 플로우 톤을 통일 */
+.regi-page {
+  position: relative;
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
+  min-height: 100vh;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 60px 20px;
+  box-sizing: border-box;
+  background-image: url("@/assets/logistics.png");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+
+.regi-page::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(10, 37, 64, 0.85), rgba(10, 37, 64, 0.7));
+}
+
+/* 트러스트 & 마린 팔레트 매핑 (scoped라 :root 대신 .regi-box에 정의) */
+.regi-box {
+  --regi-primary: var(--color-primary, #0a2540);
+  --regi-primary-hover: var(--color-primary-hover, #123a63);
+  --regi-accent: var(--color-accent, #ff6b00);
+  --regi-text: var(--color-text, #0a2540);
+  --regi-text-muted: var(--color-subtext, #64748b);
+  --regi-border: #d7dce4;
+  --regi-bg-soft: var(--color-bg, #f4f6f8);
+  --regi-danger: #ef4444;
+
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 520px;
+  margin: 0;
+}
+
+.card {
+  border: none;
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(10, 37, 64, 0.18);
+}
+
+.card-header {
+  background: var(--regi-primary);
+  color: #fff;
+  text-align: center;
+  font-size: 26px;
+  font-weight: bold;
+  padding: 22px;
+  letter-spacing: 1px;
+}
+
+.card-body {
+  background: #fff;
+}
+
+/* 1,2,3,5,6,8,9. 라벨 + 입력요소를 한 줄(grid)로 배치. 3번째 열은 중복확인 버튼 전용 */
+.form-row {
+  display: grid;
+  grid-template-columns: 100px 1fr 92px;
+  align-items: center;
+  gap: 12px;
+}
+
+.form-row,
+.id-check-msg,
+.field-error {
+  margin-top: 16px;
+}
+
+/* 26.09.21 추가: 아이디처럼 3번째 칸(중복확인 버튼)이 없는 행은
+   라디오 그룹이 그 92px 자리까지 넓게 써서 한 줄에 더 잘 들어가도록 함 */
+.form-row--wide-field .radio-group {
+  grid-column: 2 / span 2;
+}
+
+.card-body form > .form-row:first-child {
+  margin-top: 0;
+}
+
+.form-row .form-label {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--regi-text);
+  white-space: nowrap;
+}
+
+.form-row .form-control,
+.form-row .form-select {
+  width: 100%;
+  padding: 10px 14px;
+  font-size: 14.5px;
+  border-radius: 8px;
+  border: 1px solid var(--regi-border);
+  background-color: var(--regi-bg-soft);
+  color: var(--regi-text);
+  transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s;
+  box-sizing: border-box;
+}
+
+.form-row .form-control:focus,
+.form-row .form-select:focus {
+  outline: none;
+  border-color: var(--regi-accent);
+  box-shadow: 0 0 0 3px rgba(255, 107, 0, 0.18);
+  background-color: #fff;
+}
+
+.form-row .form-control[readonly] {
+  background-color: #eef1f5;
+  color: var(--regi-text-muted);
+  cursor: default;
+}
+
+/* 회원 유형 라디오: 입력란 자리에 가로 배치 */
+.radio-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 18px;
+  height: 100%;
+}
+
+.radio-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14.5px;
+  color: var(--regi-text);
+  cursor: pointer;
+  white-space: nowrap; /* 26.09.21 추가: "기존 업체 선택" 같은 긴 라벨이 중간에서 줄바꿈되지 않도록 */
+}
+
+.radio-option input[type="radio"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--regi-accent);
+}
+
+/* 아이디 입력 + 중복확인 버튼 */
+.id-check-btn {
+  width: 100%;
+  height: 100%;
+  min-height: 38px;
+  padding: 0 10px;
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  border-radius: 8px;
+  border: 1px solid var(--regi-primary);
+  background: #fff;
+  color: var(--regi-primary);
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.id-check-btn:hover {
+  background: var(--regi-primary);
+  color: #fff;
+}
+
+.id-check-msg {
+  margin-left: 112px;
+  font-size: 12.5px;
+}
+
+/* 4. 비밀번호 표시/숨김 버튼: 입력란 우측 내부 */
+.password-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.password-wrapper .form-control {
+  padding-right: 40px;
+}
+
+.pw-toggle-btn {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--regi-text-muted);
+  cursor: pointer;
+  border-radius: 6px;
+  transition: color 0.15s, background-color 0.15s;
+}
+
+.pw-toggle-btn:hover {
+  color: var(--regi-primary);
+  background-color: rgba(10, 37, 64, 0.06);
+}
+
+.pw-toggle-btn:focus-visible {
+  outline: 2px solid var(--regi-accent);
+  outline-offset: 1px;
+}
+
+.field-error {
+  margin-left: 112px;
+  font-size: 12.5px;
+  color: var(--regi-danger);
+}
+
+.regi-submit-btn {
+  display: block;
+  width: 60%;
+  min-width: 200px;
+  margin: 26px auto 0;
+  padding: 11px;
+  font-size: 16px;
+  font-weight: bold;
+  border-radius: 8px;
+  background: var(--regi-primary);
+  border: none;
+  color: #fff;
+  transition: background-color 0.15s, transform 0.15s, box-shadow 0.15s;
+}
+
+.regi-submit-btn:hover {
+  background: var(--regi-primary-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(10, 37, 64, 0.3);
+}
+
+/* 좁은 화면에서는 라벨/입력란을 세로로 전환 (로그인 화면과 동일 기준) */
+@media (max-width: 480px) {
+  .form-row {
+    grid-template-columns: 1fr;
+    row-gap: 6px;
+  }
+  .id-check-msg,
+  .field-error {
+    margin-left: 0;
+  }
+  .id-check-btn {
+    width: auto;
+    padding: 0 14px;
+  }
+  .regi-submit-btn {
+    width: 100%;
+  }
+}

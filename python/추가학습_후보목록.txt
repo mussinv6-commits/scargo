@@ -1,0 +1,241 @@
+학습셋에 아직 없는데, 검출/인식에 문제가 있었던 것으로 확인된 사진 목록
+(라벨링 후 train/images, train/labels에 추가하면 재학습에 활용 가능)
+============================================================
+
+006너7931.jpeg  <- 저확신도(conf=0.533, 화물차_merged)
+006너8562.jpeg  <- still_no_detection.txt
+006너9792.jpeg  <- no_detection_list.txt
+006너9793.jpeg  <- 저확신도(conf=0.336, 화물차_merged)
+006더6445.jpeg  <- no_detection_list.txt
+006더6447.jpeg  <- still_no_detection.txt
+006더6616.jpeg  <- no_detection_list.txt
+006더7108.jpeg  <- still_no_detection.txt, no_detection_list.txt
+006러7405.jpeg  <- no_detection_list.txt
+36국6798.jpeg  <- no_detection_list.txt
+강원81바1400.jpeg  <- no_detection_list.txt
+강원83바2154.jpeg  <- no_detection_list.txt
+강원89바3023.jpeg  <- no_detection_list.txt
+강원98바1402.jpeg  <- no_detection_list.txt
+강원98바9603.jpeg  <- no_detection_list.txt
+강원98사1064.jpeg  <- no_detection_list.txt
+경기80아2186.jpeg  <- still_no_detection.txt, no_detection_list.txt
+경기80아2842.jpeg  <- no_detection_list.txt
+경기80자2065.jpeg  <- still_no_detection.txt, no_detection_list.txt
+경기81자7447.jpeg  <- no_detection_list.txt
+경기82바6939.jpeg  <- no_detection_list.txt
+경기82바8326.jpeg  <- 저확신도(conf=0.143, 화물차_merged), no_detection_list.txt
+경기83사5652.jpeg  <- no_detection_list.txt
+경기84바7976.jpeg  <- no_detection_list.txt
+경기84바8125.jpeg  <- no_detection_list.txt
+경기84바8168.jpeg  <- still_no_detection.txt, no_detection_list.txt
+경기85바5047.jpeg  <- still_no_detection.txt
+경기85사5209.jpeg  <- no_detection_list.txt
+경기85아4240.jpeg  <- still_no_detection.txt, no_detection_list.txt
+경기85자5382.jpeg  <- no_detection_list.txt
+경기86사4217.jpeg  <- no_detection_list.txt
+경기86사8102.jpeg  <- 저확신도(conf=0.398, 화물차_merged), no_detection_list.txt
+경기86자4736.jpeg  <- no_detection_list.txt
+경기86자5261.jpeg  <- no_detection_list.txt
+경기89바3646.jpeg  <- no_detection_list.txt
+경기89아7796.jpeg  <- no_detection_list.txt
+경기90자6588.jpeg  <- no_detection_list.txt
+경기90자8715.jpeg  <- no_detection_list.txt
+경기91아7142.jpeg  <- no_detection_list.txt
+경기91아7910.jpeg  <- still_no_detection.txt, no_detection_list.txt
+경기91아9214.jpeg  <- 저확신도(conf=0.191, 화물차_merged), no_detection_list.txt
+경기92아1253.jpeg  <- 저확신도(conf=0.137, 화물차_merged), no_detection_list.txt
+경기92아5439.jpeg  <- no_detection_list.txt
+경기92자6681.jpeg  <- no_detection_list.txt
+경기92자9284.jpeg  <- no_detection_list.txt
+경기93사3031.jpeg  <- no_detection_list.txt
+경기94바5839.jpeg  <- no_detection_list.txt
+경기94사2024.jpeg  <- no_detection_list.txt
+경기94사3491.jpeg  <- no_detection_list.txt
+경기95자1176.jpeg  <- no_detection_list.txt
+경기95자1591.jpeg  <- no_detection_list.txt
+경기95자7860.jpeg  <- no_detection_list.txt
+경기95자9162.jpeg  <- 저확신도(conf=0.079, 화물차_merged), no_detection_list.txt
+경기96사1256.jpeg  <- no_detection_list.txt
+경기96자1581.jpeg  <- no_detection_list.txt
+경기96자2223.jpeg  <- no_detection_list.txt
+경기98자1763.jpeg  <- no_detection_list.txt
+경기99바5301.jpeg  <- no_detection_list.txt
+경기99바9788.jpeg  <- no_detection_list.txt
+경남06모6426.jpeg  <- still_no_detection.txt
+경남06모7917.jpeg  <- still_no_detection.txt
+경남06소6333.jpeg  <- still_no_detection.txt
+경남06소6486.jpeg  <- still_no_detection.txt
+경남14노5426.jpeg  <- still_no_detection.txt
+경남14노5533.jpeg  <- still_no_detection.txt
+경남14노7607.jpeg  <- 저확신도(conf=0.196, 화물차_merged)
+경남14노7722.jpeg  <- still_no_detection.txt
+경남14노7724.jpeg  <- still_no_detection.txt
+경남14노7883.jpeg  <- 저확신도(conf=0.227, 화물차_merged)
+경남14노7915.jpeg  <- still_no_detection.txt
+경남14노8165.jpeg  <- 저확신도(conf=0.314, 화물차_merged)
+경남14노8283.jpeg  <- 저확신도(conf=0.091, 화물차_merged)
+경남14노8462.jpeg  <- still_no_detection.txt
+경남14노8729.jpeg  <- still_no_detection.txt
+경남14노8741.jpeg  <- still_no_detection.txt
+경남70아3729.jpeg  <- no_detection_list.txt
+경남72바7315.jpeg  <- no_detection_list.txt
+경남80배7104.jpeg  <- no_detection_list.txt
+경남80배8592.jpeg  <- no_detection_list.txt
+경남80사1407.jpeg  <- no_detection_list.txt
+경남80사8567.jpeg  <- no_detection_list.txt
+경남80아8058.jpeg  <- no_detection_list.txt
+경남80아8416.jpeg  <- no_detection_list.txt
+경남81사1657.jpeg  <- no_detection_list.txt
+경남81사1894.jpeg  <- still_no_detection.txt
+경남81사5152.jpeg  <- no_detection_list.txt
+경남81아2520.jpeg  <- no_detection_list.txt
+경남81아2553.jpeg  <- no_detection_list.txt
+경남81아6153.jpeg  <- no_detection_list.txt
+경남81아7287.jpeg  <- no_detection_list.txt
+경남82사3075.jpeg  <- no_detection_list.txt
+경남82사5270.jpeg  <- 저확신도(conf=0.101, 화물차_merged)
+경남82사5830.jpeg  <- no_detection_list.txt
+경남82사6125.jpeg  <- 저확신도(conf=0.137, 화물차_merged)
+경남82사6764.jpeg  <- 저확신도(conf=0.471, 화물차_merged)
+경남82사8580.jpeg  <- still_no_detection.txt, no_detection_list.txt
+경남82아6526.jpeg  <- no_detection_list.txt
+경남82아7468.jpeg  <- no_detection_list.txt
+경남82아9755.jpeg  <- no_detection_list.txt
+경남83아2710.jpeg  <- no_detection_list.txt
+경남90자8342.jpeg  <- no_detection_list.txt
+경남91자3304.jpeg  <- no_detection_list.txt
+경남99바2707.jpeg  <- 저확신도(conf=0.516, 화물차_merged)
+경남99바4834.jpeg  <- no_detection_list.txt
+경남99바9772.jpeg  <- no_detection_list.txt
+경남99사4463.jpeg  <- no_detection_list.txt
+경남99사4799.jpeg  <- no_detection_list.txt
+경북81아5904.jpeg  <- no_detection_list.txt
+경북86바3350.jpeg  <- 저확신도(conf=0.128, 화물차_merged)
+경북86아1316.jpeg  <- no_detection_list.txt
+경북86아6904.jpeg  <- no_detection_list.txt
+경북86아7250.jpeg  <- no_detection_list.txt
+경북86아9559.jpeg  <- 저확신도(conf=0.445, 화물차_merged), no_detection_list.txt
+경북87아5842.jpeg  <- still_no_detection.txt
+경북87아6440.jpeg  <- no_detection_list.txt
+경북88자1268.jpeg  <- no_detection_list.txt
+경북98사4005.jpeg  <- no_detection_list.txt
+경북98사5843.jpeg  <- no_detection_list.txt
+경북98사6638.jpeg  <- no_detection_list.txt
+경북98사7578.jpeg  <- no_detection_list.txt
+경북98사7743.jpeg  <- no_detection_list.txt
+경북98아2472.jpeg  <- no_detection_list.txt
+경북98아4459.jpeg  <- no_detection_list.txt
+경북99아5733.jpeg  <- 저확신도(conf=0.530, 화물차_merged)
+광주85사2116.jpeg  <- 저확신도(conf=0.246, 화물차_merged)
+대구70바2397.jpeg  <- 저확신도(conf=0.396, 화물차_merged)
+대구80아2512.jpeg  <- 저확신도(conf=0.204, 화물차_merged)
+대구80아5743.jpeg  <- 저확신도(conf=0.084, 화물차_merged)
+대구80자1338.jpeg  <- 저확신도(conf=0.072, 화물차_merged), no_detection_list.txt
+대구80자2128.jpeg  <- 저확신도(conf=0.450, 화물차_merged), no_detection_list.txt
+대구80자6850.jpeg  <- no_detection_list.txt
+대구80자7492.jpeg  <- no_detection_list.txt
+대구80자8326.jpeg  <- no_detection_list.txt
+대구81바6237.jpeg  <- 저확신도(conf=0.186, 화물차_merged)
+대구81바6683.jpeg  <- still_no_detection.txt
+대구81아5363.jpeg  <- still_no_detection.txt
+대구86아1076.jpeg  <- still_no_detection.txt
+대전89아6993.jpeg  <- no_detection_list.txt
+부남80두2084.jpeg  <- still_no_detection.txt, no_detection_list.txt
+부산80노1122.jpeg  <- still_no_detection.txt, no_detection_list.txt
+부산80누1017.jpeg  <- 저확신도(conf=0.103, 화물차_merged)
+부산80두3869.jpeg  <- still_no_detection.txt
+부산80러4819.jpeg  <- 저확신도(conf=0.141, 화물차_merged)
+부산80루9010.jpeg  <- still_no_detection.txt
+부산80무6611.jpeg  <- 저확신도(conf=0.326, 화물차_merged)
+부산81가1761.jpeg  <- 저확신도(conf=0.171, 화물차_merged)
+부산81나2076.jpeg  <- 저확신도(conf=0.510, 화물차_merged)
+부산86누1017.jpeg  <- still_no_detection.txt
+부산90바5567.jpeg  <- no_detection_list.txt
+부산90바8941.jpeg  <- no_detection_list.txt
+부산90배1026.jpeg  <- no_detection_list.txt
+부산90배1450.jpeg  <- no_detection_list.txt
+부산90배3635.jpeg  <- no_detection_list.txt
+부산90배4277.jpeg  <- 저확신도(conf=0.059, 화물차_merged), no_detection_list.txt
+부산90배4828.jpeg  <- no_detection_list.txt
+부산90배5191.jpeg  <- no_detection_list.txt
+부산90배5254.jpeg  <- no_detection_list.txt
+부산90배5367.jpeg  <- no_detection_list.txt
+부산90배5437.jpeg  <- no_detection_list.txt
+부산90배6084.jpeg  <- no_detection_list.txt
+부산90배7253.jpeg  <- no_detection_list.txt
+부산90배7520.jpeg  <- no_detection_list.txt
+부산90배7690.jpeg  <- no_detection_list.txt
+부산90배7845.jpeg  <- no_detection_list.txt
+부산90배7913.jpeg  <- no_detection_list.txt
+부산90배7923.jpeg  <- no_detection_list.txt
+부산90배8407.jpeg  <- no_detection_list.txt
+부산90배8933.jpeg  <- no_detection_list.txt
+부산90배9151.jpeg  <- no_detection_list.txt
+부산90배9366.jpeg  <- no_detection_list.txt
+부산90자3051.jpeg  <- no_detection_list.txt
+부산90자5514.jpeg  <- no_detection_list.txt
+부산91바1727.jpeg  <- no_detection_list.txt
+부산91바2342.jpeg  <- no_detection_list.txt
+부산91자1611.jpeg  <- still_no_detection.txt, no_detection_list.txt
+부산91자1923.jpeg  <- no_detection_list.txt
+부산91자2193.jpeg  <- no_detection_list.txt
+부산91자2982.jpeg  <- no_detection_list.txt
+부산91자4016.jpeg  <- no_detection_list.txt
+부산91자4148.jpeg  <- no_detection_list.txt
+부산91자4203.jpeg  <- no_detection_list.txt
+부산91자4701.jpeg  <- no_detection_list.txt
+부산91자4955.jpeg  <- 저확신도(conf=0.270, 화물차_merged), no_detection_list.txt
+부산91자5081.jpeg  <- no_detection_list.txt
+부산91자5656.jpeg  <- no_detection_list.txt
+부산91자5787.jpeg  <- no_detection_list.txt
+부산94아1829.jpeg  <- no_detection_list.txt
+부산95아2504.jpeg  <- no_detection_list.txt
+부산96아1156.jpeg  <- no_detection_list.txt
+부산96아3401.jpeg  <- no_detection_list.txt
+부산98바4529.jpeg  <- no_detection_list.txt
+부산98바5912.jpeg  <- no_detection_list.txt
+부산98바9620.jpeg  <- 저확신도(conf=0.473, 화물차_merged), no_detection_list.txt
+부산98사1020.jpeg  <- no_detection_list.txt
+부산98사1102.jpeg  <- no_detection_list.txt
+부산98사2406.jpeg  <- no_detection_list.txt
+부산98사2482.jpeg  <- no_detection_list.txt
+부산98사4083.jpeg  <- no_detection_list.txt
+부산99바3204.jpeg  <- no_detection_list.txt
+부산99바5343.jpeg  <- no_detection_list.txt
+부산99바7897.jpeg  <- no_detection_list.txt
+부산99사2954.jpeg  <- no_detection_list.txt
+부산99사3164.jpeg  <- no_detection_list.txt
+부산99사5208.jpeg  <- no_detection_list.txt
+부산99사6028.jpeg  <- no_detection_list.txt
+부산99사9560.jpeg  <- no_detection_list.txt
+서울80바3830.jpeg  <- no_detection_list.txt
+서울80바9212.jpeg  <- no_detection_list.txt
+서울82바3297.jpeg  <- no_detection_list.txt
+서울85바4252.jpeg  <- no_detection_list.txt
+서울85바4735.jpeg  <- no_detection_list.txt
+서울86바1748.jpeg  <- no_detection_list.txt
+서울86바4851.jpeg  <- no_detection_list.txt
+서울89자9584.jpeg  <- still_no_detection.txt, no_detection_list.txt
+서울89자9615.jpeg  <- no_detection_list.txt
+울산80사2417.jpeg  <- no_detection_list.txt
+울산80사2605.jpeg  <- no_detection_list.txt
+울산80아1939.jpeg  <- no_detection_list.txt
+울산80아6432.jpeg  <- no_detection_list.txt
+울산80아7396.jpeg  <- no_detection_list.txt
+울산81사1363.jpeg  <- no_detection_list.txt
+울산81사3919.jpeg  <- no_detection_list.txt
+울산81사4552.jpeg  <- no_detection_list.txt
+울산81아9175.jpeg  <- no_detection_list.txt
+울산90배3020.jpeg  <- no_detection_list.txt
+울산90배3067.jpeg  <- no_detection_list.txt
+울산99바1425.jpeg  <- no_detection_list.txt
+울산99바1436.jpeg  <- no_detection_list.txt
+울산99바2339.jpeg  <- no_detection_list.txt
+울산99바3755.jpeg  <- no_detection_list.txt
+울산99바6334.jpeg  <- no_detection_list.txt
+울산99바8207.jpeg  <- no_detection_list.txt
+전남87바5931.jpeg  <- still_no_detection.txt, no_detection_list.txt
+전남98사7311.jpeg  <- no_detection_list.txt
+전남98사7662.jpeg  <- no_detection_list.txt
+충남89바2712.jpeg  <- 저확신도(conf=0.346, 화물차_merged)
+충북90아9211.jpeg  <- still_no_detection.txt

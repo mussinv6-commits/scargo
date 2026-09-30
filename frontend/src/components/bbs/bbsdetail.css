@@ -1,0 +1,12 @@
+table {
+  margin: auto;
+  width: 800px;
+}
+.center td {
+  padding: 2px;
+  text-align: left;
+  padding: 10px;
+}
+th{
+    background-color: royalblue;
+}

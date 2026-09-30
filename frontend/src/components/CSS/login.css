@@ -1,0 +1,200 @@
+/* 야간 고속도로 배경 (Photo by Benjamin Chambon on Unsplash, Unsplash License - 상업적 사용 무료, 출처 표기 불필요) */
+.login-page {
+  position: relative;
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  box-sizing: border-box;
+  background-image: url("@/assets/Logistics.jpg");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+
+/* 이미지 위에 Main 네이비 톤 오버레이를 얹어 카드와의 대비를 확보 */
+.login-page::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(10, 37, 64, 0.85), rgba(10, 37, 64, 0.7));
+}
+
+/* 트러스트 & 마린 팔레트를 로그인 카드에 매핑 */
+/* :root 대신 .login-box에 정의 (scoped 스타일에서는 :root가 적용되지 않음) */
+.login-box {
+  --login-primary: var(--color-primary, #0a2540);
+  --login-primary-hover: var(--color-primary-hover, #123a63);
+  --login-accent: var(--color-accent, #ff6b00); /* 포커스/체크박스 강조색 */
+  --login-text: var(--color-text, #0a2540);
+  --login-text-muted: var(--color-subtext, #64748b);
+  --login-border: #d7dce4;
+  --login-bg-soft: var(--color-bg, #f4f6f8);
+
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 480px;
+  margin: 0;
+}
+
+.card {
+  border: none;
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(10, 37, 64, 0.18);
+}
+
+.card-header {
+  background: var(--login-primary, #0a2540);
+  color: white;
+  text-align: center;
+  font-size: 28px;
+  font-weight: bold;
+  padding: 22px;
+  letter-spacing: 1px;
+}
+
+/* 1, 2. 라벨 + 입력란(+ 아이디 저장)을 한 줄로 배치 */
+/* grid로 열 너비를 고정해 ID/비밀번호 입력란 크기를 동일하게 맞춤 */
+.form-row {
+  display: grid;
+  grid-template-columns: 90px 1fr 108px;
+  align-items: center;
+  gap: 12px;
+}
+
+.form-row .form-label {
+  margin: 0;
+  font-size: 15px;
+  color: var(--login-text, #0a2540);
+}
+
+.form-row .form-control {
+  width: 100%;
+  padding: 10px 14px;
+  font-size: 15px;
+  border-radius: 8px;
+  border: 1px solid var(--login-border, #d7dce4);
+  background-color: var(--login-bg-soft, #f4f6f8);
+  transition: border-color 0.2s, box-shadow 0.2s;
+  box-sizing: border-box;
+}
+
+.form-row .form-control:focus {
+  outline: none;
+  border-color: var(--login-accent, #ff6b00);
+  box-shadow: 0 0 0 3px rgba(255, 107, 0, 0.18);
+  background-color: #fff;
+}
+
+/* 비밀번호 보기/숨김 토글: 입력란 우측 내부에 위치 */
+.password-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.password-wrapper .form-control {
+  padding-right: 40px; /* 아이콘 공간 확보 */
+}
+
+.pw-toggle-btn {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--login-text-muted, #64748b);
+  cursor: pointer;
+  border-radius: 6px;
+  transition: color 0.15s, background-color 0.15s;
+}
+
+.pw-toggle-btn:hover {
+  color: var(--login-primary, #0a2540);
+  background-color: rgba(10, 37, 64, 0.06);
+}
+
+.pw-toggle-btn:focus-visible {
+  outline: 2px solid var(--login-accent, #ff6b00);
+  outline-offset: 1px;
+}
+
+/* 아이디 저장 체크박스: 3번째 고정 열에 위치, 없는 행(비밀번호)에서도
+   열 너비는 그대로 유지되어 입력란 크기가 흔들리지 않음 */
+.save-id-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 13px;
+  color: var(--login-text-muted, #64748b);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.save-id-label .form-check-input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--login-accent, #ff6b00);
+}
+
+/* 2. 버튼 길이를 살짝 줄이고 가운데 정렬 */
+.btn-login {
+  display: block;
+  width: 60%;
+  min-width: 180px;
+  margin: 4px auto 0;
+  padding: 10px;
+  font-size: 16px;
+  font-weight: bold;
+  border-radius: 8px;
+  background: var(--login-primary, #0a2540);
+  border: none;
+  color: #fff;
+  transition: background-color 0.15s, transform 0.15s, box-shadow 0.15s;
+}
+
+.btn-login:hover {
+  background: var(--login-primary-hover, #123a63);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(10, 37, 64, 0.3);
+}
+
+.signup {
+  text-align: center;
+  margin-top: 18px;
+  font-size: 14px;
+  color: var(--login-text-muted, #64748b);
+}
+
+.signup a {
+  color: var(--login-primary, #0a2540);
+}
+
+/* 좁은 화면에서는 라벨/입력란을 세로로 전환 */
+@media (max-width: 480px) {
+  .form-row {
+    grid-template-columns: 1fr;
+    row-gap: 6px;
+  }
+  .save-id-label {
+    justify-content: flex-end;
+  }
+  .btn-login {
+    width: 100%;
+  }
+}

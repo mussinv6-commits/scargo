@@ -1,0 +1,15 @@
+train:
+  - C:/Users/user/Desktop/project.v4i.yolov8/train/images
+  - C:/Users/user/Desktop/추가학습_검수/images
+val: C:/Users/user/Desktop/project.v4i.yolov8/valid/images
+test: C:/Users/user/Desktop/project.v4i.yolov8/test/images
+
+nc: 1
+names: ['plate']
+
+roboflow:
+  workspace: s-workspace-jotqh
+  project: project-mh9pt
+  version: 4
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/s-workspace-jotqh/project-mh9pt/dataset/4

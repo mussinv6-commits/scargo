@@ -1,0 +1,85 @@
+/* ============================================================
+   전역 스타일 통일 (unify.css)
+   -----------------------------------------------------------
+   main.js 에서 bootstrap.css 이후, theme.css 다음으로 로드된다.
+   게시판(bbs) 등 순정 부트스트랩 클래스를 쓰는 화면들이
+   프로젝트 브랜드 컬러(--color-primary 네이비 / --color-accent 오렌지)를
+   그대로 물려받도록 부트스트랩 기본값만 얇게 오버라이드한다.
+   ============================================================ */
+
+body {
+  font-family: 'Inter', Avenir, Helvetica, Arial, sans-serif;
+}
+
+/* ---- 버튼 ---- */
+.btn-primary {
+  --bs-btn-bg: var(--color-primary);
+  --bs-btn-border-color: var(--color-primary);
+  --bs-btn-hover-bg: var(--color-primary-hover);
+  --bs-btn-hover-border-color: var(--color-primary-hover);
+  --bs-btn-active-bg: var(--color-primary-hover);
+  --bs-btn-active-border-color: var(--color-primary-hover);
+  --bs-btn-disabled-bg: var(--color-secondary);
+  --bs-btn-disabled-border-color: var(--color-secondary);
+  font-weight: 600;
+}
+
+.btn-accent {
+  --bs-btn-color: #fff;
+  --bs-btn-bg: var(--color-accent);
+  --bs-btn-border-color: var(--color-accent);
+  --bs-btn-hover-color: #fff;
+  --bs-btn-hover-bg: #e05f00;
+  --bs-btn-hover-border-color: #e05f00;
+  font-weight: 600;
+}
+
+/* ---- 링크/포커스 ---- */
+a { color: var(--color-primary); }
+a:hover { color: var(--color-accent); }
+
+.form-control:focus,
+.form-select:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 0.2rem rgba(10, 37, 64, 0.12);
+}
+
+/* ---- 테이블(게시판 목록/글쓰기/상세) ---- */
+.table {
+  --bs-table-hover-bg: rgba(10, 37, 64, 0.04);
+}
+.table thead th {
+  color: var(--color-subtext);
+  font-size: 0.82rem;
+  font-weight: 700;
+  border-bottom-width: 1px;
+}
+.table-info,
+.table > :not(caption) > * > .table-info {
+  --bs-table-bg: rgba(10, 37, 64, 0.06);
+  color: var(--color-text);
+}
+.text-underline-hover:hover {
+  text-decoration: underline !important;
+  color: var(--color-primary);
+  cursor: pointer;
+}
+
+/* ---- 페이지네이션(bootstrap-vue-3 b-pagination) ---- */
+.page-link {
+  color: var(--color-primary);
+}
+.page-item.active .page-link {
+  background-color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+.page-link:hover {
+  color: var(--color-accent);
+}
+
+/* ---- 폼 카드형 페이지(게시글 작성/수정) 여백 정리 ---- */
+#bbslist, #bbswrite, #bbsdetail, #bbsupdate {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 24px 16px 60px;
+}

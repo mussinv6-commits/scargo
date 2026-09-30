@@ -1,0 +1,161 @@
+/* 사업자(업체) 섹션 전용 스타일. theme.css 의 --color-* 토큰을 그대로 사용한다. */
+
+.biz-shell {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 32px 16px 64px;
+}
+
+.biz-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+.biz-header h1 {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0 0 4px;
+}
+.biz-header p {
+  font-size: 13.5px;
+  color: var(--color-subtext);
+  margin: 0;
+}
+
+.biz-tabs {
+  display: flex;
+  gap: 6px;
+  border-bottom: 1px solid #e3e8ef;
+  margin-bottom: 22px;
+}
+.biz-tab {
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-subtext);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+}
+.biz-tab:hover { color: var(--color-primary); }
+.biz-tab.active { color: var(--color-primary); border-bottom-color: var(--color-accent); }
+
+/* ---- 업체 정보 카드 ---- */
+.dash-wrap { display: flex; justify-content: center; }
+.dash-card {
+  width: 100%;
+  background: var(--color-card);
+  border-radius: 16px;
+  padding: 28px;
+  box-shadow: 0 10px 30px rgba(10, 37, 64, 0.08);
+  border: 1px solid #eef1f8;
+}
+.dash-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+.dash-header h2 { font-size: 19px; margin: 0; color: var(--color-text); }
+.badge { background: rgba(10, 37, 64, 0.08); color: var(--color-primary); font-size: 12px; font-weight: 700; padding: 4px 12px; border-radius: 20px; }
+.info-row { display: flex; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid #f0f2f5; font-size: 14px; }
+.info-row span { color: var(--color-subtext); }
+.section-title { font-weight: 700; font-size: 15px; margin: 24px 0 12px; color: var(--color-text); }
+.truck-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.truck-table th { text-align: left; color: var(--color-subtext); font-size: 12px; padding: 10px; border-bottom: 1px solid #e3e8ef; background: #f8fafc; }
+.truck-table td { padding: 10px; border-bottom: 1px solid #f0f2f5; }
+.empty-text { color: #98a2b3; font-size: 14px; text-align: center; padding: 20px 0; }
+.hint-text { color: var(--color-subtext); font-size: 12.5px; margin-top: 6px; }
+
+/* ---- 배차 매핑 화면 ---- */
+.mapping-grid {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 20px;
+  align-items: start;
+}
+@media (max-width: 800px) {
+  .mapping-grid { grid-template-columns: 1fr; }
+}
+
+.mapping-card {
+  background: var(--color-card);
+  border: 1px solid #eef1f8;
+  border-radius: 16px;
+  padding: 22px;
+  box-shadow: 0 10px 30px rgba(10, 37, 64, 0.06);
+}
+.mapping-card h3 {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0 0 16px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #eef1f8;
+}
+
+.mapping-field { margin-bottom: 14px; }
+.mapping-field label { display: block; font-size: 12.5px; font-weight: 700; color: var(--color-subtext); margin-bottom: 5px; }
+.mapping-select, .mapping-input {
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid #dfe3ea;
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-family: inherit;
+}
+.mapping-select:focus, .mapping-input:focus { outline: none; border-color: var(--color-primary); }
+
+.mapping-submit-btn {
+  width: 100%;
+  padding: 11px;
+  border: none;
+  border-radius: 8px;
+  background: var(--color-accent);
+  color: #fff;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+}
+.mapping-submit-btn:disabled { background: #cbd5e1; cursor: not-allowed; }
+
+.mapping-status {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.mapping-status.ok { background: rgba(16, 185, 129, 0.12); color: #10b981; }
+.mapping-status.error { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
+
+.mapping-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.mapping-section-header h4 { font-size: 13.5px; font-weight: 700; color: var(--color-text); margin: 0; }
+.mapping-refresh-btn {
+  border: 1px solid #dfe3ea;
+  background: #fff;
+  color: var(--color-subtext);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.mapping-refresh-btn:hover { background: #f8fafc; }
+
+.mapping-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 20px; }
+.mapping-table th { text-align: left; color: var(--color-subtext); font-size: 11.5px; padding: 8px 10px; background: #f8fafc; border-bottom: 1px solid #e3e8ef; }
+.mapping-table td { padding: 9px 10px; border-bottom: 1px solid #f0f2f5; }
+.mapping-empty { text-align: center; color: #98a2b3; padding: 18px 0; }
+
+.mapping-truck-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.mapping-truck-card {
+  border: 1px solid #eef1f8;
+  border-radius: 10px;
+  padding: 12px;
+  background: #fafbfc;
+}
+.mapping-truck-card .truck-no { font-weight: 700; color: var(--color-text); font-size: 13.5px; }
+.mapping-truck-card .truck-meta { font-size: 12px; color: var(--color-subtext); margin-top: 3px; }

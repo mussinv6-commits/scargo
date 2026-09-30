@@ -1,0 +1,416 @@
+<template>
+  <div class="topbar">
+    <div>
+      <div class="brand">MY/차량</div>
+      <div class="sub">내 정보와 차량을 관리하세요</div>
+    </div>
+  </div>
+
+  <main class="page">
+    <div class="layout-2col">
+    <div class="col-main">
+    <!-- 프로필 (실제 로그인 계정 정보) -->
+    <div class="profile-card">
+      <div class="avatar">{{ initial }}</div>
+      <div class="profile-body">
+        <div class="profile-name">{{ user?.userName || '-' }}님</div>
+        <div class="profile-phone">{{ user?.phoneNum || '연락처 미등록' }}</div>
+        <div class="profile-badges">
+          <span class="mini-badge">{{ userTypeLabel }}</span>
+          <span class="mini-badge">ID {{ user?.userId }}</span>
+        </div>
+      </div>
+      <button class="edit-btn" @click="editProfile">수정</button>
+    </div>
+
+    <!-- 소속 업체 (companyId가 있는 계정만) -->
+    <template v-if="user?.companyId">
+      <div class="section-title">소속 업체</div>
+      <div class="card company-card">
+        <template v-if="company">
+          <div class="info-row"><span>업체명</span><b>{{ company.companyName }}</b></div>
+          <div class="info-row"><span>주소</span><b>{{ company.address }}</b></div>
+        </template>
+        <p v-else class="hint-text">업체 정보를 불러오는 중이거나 찾을 수 없습니다. (companyId: {{ user.companyId }})</p>
+      </div>
+    </template>
+
+    <!-- 차량 정보 (26.09.21 수정: 고정형/지입차 모델로 변경 - 직접 등록/조회 대신 관리자가 배정한 차량만 표시) -->
+    <div class="section-title" style="margin-top: 22px;">내 차량 정보</div>
+
+    <div v-if="myTruck" class="card truck-card">
+      <div class="info-row"><span>차량번호</span><b>{{ myTruck.vehicleNo }}</b></div>
+      <div class="info-row"><span>차종</span><b>{{ myTruck.truckType || '-' }}</b></div>
+      <div class="info-row"><span>세미트레일러</span><b>{{ myTruck.semiTrailer ? '예' : '아니오' }}</b></div>
+      <div class="info-row" v-if="myTruck.semiTrailer">
+        <span>트레일러 번호</span><b>{{ myTruck.trailerNo || '-' }}</b>
+      </div>
+      <div class="info-row"><span>최대 적재 중량</span><b>{{ myTruck.maxLoadWeight ?? '-' }} kg</b></div>
+    </div>
+
+    <div v-else class="card lookup-card">
+      <p class="hint-text">
+        아직 배정된 차량이 없습니다. 소속 업체 또는 관리자에게 차량 배정을 요청해주세요.
+      </p>
+    </div>
+
+    <!-- 적재 위치(야드) 현황 -->
+    <template v-if="myTruck">
+      <div class="section-title" style="margin-top: 22px;">적재 위치 현황</div>
+      <div class="card location-card">
+        <p v-if="!locations.length" class="hint-text">불러올 야드 정보가 없습니다.</p>
+        <div v-for="loc in locations" :key="loc.locationId" class="location-item">
+          <div>
+            <b>야드 #{{ loc.yardId }}</b>
+            <span class="location-sector"> · {{ loc.sector }}</span>
+          </div>
+          <span class="badge" :class="loc.isAvailable ? 'done' : 'cancel'">
+            {{ loc.isAvailable ? '이용가능' : (loc.status || '이용불가') }}
+          </span>
+        </div>
+      </div>
+    </template>
+
+    <!-- 입·출차 체크인 -->
+    <template v-if="myTruck">
+      <div class="section-title" style="margin-top: 22px;">입·출차 체크인</div>
+      <form class="card checkin-form" @submit.prevent="submitCheckin">
+        <input class="input" v-model="checkin.containerNo" placeholder="컨테이너 번호" />
+        <select class="input" v-model.number="checkin.locationId">
+          <option value="" disabled>적재 장소 선택</option>
+          <option v-for="loc in locations" :key="loc.locationId" :value="loc.locationId">
+            야드 #{{ loc.yardId }} · {{ loc.sector }}
+          </option>
+        </select>
+        <button type="submit" class="btn-fill">체크인 등록</button>
+        <p v-if="checkinMsg" class="hint-text">{{ checkinMsg }}</p>
+      </form>
+    </template>
+
+    <!-- 나의 운행 이력 -->
+    <template v-if="myTruck">
+      <div class="section-title" style="margin-top: 22px;">나의 운행 이력</div>
+      <div class="card">
+        <table v-if="records.length" class="record-table">
+          <thead>
+            <tr><th>컨테이너</th><th>장소 ID</th><th>일시</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="r in records" :key="r.recordId">
+              <td>{{ r.containerNo }}</td>
+              <td>{{ r.locationId }}</td>
+              <td>{{ formatDate(r.loadedAt) }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <p v-else class="hint-text">아직 운행 이력이 없습니다.</p>
+      </div>
+    </template>
+
+    </div>
+
+    <aside class="side-panel">
+    <!-- 푸시 알림 설정 (※ 현재는 이 기기에만 저장되는 프런트 전용 설정입니다) -->
+    <div class="section-title">푸시 알림 설정</div>
+    <div class="card toggle-card">
+      <div class="toggle-row">
+        <div>
+          <div class="toggle-label">배차 알림</div>
+          <div class="toggle-desc">새 배차가 등록되면 즉시 알려드려요</div>
+        </div>
+        <label class="switch"><input type="checkbox" v-model="notif.dispatch"><span class="slider"></span></label>
+      </div>
+      <div class="toggle-row">
+        <div>
+          <div class="toggle-label">운행 상태 알림</div>
+          <div class="toggle-desc">상/하차 시간 임박, 지연 등 운행 관련 안내</div>
+        </div>
+        <label class="switch"><input type="checkbox" v-model="notif.trip"><span class="slider"></span></label>
+      </div>
+      <div class="toggle-row">
+        <div>
+          <div class="toggle-label">정산·세금계산서 알림</div>
+          <div class="toggle-desc">정산 완료, 세금계산서 발행 상태 안내</div>
+        </div>
+        <label class="switch"><input type="checkbox" v-model="notif.settlement"><span class="slider"></span></label>
+      </div>
+      <div class="toggle-row">
+        <div>
+          <div class="toggle-label">공지사항 알림</div>
+          <div class="toggle-desc">서비스 점검, 정책 변경 등 주요 공지</div>
+        </div>
+        <label class="switch"><input type="checkbox" v-model="notif.notice"><span class="slider"></span></label>
+      </div>
+    </div>
+
+    <!-- 기타 -->
+    <div class="section-title" style="margin-top: 22px;">기타</div>
+    <div class="card menu-card">
+      <button class="menu-row" @click="alertPlaceholder('자주 묻는 질문')">자주 묻는 질문 <span class="chev">›</span></button>
+      <button class="menu-row" @click="alertPlaceholder('고객센터 문의')">고객센터 문의 <span class="chev">›</span></button>
+      <button class="menu-row" @click="alertPlaceholder('약관 및 정책')">약관 및 정책 <span class="chev">›</span></button>
+    </div>
+
+    <button class="logout-btn" @click="logout">로그아웃</button>
+    <div class="version">앱 버전 1.0.0</div>
+    </aside>
+    </div>
+  </main>
+</template>
+
+<script setup>
+import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import axios from 'axios'
+import { authState, clearLogin } from '@/auth/authState.js'
+import { API_BASE } from '@/utils/apiBase.js'
+
+const router = useRouter()
+
+// ---- 로그인 사용자 (authState는 로그인/로그아웃 시 전역으로 갱신됨) ----
+const user = computed(() => authState.user)
+const initial = computed(() => user.value?.userName?.[0] || '?')
+const userTypeLabel = computed(() => {
+  const map = {
+    GENERAL: '일반 회원',
+    CORPORATE_PENDING: '기업 회원 (승인대기)',
+    CORPORATE_APPROVED: '기업 회원 (승인완료)',
+    ADMIN: '관리자',
+  }
+  return map[user.value?.userType] || user.value?.userType || '-'
+})
+
+// ---- 소속 업체 ----
+// 주의: 백엔드에 companyId로 단건 조회하는 API가 없고(있는 건 /api/companies/{businessNo}뿐),
+// /api/companies/options 로 전체 목록을 받아 companyId로 찾는 방식으로 대체합니다.
+const company = ref(null)
+async function fetchCompany() {
+  if (!user.value?.companyId) return
+  try {
+    const resp = await axios.get(`${API_BASE}/api/companies/options`, { withCredentials: true })
+    company.value = resp.data.find(c => c.companyId === user.value.companyId) || null
+  } catch (err) {
+    console.error(err)
+  }
+}
+
+// ---- 26.09.21 수정: 고정형(지입차) 모델로 전환 ----
+// 기사가 직접 차량번호를 검색/등록하지 않고, 관리자가 "기사 배정"한 차량을 그대로 보여준다.
+// (구 GET /api/trucks/{vehicleNo} + POST /api/trucks 방식 → GET /api/trucks/my 로 단순화)
+const myTruck = ref(null)
+
+async function fetchMyTruck() {
+  try {
+    const resp = await axios.get(`${API_BASE}/api/trucks/my`, { withCredentials: true })
+    myTruck.value = resp.data
+    await fetchLocations()
+    await fetchRecords()
+  } catch (err) {
+    // 204 No Content(배정된 차량 없음) 포함, 그 외 에러도 일단 "배정 없음"으로 처리
+    myTruck.value = null
+  }
+}
+
+// ---- 적재 위치(야드) 현황 (GET /api/loading-locations) ----
+const locations = ref([])
+async function fetchLocations() {
+  try {
+    const resp = await axios.get(`${API_BASE}/api/loading-locations`, { withCredentials: true })
+    locations.value = resp.data
+  } catch (err) {
+    console.error(err)
+  }
+}
+
+// ---- 입·출차 체크인 / 운행 이력 ----
+// 주의: 백엔드에 LoadingRecordController/Service가 아직 없어(레포지토리만 존재)
+// 아래 두 API는 현재 항상 실패합니다. 컨트롤러가 추가되면 그대로 정상 동작합니다.
+const checkin = reactive({ containerNo: '', locationId: '' })
+const checkinMsg = ref('')
+const records = ref([])
+
+async function submitCheckin() {
+  checkinMsg.value = ''
+  if (!checkin.containerNo.trim() || !checkin.locationId) {
+    checkinMsg.value = '컨테이너 번호와 적재 장소를 입력해주세요.'
+    return
+  }
+  try {
+    await axios.post(
+      `${API_BASE}/api/loading-records`,
+      {
+        vehicleNo: myTruck.value.vehicleNo,
+        containerNo: checkin.containerNo.trim(),
+        locationId: checkin.locationId,
+      },
+      { withCredentials: true }
+    )
+    checkinMsg.value = '체크인이 등록되었습니다.'
+    checkin.containerNo = ''
+    checkin.locationId = ''
+    await fetchRecords()
+  } catch (err) {
+    checkinMsg.value =
+      err.response?.status === 404
+        ? '체크인 API가 아직 백엔드에 준비되지 않았습니다. (LoadingRecordController 필요)'
+        : err.response?.data?.message || '체크인 등록에 실패했습니다.'
+  }
+}
+
+async function fetchRecords() {
+  if (!myTruck.value) return
+  try {
+    const resp = await axios.get(`${API_BASE}/api/loading-records/vehicle/${myTruck.value.vehicleNo}`, { withCredentials: true })
+    records.value = resp.data
+  } catch (err) {
+    records.value = []
+  }
+}
+
+function formatDate(d) {
+  return d ? new Date(d).toLocaleString() : '-'
+}
+
+// ---- 푸시 알림 설정 (프런트 전용, localStorage에만 저장 - 백엔드 API 없음) ----
+const notif = reactive({
+  dispatch: true,
+  trip: true,
+  settlement: true,
+  notice: false,
+})
+
+watch(
+  notif,
+  (v) => {
+    if (user.value?.userId) {
+      localStorage.setItem(`scargo_notif_${user.value.userId}`, JSON.stringify(v))
+    }
+  },
+  { deep: true }
+)
+
+// ---- 기타 ----
+function editProfile() {
+  alert('회원정보 수정 API는 아직 백엔드에 없습니다. (준비 중)')
+}
+function alertPlaceholder(label) {
+  alert(`${label} 화면은 준비 중입니다.`)
+}
+function logout() {
+  if (!confirm('로그아웃 하시겠습니까?')) return
+  axios
+    .post(`${API_BASE}/api/accounts/logout`, {}, { withCredentials: true })
+    .catch(() => {}) // 백엔드에 logout API가 없어도 클라이언트 쪽은 로그아웃 처리
+    .finally(() => {
+      clearLogin()
+      router.push('/login')
+    })
+}
+
+// ---- 초기 로딩 ----
+onMounted(async () => {
+  if (!user.value) {
+    alert('로그인이 필요합니다.')
+    router.push('/login')
+    return
+  }
+
+  const savedNotif = localStorage.getItem(`scargo_notif_${user.value.userId}`)
+  if (savedNotif) Object.assign(notif, JSON.parse(savedNotif))
+
+  await fetchCompany()
+
+  // 26.09.21 수정: localStorage에 저장해둔 차량번호로 재조회하던 방식 →
+  // 관리자가 배정한 차량을 세션 기준으로 바로 조회하는 방식으로 변경
+  await fetchMyTruck()
+})
+</script>
+
+<style scoped>
+.page { padding: 28px 32px; }
+
+/* 프로필 */
+.profile-card {
+  display: flex; align-items: center; gap: 14px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px; margin-bottom: 18px;
+}
+.avatar {
+  width: 52px; height: 52px; border-radius: 50%;
+  background: var(--amber-soft); color: var(--amber);
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Barlow Condensed', sans-serif; font-size: 22px; font-weight: 700; flex-shrink: 0;
+}
+.profile-body { flex: 1; min-width: 0; }
+.profile-name { font-size: 16px; font-weight: 700; }
+.profile-phone { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+.profile-badges { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.mini-badge { font-size: 11.5px; color: var(--text-muted); background: var(--surface-alt); padding: 3px 8px; border-radius: 999px; }
+.edit-btn {
+  padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border);
+  background: transparent; color: var(--text); font-size: 13px; font-weight: 600; cursor: pointer; flex-shrink: 0;
+}
+
+.company-card, .truck-card, .lookup-card, .location-card, .checkin-form { margin-bottom: 4px; }
+
+.info-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 14px; border-bottom: 1px solid var(--border); }
+.info-row:last-of-type { border-bottom: none; }
+.info-row span { color: var(--text-muted); }
+/* 26.09.21 추가: 값(<b>)에 색이 명시돼 있지 않아 특정 환경에서 배경색과 거의 안 구분되던 문제 수정 */
+.info-row b { color: var(--text); font-weight: 600; }
+
+.hint-text { color: var(--text-muted); font-size: 13px; }
+.error-text { color: var(--red); font-size: 13px; margin-top: 4px; }
+
+.lookup-row { display: flex; gap: 8px; margin: 8px 0; }
+.input {
+  padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px;
+  font-size: 14px; flex: 1; background: var(--surface-alt); color: var(--text);
+}
+.input::placeholder { color: var(--text-muted); }
+
+.truck-form { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.checkbox-row { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+
+.btn-outline, .btn-fill {
+  padding: 10px 14px; border-radius: 8px; font-size: 13.5px; font-weight: 600; cursor: pointer; margin-top: 8px;
+}
+.btn-outline { background: transparent; border: 1px solid var(--amber); color: var(--amber); }
+.btn-fill { border: none; background: var(--amber); color: #1A1300; width: 100%; }
+.btn-outline:active, .btn-fill:active { transform: scale(0.98); }
+
+.location-item {
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--surface-alt); padding: 10px 12px; border-radius: 8px; font-size: 13px;
+}
+.location-item + .location-item { margin-top: 8px; }
+.location-sector { color: var(--text-muted); }
+
+.checkin-form { display: flex; flex-direction: column; gap: 10px; }
+
+.record-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.record-table th, .record-table td { padding: 8px; border-bottom: 1px solid var(--border); text-align: left; color: var(--text); }
+.record-table th { color: var(--text-muted); font-weight: 600; }
+
+/* 알림 토글 */
+.toggle-card { display: flex; flex-direction: column; }
+.toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 0; }
+.toggle-row + .toggle-row { border-top: 1px solid var(--border); }
+.toggle-label { font-size: 14.5px; font-weight: 600; }
+.toggle-desc { font-size: 12px; color: var(--text-muted); margin-top: 3px; line-height: 1.4; }
+.switch { position: relative; width: 44px; height: 26px; flex-shrink: 0; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider { position: absolute; cursor: pointer; inset: 0; background: var(--surface-alt); border: 1px solid var(--border); border-radius: 999px; transition: background .2s ease; }
+.slider::before { content: ""; position: absolute; width: 18px; height: 18px; left: 3px; top: 3px; background: var(--text-muted); border-radius: 50%; transition: transform .2s ease, background .2s ease; }
+.switch input:checked + .slider { background: var(--amber-soft); border-color: var(--amber); }
+.switch input:checked + .slider::before { transform: translateX(18px); background: var(--amber); }
+
+/* 기타 메뉴 */
+.menu-card { padding: 4px 16px; }
+.menu-row { width: 100%; display: flex; align-items: center; justify-content: space-between; padding: 14px 0; background: none; border: none; color: var(--text); font-size: 14.5px; font-weight: 500; cursor: pointer; text-align: left; }
+.menu-row + .menu-row { border-top: 1px solid var(--border); }
+.menu-row .chev { color: var(--text-muted); }
+
+.logout-btn { width: 100%; margin-top: 22px; padding: 14px; border-radius: var(--radius); border: 1px solid var(--border); background: transparent; color: var(--red); font-size: 14.5px; font-weight: 600; cursor: pointer; }
+.version { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 14px; }
+</style>

@@ -1,0 +1,69 @@
+/* ============================================================
+   전역 컬러 토큰
+   scoped 스타일 안에서도 CSS 변수는 상속되므로, App.css / home.css /
+   login.css / regi.css 등 어디서든 var(--color-xxx)로 참조하면 됨.
+   ============================================================ */
+:root {
+  --color-primary: #0a2540;        /* Main 60% - 딥 나이트 블루 (바다와 신뢰감) */
+  --color-primary-hover: #123a63;  /* 버튼 마우스 오버 (한 톤 밝은 네이비) */
+  --color-secondary: #3b5674;      /* Main의 라이트 톤 - 보조 강조/보더용 */
+  --color-accent: #ff6b00;         /* Point 10% - 에너지 오렌지 (CTA, 상태 업데이트, 알림) */
+  --color-bg: #f4f6f8;             /* Sub 30% - 아이스 화이트 / 쿨 그레이 */
+  --color-card: #ffffff;           /* Card - 화이트 (가독성 확보용 여백) */
+  --color-text: #0a2540;           /* Text - 메인 컬러를 그대로 텍스트에도 사용 */
+  --color-subtext: #64748b;        /* Sub Text - 그레이 */
+
+  /* 물류 상태 표시 */
+  --status-delivered: #10b981;   /* 배송완료 */
+  --status-in-transit: #0a2540;  /* 배송중 - 메인 네이비 */
+  --status-pending: #ff6b00;     /* 배송대기 - 포인트 오렌지 */
+  --status-delayed: #ef4444;     /* 배송지연 */
+}
+
+body {
+  background-color: var(--color-bg);
+}
+
+/* ============================================================
+   물류 상태 배지 (아직 적용된 화면은 없지만, 배차/운행이력 등에서
+   바로 가져다 쓸 수 있도록 미리 준비해둠)
+   사용 예: <span class="status-badge status-delivered">배송완료</span>
+   ============================================================ */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 999px;
+  line-height: 1.6;
+}
+
+.status-badge::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.status-badge.status-delivered {
+  color: var(--status-delivered);
+  background: rgba(16, 185, 129, 0.12);
+}
+
+.status-badge.status-in-transit {
+  color: var(--status-in-transit);
+  background: rgba(10, 37, 64, 0.1);
+}
+
+.status-badge.status-pending {
+  color: var(--status-pending);
+  background: rgba(245, 158, 11, 0.14);
+}
+
+.status-badge.status-delayed {
+  color: var(--status-delayed);
+  background: rgba(239, 68, 68, 0.12);
+}

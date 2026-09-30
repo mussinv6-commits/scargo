@@ -1,0 +1,26 @@
+/* ============================================================
+   전역 베이스 리셋
+   -----------------------------------------------------------
+   원래 Vite 템플릿에서 생성된 다크모드/보라색 액센트 변수 세트가
+   theme.css(네이비/오렌지 브랜드 팔레트)와 이름이 겹치지 않도록
+   최소한의 리셋만 남기고 정리했다. 실제 색상 토큰은 전부
+   components/CSS/theme.css 에서 관리한다.
+   ============================================================ */
+:root {
+  font: 16px/1.5 'Inter', system-ui, 'Segoe UI', Roboto, sans-serif;
+  color-scheme: light;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  margin: 0;
+}

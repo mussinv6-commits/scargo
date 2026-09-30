@@ -1,0 +1,158 @@
+/* ============================================================
+   화물기사 앱(4개 화면) 전용 디자인 토큰 - PC 웹 기준 레이아웃
+   -----------------------------------------------------------
+   주의: 이 프로젝트에는 이미 src/style.css, CSS/theme.css 에서
+   :root 로 --bg, --border 등의 전역 변수를 정의하고 있습니다.
+   여기서 또 :root 에 같은 이름(--bg 등)으로 선언하면 전역 색상이
+   충돌/오염되므로, .driver-app-shell 클래스 스코프 안에서만
+   변수를 재정의합니다. (DriverAppLayout.vue 최상단 요소에 부여)
+   ============================================================ */
+
+.driver-app-shell {
+  --bg: #12161C;
+  --surface: #1B212A;
+  --surface-alt: #232A35;
+  --border: #2E3742;
+  --text: #EDEFF2;
+  --text-muted: #8B94A3;
+  --amber: #FFB020;
+  --amber-soft: rgba(255, 176, 32, 0.12);
+  --green: #2FBF71;
+  --green-soft: rgba(47, 191, 113, 0.12);
+  --red: #FF5A5F;
+  --red-soft: rgba(255, 90, 95, 0.12);
+  --radius: 10px;
+
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+
+  max-width: 1240px;
+  margin: 32px auto;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+
+  display: flex;
+  align-items: stretch;
+  min-height: 760px;
+}
+
+.driver-app-shell * { box-sizing: border-box; }
+
+.driver-app-shell .num,
+.driver-app-shell h1,
+.driver-app-shell h2,
+.driver-app-shell h3,
+.driver-app-shell .display {
+  font-family: 'Barlow Condensed', 'Inter', sans-serif;
+}
+
+.driver-app-shell button { font-family: inherit; }
+
+/* ---- 좌측 사이드바 (PC 전용 내비게이션) ---- */
+.driver-app-shell .driver-sidebar {
+  width: 224px;
+  flex-shrink: 0;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  padding: 24px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.driver-app-shell .driver-sidebar .brand-mark {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  padding: 4px 10px 20px;
+  color: var(--text);
+}
+.driver-app-shell .driver-sidebar .brand-mark span { color: var(--amber); }
+
+/* ---- 우측 메인 콘텐츠 (스크롤 영역) ---- */
+.driver-app-shell .driver-main {
+  flex: 1;
+  min-width: 0;
+  max-height: 760px;
+  overflow-y: auto;
+}
+
+/* 공통 상단바 */
+.driver-app-shell .topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 32px 18px;
+  border-bottom: 1px solid var(--border);
+}
+.driver-app-shell .topbar .brand {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 26px;
+  font-weight: 700;
+}
+.driver-app-shell .topbar .sub {
+  font-size: 13.5px;
+  color: var(--text-muted);
+  margin-top: 3px;
+}
+
+/* 공통 섹션 타이틀 */
+.driver-app-shell .section-title {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-weight: 600;
+  margin: 4px 0 10px;
+}
+
+/* 공통 카드 */
+.driver-app-shell .card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+}
+
+/* 공통 배지 */
+.driver-app-shell .badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.driver-app-shell .badge.waiting { background: var(--amber-soft); color: var(--amber); }
+.driver-app-shell .badge.active  { background: rgba(77, 166, 255, 0.14); color: #4DA6FF; }
+.driver-app-shell .badge.done    { background: var(--green-soft); color: var(--green); }
+.driver-app-shell .badge.cancel  { background: var(--red-soft); color: var(--red); }
+
+/* 화면 공통 2단 그리드 (본문 + 우측 보조 패널) */
+.driver-app-shell .layout-2col {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 24px;
+  align-items: start;
+}
+.driver-app-shell .side-panel {
+  position: sticky;
+  top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 카드/아이템을 여러 열로 배치할 때 쓰는 그리드 */
+.driver-app-shell .card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 14px;
+}
+
+@media (max-width: 900px) {
+  .driver-app-shell .layout-2col { grid-template-columns: 1fr; }
+  .driver-app-shell .side-panel { position: static; }
+}

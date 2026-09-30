@@ -1,0 +1,142 @@
+/* ===== Hero ===== */
+.home-hero {
+  position: relative;
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
+  min-height: 440px;
+  display: flex;
+  align-items: center;
+  /* 물류 배경 이미지 위에 Main 네이비 오버레이 - 항만/신뢰감 톤 */
+  background-image:
+    linear-gradient(120deg, rgba(10, 37, 64, 0.92) 0%, rgba(10, 37, 64, 0.68) 45%, rgba(10, 37, 64, 0.35) 100%),
+    url("@/assets/cargo-logistics.png");
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  color: #fff;
+  box-sizing: border-box;
+}
+
+.home-hero-inner {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 80px 32px;
+  text-align: left;
+}
+
+.home-kicker {
+  display: inline-block;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--color-accent);
+  background: rgba(255, 107, 0, 0.14);
+  border: 1px solid rgba(255, 107, 0, 0.4);
+  padding: 6px 14px;
+  border-radius: 20px;
+  margin-bottom: 20px;
+}
+
+.home-title {
+  font-size: 44px;
+  font-weight: 800;
+  line-height: 1.25;
+  margin: 0 0 16px;
+  color: #fff;
+}
+
+/* 강조 단어: 포인트 오렌지 */
+.home-title span {
+  color: var(--color-accent);
+}
+
+.home-subtitle {
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--color-bg);
+  max-width: 560px;
+  margin: 0;
+}
+
+/* ===== Features ===== */
+.home-features {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 60px 32px 76px;
+}
+
+.home-section-title {
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--color-text);
+  text-align: center;
+  margin: 0 0 8px;
+}
+
+.home-section-sub {
+  font-size: 14.5px;
+  color: var(--color-subtext);
+  text-align: center;
+  margin: 0 0 36px;
+}
+
+.home-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+
+.home-card {
+  background: var(--color-card);
+  border-radius: 16px;
+  padding: 28px 24px;
+  box-shadow: 0 10px 30px rgba(10, 37, 64, 0.08);
+  border: 1px solid #eef1f8;
+  text-align: left;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.home-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 16px 36px rgba(10, 37, 64, 0.14);
+}
+
+.home-card-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  margin-bottom: 16px;
+}
+
+.home-card-icon.navy { background: rgba(10, 37, 64, 0.1); }     /* Main 톤 */
+.home-card-icon.orange { background: rgba(255, 107, 0, 0.14); } /* Point 톤 */
+.home-card-icon.sky { background: rgba(59, 86, 116, 0.16); }    /* Main의 라이트 톤 */
+
+.home-card h3 {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0 0 8px;
+}
+
+.home-card p {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--color-subtext);
+  margin: 0;
+}
+
+/* ===== Responsive ===== */
+@media (max-width: 900px) {
+  .home-card-grid {
+    grid-template-columns: 1fr;
+  }
+  .home-title {
+    font-size: 32px;
+  }
+}

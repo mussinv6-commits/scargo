@@ -1,0 +1,43 @@
+.notice-write {
+  width: 700px;
+  margin: 50px auto;
+}
+
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+
+.form-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: bold;
+}
+
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  width: 100%;
+  padding: 10px;
+  box-sizing: border-box;
+}
+
+
+.form-group textarea {
+  height: 300px;
+  resize: vertical;
+}
+
+
+.button-area {
+  text-align: center;
+}
+
+
+.button-area button {
+  margin: 0 5px;
+  padding: 10px 25px;
+  cursor: pointer;
+}
