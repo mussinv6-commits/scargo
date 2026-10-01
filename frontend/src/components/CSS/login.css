@@ -1,200 +1,717 @@
-/* 야간 고속도로 배경 (Photo by Benjamin Chambon on Unsplash, Unsplash License - 상업적 사용 무료, 출처 표기 불필요) */
-.login-page {
-  position: relative;
-  width: 100vw;
-  margin-left: calc(50% - 50vw);
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 60px 20px;
-  box-sizing: border-box;
-  background-image: url("@/assets/Logistics.jpg");
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  background-attachment: fixed;
-}
-
-/* 이미지 위에 Main 네이비 톤 오버레이를 얹어 카드와의 대비를 확보 */
-.login-page::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, rgba(10, 37, 64, 0.85), rgba(10, 37, 64, 0.7));
-}
-
-/* 트러스트 & 마린 팔레트를 로그인 카드에 매핑 */
-/* :root 대신 .login-box에 정의 (scoped 스타일에서는 :root가 적용되지 않음) */
-.login-box {
-  --login-primary: var(--color-primary, #0a2540);
-  --login-primary-hover: var(--color-primary-hover, #123a63);
-  --login-accent: var(--color-accent, #ff6b00); /* 포커스/체크박스 강조색 */
-  --login-text: var(--color-text, #0a2540);
-  --login-text-muted: var(--color-subtext, #64748b);
-  --login-border: #d7dce4;
-  --login-bg-soft: var(--color-bg, #f4f6f8);
-
-  position: relative;
-  z-index: 1;
+/* ========================================= 
+   전체 로그인 화면 
+   ========================================= */ 
+ 
+.login-page { 
+  position: relative; 
+ 
+  /* 합본: 구버전 100vw + margin-left: calc(50% - 50vw) 대신
+     부모(#app) 기준 100% — 스크롤바 폭만큼 가로 스크롤이 생기지 않음 */
   width: 100%;
-  max-width: 480px;
-  margin: 0;
-}
-
-.card {
-  border: none;
-  border-radius: 18px;
-  overflow: hidden;
-  box-shadow: 0 10px 30px rgba(10, 37, 64, 0.18);
-}
-
-.card-header {
-  background: var(--login-primary, #0a2540);
-  color: white;
-  text-align: center;
-  font-size: 28px;
-  font-weight: bold;
-  padding: 22px;
-  letter-spacing: 1px;
-}
-
-/* 1, 2. 라벨 + 입력란(+ 아이디 저장)을 한 줄로 배치 */
-/* grid로 열 너비를 고정해 ID/비밀번호 입력란 크기를 동일하게 맞춤 */
-.form-row {
-  display: grid;
-  grid-template-columns: 90px 1fr 108px;
-  align-items: center;
-  gap: 12px;
-}
-
-.form-row .form-label {
-  margin: 0;
-  font-size: 15px;
-  color: var(--login-text, #0a2540);
-}
-
-.form-row .form-control {
-  width: 100%;
-  padding: 10px 14px;
-  font-size: 15px;
-  border-radius: 8px;
-  border: 1px solid var(--login-border, #d7dce4);
-  background-color: var(--login-bg-soft, #f4f6f8);
-  transition: border-color 0.2s, box-shadow 0.2s;
-  box-sizing: border-box;
-}
-
-.form-row .form-control:focus {
-  outline: none;
-  border-color: var(--login-accent, #ff6b00);
-  box-shadow: 0 0 0 3px rgba(255, 107, 0, 0.18);
-  background-color: #fff;
-}
-
-/* 비밀번호 보기/숨김 토글: 입력란 우측 내부에 위치 */
-.password-wrapper {
-  position: relative;
-  width: 100%;
-}
-
-.password-wrapper .form-control {
-  padding-right: 40px; /* 아이콘 공간 확보 */
-}
-
-.pw-toggle-btn {
-  position: absolute;
-  top: 50%;
-  right: 8px;
-  transform: translateY(-50%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--login-text-muted, #64748b);
-  cursor: pointer;
-  border-radius: 6px;
-  transition: color 0.15s, background-color 0.15s;
-}
-
-.pw-toggle-btn:hover {
-  color: var(--login-primary, #0a2540);
-  background-color: rgba(10, 37, 64, 0.06);
-}
-
-.pw-toggle-btn:focus-visible {
-  outline: 2px solid var(--login-accent, #ff6b00);
-  outline-offset: 1px;
-}
-
-/* 아이디 저장 체크박스: 3번째 고정 열에 위치, 없는 행(비밀번호)에서도
-   열 너비는 그대로 유지되어 입력란 크기가 흔들리지 않음 */
-.save-id-label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0;
-  font-size: 13px;
-  color: var(--login-text-muted, #64748b);
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.save-id-label .form-check-input {
-  width: 16px;
-  height: 16px;
-  margin: 0;
-  cursor: pointer;
-  accent-color: var(--login-accent, #ff6b00);
-}
-
-/* 2. 버튼 길이를 살짝 줄이고 가운데 정렬 */
-.btn-login {
-  display: block;
-  width: 60%;
-  min-width: 180px;
-  margin: 4px auto 0;
-  padding: 10px;
-  font-size: 16px;
-  font-weight: bold;
-  border-radius: 8px;
-  background: var(--login-primary, #0a2540);
-  border: none;
-  color: #fff;
-  transition: background-color 0.15s, transform 0.15s, box-shadow 0.15s;
-}
-
-.btn-login:hover {
-  background: var(--login-primary-hover, #123a63);
-  transform: translateY(-1px);
-  box-shadow: 0 6px 14px rgba(10, 37, 64, 0.3);
-}
-
-.signup {
-  text-align: center;
-  margin-top: 18px;
-  font-size: 14px;
-  color: var(--login-text-muted, #64748b);
-}
-
-.signup a {
-  color: var(--login-primary, #0a2540);
-}
-
-/* 좁은 화면에서는 라벨/입력란을 세로로 전환 */
-@media (max-width: 480px) {
-  .form-row {
-    grid-template-columns: 1fr;
-    row-gap: 6px;
-  }
-  .save-id-label {
-    justify-content: flex-end;
-  }
-  .btn-login {
-    width: 100%;
-  }
-}
+  min-height: 100vh; 
+ 
+  margin-left: 0; 
+ 
+  box-sizing: border-box; 
+ 
+  overflow: hidden; 
+ 
+  /* 항만 배경 */ 
+  background-image: url("@/assets/loginbg.png"); 
+ 
+  background-size: cover; 
+ 
+  background-position: center; 
+ 
+  background-repeat: no-repeat; 
+ 
+  background-attachment: fixed; 
+} 
+ 
+ 
+/* ========================================= 
+   배경 어둡게 처리 
+   ========================================= */ 
+ 
+.login-page::before { 
+  content: ""; 
+ 
+  position: absolute; 
+ 
+  inset: 0; 
+ 
+  z-index: 0; 
+ 
+  /* 
+    사진처럼 전체적으로 푸른 느낌을 유지하면서 
+    흰색 글자가 잘 보이도록 어둡게 처리 
+  */ 
+  background: 
+    linear-gradient( 
+      90deg, 
+      rgba(10, 45, 80, 0.48) 0%, 
+      rgba(10, 45, 80, 0.28) 55%, 
+      rgba(10, 45, 80, 0.18) 100% 
+    ); 
+} 
+ 
+ 
+/* ========================================= 
+   왼쪽 소개 영역 
+   ========================================= */ 
+ 
+.login-intro { 
+  position: absolute; 
+ 
+  z-index: 2; 
+ 
+  /* 
+    화면 크기에 따라 왼쪽 위치도 자연스럽게 변경 
+  */ 
+  /* 🟡 변경: 5vw → 1200px 안쪽 기준으로 정렬 (큰 화면에서 간격 유지) */ 
+  left: max(5vw, calc((100vw - 1200px) / 2)); 
+ 
+  /* 
+    로고 위치 
+  */ 
+  top: 9vh; 
+ 
+  /* 
+    로그인 카드와 너무 멀어지지 않도록 
+    왼쪽 영역의 폭을 제한 
+  */ 
+  width: 44vw; 
+ 
+  max-width: 620px; 
+ 
+  color: #ffffff; 
+ 
+  text-shadow: 
+    0 2px 5px rgba(0, 0, 0, 0.25); 
+} 
+ 
+ 
+/* ========================================= 
+   SafeCargo 로고 
+   ========================================= */ 
+ 
+.brand { 
+  display: flex; 
+ 
+  align-items: flex-start; 
+ 
+  height: auto; 
+} 
+ 
+ 
+/* 트럭 아이콘 */ 
+.brand-icon { 
+  /* 09.30: 가로형 로고에 맞게 가로폭 확대, 높이는 자동 */
+  width: clamp(220px, 22vw, 380px); 
+ 
+  height: auto; 
+ 
+  display: flex; 
+ 
+  align-items: center; 
+ 
+  justify-content: flex-start;
+ 
+  margin-right: clamp(8px, 0.8vw, 12px); 
+ 
+  margin-left: -6px; 
+ 
+  color: #ffffff; 
+ 
+  flex-shrink: 0; 
+ 
+  overflow: hidden; 
+} 
+ 
+ 
+/* 🟡 추가: SafeCargo 로고 이미지 */ 
+.brand-icon img { 
+  width: 100%; 
+ 
+  height: auto;
+ 
+  object-fit: contain; 
+ 
+  display: block; 
+ 
+  margin-left: -8%; 
+  margin-top: -7%; 
+  margin-bottom: -7%; 
+} 
+ 
+ 
+/* SafeCargo + 설명 */ 
+.brand-info { 
+  display: flex; 
+ 
+  flex-direction: column; 
+ 
+  align-items: flex-start; 
+ 
+  /* 
+    SafeCargo와 아래 설명의 
+    왼쪽 시작점을 동일하게 맞춤 
+  */ 
+  text-align: left; 
+} 
+ 
+ 
+/* SafeCargo */ 
+.brand-name { 
+  font-size: clamp(24px, 2.4vw, 32px); /* 🟡 변경: clamp(20px, 2vw, 25px) */ 
+ 
+  line-height: 1; 
+ 
+  font-weight: 700; 
+ 
+  letter-spacing: -0.5px; 
+ 
+  color: #ffffff; 
+ 
+  margin: 0; 
+ 
+  padding: 0; 
+} 
+ 
+ 
+/* SafeCargo 아래 설명 */ 
+.brand-subtitle { 
+  margin-top: 6px; 
+ 
+  font-size: clamp(12px, 1vw, 14px); /* 🟡 변경: clamp(9px, 0.85vw, 11px) */ 
+ 
+  line-height: 1; 
+ 
+  font-weight: 400; 
+ 
+  color: rgba(255, 255, 255, 0.82); 
+ 
+  letter-spacing: -0.3px; 
+ 
+  margin-left: 0; 
+ 
+  padding-left: 0; 
+} 
+ 
+ 
+/* ========================================= 
+   메인 문구 
+   ========================================= */ 
+ 
+.intro-text { 
+ 
+  /* 
+    기존 88px보다 줄여서 
+    SafeCargo와 메인 문구가 적당히 떨어지도록 함 
+  */ 
+  margin-top: clamp(55px, 7vh, 85px); 
+ 
+  /* 
+    로그인 카드와 너무 멀어지지 않도록 
+    문구 영역의 폭을 제한 
+  */ 
+  width: 100%; 
+} 
+ 
+ 
+/* 큰 문구 */ 
+ 
+.intro-text h1 { 
+ 
+  margin: 0; 
+ 
+  padding: 0; 
+ 
+  color: #ffffff; 
+ 
+  /* 
+    화면 크기에 따라 글자도 같이 커지고 작아짐 
+  */ 
+  font-size: clamp(32px, 3.2vw, 50px); /* 🟡 변경: clamp(27px, 2.6vw, 40px) */ 
+ 
+  /* 
+    줄 간격 일정하게 유지 
+  */ 
+  line-height: 1.28; 
+ 
+  font-weight: 500; /* 🟡 변경: 700 → 500 (미디엄) */ 
+ 
+  letter-spacing: -1.8px; 
+ 
+  text-align: left; 
+ 
+  text-shadow: 
+    0 2px 6px rgba(0, 0, 0, 0.25); 
+ 
+  /* 
+    각 줄의 시작 위치가 동일하게 유지되도록 함 
+  */ 
+  width: 100%; 
+} 
+ 
+ 
+/* 설명 문구 */ 
+ 
+.intro-text p { 
+ 
+  margin-top: clamp(18px, 2.5vh, 25px); 
+ 
+  margin-left: 0; 
+ 
+  padding: 0; 
+ 
+  color: rgba(255, 255, 255, 0.88); 
+ 
+  font-size: clamp(14px, 1.2vw, 18px); /* 🟡 변경: clamp(11px, 1vw, 14px) */ 
+ 
+  line-height: 1.65; 
+ 
+  font-weight: 400; 
+ 
+  letter-spacing: -0.5px; 
+ 
+  text-align: left; 
+ 
+  text-shadow: 
+    0 1px 4px rgba(0, 0, 0, 0.3); 
+} 
+ 
+ 
+/* ========================================= 
+   로그인 박스 
+   ========================================= */ 
+ 
+.login-box { 
+ 
+  --login-primary: #1268d5; 
+ 
+  --login-primary-hover: #0958bb; 
+ 
+  --login-accent: #1268d5; 
+ 
+  --login-text: #20252b; 
+ 
+  --login-text-muted: #777; 
+ 
+  --login-border: #e1e5ea; 
+ 
+ 
+  position: absolute; 
+ 
+  z-index: 3; 
+ 
+ 
+  /* 
+    오른쪽 여백을 화면 크기에 따라 조절 
+  */ 
+  /* 🟡 변경: 5vw → 1200px 안쪽 기준으로 정렬 (왼쪽 영역과 같은 기준) */ 
+  right: max(5vw, calc((100vw - 1200px) / 2)); 
+ 
+ 
+  /* 
+    위쪽 위치 
+  */ 
+  top: 17vh; 
+ 
+ 
+  /* 
+    화면 크기에 따라 카드도 같이 커지고 작아짐 
+ 
+    최소 320px 
+    일반 화면에서는 약 32vw 
+    최대 480px 
+  */ 
+  /* 🟡 변경: clamp(300px, 31vw, 430px) */ 
+  width: clamp(320px, 32vw, 480px); 
+ 
+  max-width: 40vw; 
+} 
+ 
+ 
+/* ========================================= 
+   로그인 카드 
+   ========================================= */ 
+ 
+.login-box .card { /* 🟡 변경: .card → .login-box .card (우선순위 높임) */ 
+ 
+  border: none; 
+ 
+  border-radius: 12px; 
+ 
+  overflow: hidden; 
+ 
+  background: rgba(255, 255, 255, 0.95); 
+ 
+  box-shadow: 
+    0 12px 35px rgba(0, 0, 0, 0.18); 
+} 
+ 
+ 
+/* ========================================= 
+   로그인 제목 
+   ========================================= */ 
+ 
+.login-box .card-header { /* 🟡 변경: 앞에 .login-box 추가 */ 
+ 
+  background: #0a2d4f; 
+ 
+  border: none; 
+ 
+  color: #ffffff; 
+ 
+  text-align: center; 
+ 
+  font-size: clamp(22px, 2vw, 30px); /* 🟡 변경: clamp(18px, 1.7vw, 25px) */ 
+ 
+  font-weight: 700; 
+ 
+  padding: clamp(15px, 1.7vw, 22px); 
+ 
+  letter-spacing: -1px; 
+} 
+ 
+ 
+/* ========================================= 
+   입력 영역 
+   ========================================= */ 
+ 
+.login-box .form-row { /* 🟡 변경: 앞에 .login-box 추가 */ 
+ 
+  display: grid !important; /* 🟡 !important 추가 */ 
+ 
+  grid-template-columns: 1fr !important; /* 🟡 변경: 1fr 1fr → 1fr (세로 한 줄씩) */ 
+ 
+  align-items: center; 
+ 
+  gap: 10px; 
+ 
+  position: relative; 
+ 
+  margin: 0 0 10px 0; /* 🟡 추가 */ 
+} 
+ 
+ 
+/* 라벨 */ 
+ 
+.login-box .form-row .form-label { /* 🟡 변경: 앞에 .login-box 추가 */ 
+ 
+  display: none !important; /* 🟡 !important 추가 */ 
+} 
+ 
+ 
+/* 입력창 */ 
+ 
+.login-box .form-row .form-control { /* 🟡 변경: 앞에 .login-box 추가 */ 
+ 
+  grid-column: 1 / -1 !important; /* 🟡 !important 추가 */ 
+ 
+  display: block; /* 🟡 추가 */ 
+ 
+  width: 100% !important; /* 🟡 !important 추가 */ 
+ 
+  max-width: 100% !important; /* 🟡 추가 */ 
+ 
+  height: clamp(44px, 3.6vw, 52px); /* 🟡 변경: clamp(38px, 3.2vw, 45px) */ 
+ 
+  padding: 8px 13px; 
+ 
+  font-size: clamp(14px, 1.1vw, 16px); /* 🟡 변경: clamp(11px, 0.95vw, 13px) */ 
+ 
+  border-radius: 6px; 
+ 
+  border: 1px solid #e1e5ea; 
+ 
+  background-color: #ffffff; 
+ 
+  box-sizing: border-box; 
+ 
+  transition: 
+    border-color 0.2s, 
+    box-shadow 0.2s; 
+} 
+ 
+ 
+/* 입력창 클릭 */ 
+ 
+.login-box .form-row .form-control:focus { /* 🟡 변경: 앞에 .login-box 추가 */ 
+ 
+  outline: none; 
+ 
+  border-color: #1268d5; 
+ 
+  box-shadow: 
+    0 0 0 3px rgba(18, 104, 213, 0.1); 
+} 
+ 
+ 
+/* ========================================= 
+   아이디 저장 
+   ========================================= */ 
+ 
+.login-box .save-id-label { /* 🟡 변경: 앞에 .login-box 추가 */ 
+ 
+  grid-column: 1 / -1 !important; /* 🟡 !important 추가 */ 
+ 
+  display: flex !important; /* 🟡 !important 추가 */ 
+ 
+  align-items: center; 
+ 
+  gap: 6px; 
+ 
+  margin: -2px 0 0 0; /* 🟡 변경: margin-top만 → margin 전체 지정 */ 
+ 
+  padding: 0; /* 🟡 추가 */ 
+ 
+  font-size: clamp(12px, 1vw, 14px); /* 🟡 변경: clamp(10px, 0.85vw, 12px) */ 
+ 
+  color: #777; 
+ 
+  cursor: pointer; 
+} 
+ 
+ 
+/* 체크박스 */ 
+ 
+.login-box .save-id-label .form-check-input { /* 🟡 변경: 앞에 .login-box 추가 */ 
+ 
+  width: 14px; 
+ 
+  height: 14px; 
+ 
+  margin: 0; 
+ 
+  cursor: pointer; 
+ 
+  accent-color: #1268d5; 
+} 
+ 
+ 
+/* ========================================= 
+   비밀번호 보기 버튼 
+   ========================================= */ 
+ 
+.login-box .password-wrapper { /* 🟡 변경: 앞에 .login-box 추가 */ 
+ 
+  position: relative !important; /* 🟡 !important 추가 */ 
+ 
+  grid-column: 1 / -1 !important; /* 🟡 !important 추가 */ 
+ 
+  width: 100% !important; /* 🟡 !important 추가 */ 
+} 
+ 
+ 
+/* 비밀번호 입력창 */ 
+ 
+.login-box .password-wrapper .form-control { /* 🟡 변경: 앞에 .login-box 추가 */ 
+ 
+  width: 100% !important; /* 🟡 !important 추가 */ 
+ 
+  padding-right: 44px; /* 🟡 변경: 40px → 44px */ 
+} 
+ 
+ 
+/* 눈 버튼 */ 
+ 
+.login-box .pw-toggle-btn { /* 🟡 변경: 앞에 .login-box 추가 */ 
+ 
+  position: absolute !important; /* 🟡 !important 추가 */ 
+ 
+  top: 50% !important; /* 🟡 !important 추가 */ 
+ 
+  right: 8px !important; /* 🟡 !important 추가 */ 
+ 
+  left: auto !important; /* 🟡 추가 */ 
+ 
+  transform: translateY(-50%); 
+ 
+  display: flex; 
+ 
+  align-items: center; 
+ 
+  justify-content: center; 
+ 
+  width: 28px; 
+ 
+  height: 28px; 
+ 
+  padding: 0; 
+ 
+  margin: 0; /* 🟡 추가 */ 
+ 
+  border: none !important; /* 🟡 !important 추가 */ 
+ 
+  background: transparent !important; /* 🟡 !important 추가 */ 
+ 
+  color: #888; 
+ 
+  cursor: pointer; 
+} 
+ 
+ 
+/* 눈 버튼 마우스 */ 
+ 
+.login-box .pw-toggle-btn:hover { /* 🟡 변경: 앞에 .login-box 추가 */ 
+ 
+  color: #1268d5; 
+} 
+ 
+ 
+/* ========================================= 
+   로그인 버튼 
+   ========================================= */ 
+ 
+.login-box .btn-login { /* 🟡 변경: 앞에 .login-box 추가 */ 
+ 
+  display: block !important; /* 🟡 !important 추가 */ 
+ 
+  width: 100% !important; /* 🟡 !important 추가 */ 
+ 
+  height: clamp(44px, 3.6vw, 52px); /* 🟡 변경: clamp(38px, 3.2vw, 45px) */ 
+ 
+  margin: 5px auto 0; 
+ 
+  padding: 8px; 
+ 
+  font-size: clamp(15px, 1.2vw, 17px); /* 🟡 변경: clamp(12px, 1vw, 14px) */ 
+ 
+  font-weight: 600; 
+ 
+  border-radius: 6px; 
+ 
+  background: #0a2d4f !important; /* 🟡 변경: #1268d5 → #0a2d4f (남색) */ 
+ 
+  border: none !important; /* 🟡 !important 추가 */ 
+ 
+  color: #ffffff !important; /* 🟡 !important 추가 */ 
+ 
+  transition: 
+    background-color 0.15s, 
+    transform 0.15s; 
+} 
+ 
+ 
+/* 로그인 버튼 마우스 */ 
+ 
+.login-box .btn-login:hover { /* 🟡 변경: 앞에 .login-box 추가 */ 
+ 
+  background: #0d3a66 !important; /* 🟡 변경: #0958bb → #0d3a66 (밝은 남색) */ 
+ 
+  transform: translateY(-1px); 
+} 
+ 
+ 
+/* ========================================= 
+   회원가입 
+   ========================================= */ 
+ 
+.login-box .signup { /* 🟡 변경: 앞에 .login-box 추가 */ 
+ 
+  text-align: center; 
+ 
+  margin-top: 18px; 
+ 
+  font-size: clamp(12px, 1vw, 14px); /* 🟡 변경: clamp(10px, 0.85vw, 12px) */ 
+ 
+  color: #888; 
+} 
+ 
+ 
+/* 회원가입 링크 */ 
+ 
+.login-box .signup a { /* 🟡 변경: 앞에 .login-box 추가 */ 
+ 
+  color: #1268d5; 
+ 
+  font-weight: 700; /* 🟡 추가 */ 
+} 
+ 
+ 
+/* ========================================= 
+   카드 안쪽 여백 
+   ========================================= */ 
+ 
+.login-box .card-body { /* 🟡 변경: 앞에 .login-box 추가 */ 
+ 
+  padding: clamp(18px, 2vw, 28px) !important; 
+} 
+ 
+ 
+/* ========================================= 
+   화면이 작아졌을 때 
+   ========================================= */ 
+ 
+@media (max-width: 900px) { 
+ 
+  .login-intro { 
+ 
+    display: none; 
+  } 
+ 
+ 
+  .login-box { 
+ 
+    position: relative; 
+ 
+    top: auto; 
+ 
+    right: auto; 
+ 
+    width: 390px; 
+ 
+    max-width: calc(100% - 40px); 
+ 
+    margin: 0 auto; 
+  } 
+ 
+ 
+  .login-page { 
+ 
+    display: flex; 
+ 
+    align-items: center; 
+ 
+    justify-content: center; 
+ 
+    min-height: 100vh; 
+  } 
+ 
+ 
+  /* 🟡 추가: 작은 화면에서는 글자·높이를 고정값으로 */ 
+ 
+  .login-box .form-row .form-control, 
+  .login-box .btn-login { 
+ 
+    height: 46px; 
+  } 
+ 
+  .login-box .form-row .form-control { 
+ 
+    font-size: 14px; 
+  } 
+ 
+  .login-box .btn-login { 
+ 
+    font-size: 15px; 
+  } 
+ 
+  .login-box .card-header { 
+ 
+    font-size: 22px; 
+  } 
+ 
+  .login-box .save-id-label, 
+  .login-box .signup { 
+ 
+    font-size: 13px; 
+  } 
+} 
+ 
+ 
+/* ========================================= 
+   휴대폰 
+   ========================================= */

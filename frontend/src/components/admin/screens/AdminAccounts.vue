@@ -1,9 +1,6 @@
 <template>
   <div>
-    <div class="admin-page-header">
-      <h1>회원 관리</h1>
-      <p>전체 회원 목록을 조회하고, 승인 대기 중인 기업회원을 승인할 수 있습니다.</p>
-    </div>
+    <AdminPageHeader title="회원 관리" description="전체 회원 목록을 조회하고, 승인 대기 중인 기업회원을 승인하거나 거절합니다." />
 
     <div class="crud-table-wrap">
       <div class="crud-toolbar">
@@ -30,26 +27,26 @@
               <th>아이디</th>
               <th>이름</th>
               <th>회원유형</th>
-              <th>소속업체ID</th>
+              <th>소속업체</th>
               <th>연락처</th>
               <th>가입일</th>
-              <th>관리</th>
+              <th class="is-center" style="width:1%;">관리</th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="loading"><td colspan="8" class="crud-empty">불러오는 중...</td></tr>
             <tr v-else-if="error"><td colspan="8" class="crud-empty">{{ error }}</td></tr>
             <tr v-else-if="filteredAccounts.length === 0"><td colspan="8" class="crud-empty">해당하는 회원이 없습니다.</td></tr>
-            <tr v-for="a in filteredAccounts" :key="a.accountId">
+            <tr v-for="a in pagedAccounts" :key="a.accountId">
               <td>{{ a.accountId }}</td>
               <td>{{ a.userId }}</td>
               <td>{{ a.userName || '-' }}</td>
-              <td><span class="pill" :class="a.userType === 'CORPORATE_PENDING' ? 'pill-off' : 'pill-on'">{{ typeLabel(a.userType) }}</span></td>
-              <td>{{ a.companyId ?? '-' }}</td>
+              <td><span class="pill" :class="typeTone(a.userType)">{{ typeLabel(a.userType) }}</span></td>
+              <td>{{ companyName(a.companyId) }}</td>
               <td>{{ a.phoneNum || '-' }}</td>
               <td>{{ formatDate(a.createdAt) }}</td>
-              <td>
-                <div v-if="a.userType === 'CORPORATE_PENDING'" style="display:flex; gap:6px;">
+              <td class="is-center">
+                <div v-if="a.userType === 'CORPORATE_PENDING'" class="crud-actions">
                   <button
                     class="btn-admin btn-admin-accent"
                     :disabled="approvingId === a.accountId || rejectingId === a.accountId"
@@ -71,12 +68,15 @@
           </tbody>
         </table>
       </div>
+      <AdminPager v-model="page" :page-count="pageCount" />
     </div>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import AdminPageHeader from '@/components/admin/AdminPageHeader.vue'
+import AdminPager from '@/components/admin/AdminPager.vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { adminApi, pickErrorMessage } from '@/utils/adminApi'
 
 const accounts = ref([])
@@ -85,11 +85,30 @@ const error = ref('')
 const filter = ref('ALL')
 const approvingId = ref(null)
 const rejectingId = ref(null) // 26.09.21 추가
+const companyMap = ref({})
+
+function companyName(id) {
+  if (id === null || id === undefined) return '-'
+  return companyMap.value[id] || `#${id}`
+}
+function typeTone(t) {
+  return { CORPORATE_PENDING: 'pill-warn', ADMIN: 'pill-muted' }[t] || 'pill-on'
+}
+
+const PAGE_SIZE = 10
+const page = ref(1)
 
 const filteredAccounts = computed(() => {
   if (filter.value === 'ALL') return accounts.value
   return accounts.value.filter((a) => a.userType === filter.value)
 })
+const pageCount = computed(() => Math.max(1, Math.ceil(filteredAccounts.value.length / PAGE_SIZE) || 1))
+const pagedAccounts = computed(() => {
+  const start = (page.value - 1) * PAGE_SIZE
+  return filteredAccounts.value.slice(start, start + PAGE_SIZE)
+})
+watch(filter, () => { page.value = 1 })
+watch(pageCount, (n) => { if (page.value > n) page.value = n })
 
 function typeLabel(t) {
   return {
@@ -144,5 +163,13 @@ async function reject(account) {
   }
 }
 
-onMounted(fetchAccounts)
+onMounted(async () => {
+  fetchAccounts()
+  try {
+    const res = await adminApi.get('/api/companies/options')
+    companyMap.value = Object.fromEntries(res.data.map((c) => [c.companyId, c.companyName]))
+  } catch (e) {
+    console.error(e)
+  }
+})
 </script>

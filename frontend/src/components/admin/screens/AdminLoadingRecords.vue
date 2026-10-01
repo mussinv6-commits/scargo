@@ -1,9 +1,6 @@
 <template>
   <div>
-    <div class="admin-page-header">
-      <h1>적재 기록 조회</h1>
-      <p>차량-컨테이너 적재(하역) 기록을 조회합니다. 오기 입력 건은 삭제할 수 있습니다.</p>
-    </div>
+    <AdminPageHeader title="적재 기록 조회" description="차량-컨테이너 적재(하역) 기록을 조회합니다. 잘못 입력된 기록은 삭제할 수 있습니다." />
 
     <div class="crud-table-wrap">
       <div class="crud-toolbar">
@@ -21,43 +18,56 @@
               <th>차량번호</th>
               <th>컨테이너번호</th>
               <th>적재위치</th>
+              <th class="is-center">상태</th>
               <th>적재일시</th>
-              <th>관리</th>
+              <th class="is-center" style="width:1%;">관리</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-if="loading"><td colspan="6" class="crud-empty">불러오는 중...</td></tr>
-            <tr v-else-if="records.length === 0"><td colspan="6" class="crud-empty">적재 기록이 없습니다.</td></tr>
-            <tr v-for="r in records" :key="r.recordId">
-              <td>{{ r.recordId }}</td>
+            <tr v-if="loading"><td colspan="7" class="crud-empty">불러오는 중...</td></tr>
+            <tr v-else-if="records.length === 0"><td colspan="7" class="crud-empty">적재 기록이 없습니다.</td></tr>
+            <tr v-for="(r, idx) in records" :key="r.recordId">
+              <td>{{ page * PAGE_SIZE + idx + 1 }}</td>
               <td>{{ r.vehicleNo }}</td>
               <td>{{ r.containerNo }}</td>
               <td>{{ r.locationName || (r.locationId ? `#${r.locationId}` : '-') }}</td>
+              <td class="is-center"><span class="pill" :class="statusTone(r.status)">{{ statusLabel(r.status) }}</span></td>
               <td>{{ formatDate(r.loadedAt) }}</td>
-              <td><button class="btn-admin btn-admin-danger" @click="remove(r)">삭제</button></td>
+              <td class="is-center"><button class="btn-admin btn-admin-danger" @click="remove(r)">삭제</button></td>
             </tr>
           </tbody>
         </table>
       </div>
 
-      <div class="crud-toolbar" style="margin-top: 12px;" v-if="totalPages > 1">
-        <button class="btn-admin btn-admin-ghost" :disabled="page === 0" @click="changePage(page - 1)">이전</button>
-        <span style="font-size: 12.5px; color: var(--a-text-muted);">{{ page + 1 }} / {{ totalPages }} 페이지</span>
-        <button class="btn-admin btn-admin-ghost" :disabled="page + 1 >= totalPages" @click="changePage(page + 1)">다음</button>
-      </div>
+      <AdminPager
+        :model-value="page + 1"
+        :page-count="pagerCount"
+        @update:model-value="(p) => loadRecords(p - 1)"
+      />
     </div>
   </div>
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import AdminPageHeader from '@/components/admin/AdminPageHeader.vue'
+import AdminPager from '@/components/admin/AdminPager.vue'
+import { computed, onMounted, ref } from 'vue'
 import { adminApi, pickErrorMessage } from '@/utils/adminApi'
 
+const PAGE_SIZE = 10
 const records = ref([])
 const loading = ref(true)
 const page = ref(0)
 const totalPages = ref(0)
 const totalElements = ref(0)
+const pagerCount = computed(() => Math.max(1, totalPages.value || 1))
+
+function statusLabel(s) {
+  return { IN_PROGRESS: '진행중', COMPLETED: '완료', CANCELED: '취소' }[s] || s || '-'
+}
+function statusTone(s) {
+  return { IN_PROGRESS: 'pill-warn', COMPLETED: 'pill-on', CANCELED: 'pill-muted' }[s] || 'pill-muted'
+}
 
 function formatDate(d) {
   return d ? new Date(d).toLocaleString('ko-KR') : '-'
@@ -66,7 +76,7 @@ function formatDate(d) {
 async function loadRecords(p = 0) {
   loading.value = true
   try {
-    const res = await adminApi.get('/api/loading-records', { params: { page: p, size: 20 } })
+    const res = await adminApi.get('/api/loading-records', { params: { page: p, size: PAGE_SIZE } })
     records.value = res.data.content
     totalPages.value = res.data.totalPages
     totalElements.value = res.data.totalElements
@@ -79,7 +89,7 @@ async function loadRecords(p = 0) {
 }
 
 function changePage(p) {
-  if (p < 0 || p >= totalPages.value) return
+  if (p < 0 || (totalPages.value > 0 && p >= totalPages.value)) return
   loadRecords(p)
 }
 
@@ -89,7 +99,7 @@ async function remove(record) {
     await adminApi.delete(`/api/loading-records/${record.recordId}`)
     await loadRecords(page.value)
   } catch (err) {
-    alert(pickErrorMessage(err, '삭제 중 오류가 발생했습니다.'))
+    alert(`적재 기록 삭제에 실패했습니다.\n${pickErrorMessage(err)}`)
   }
 }
 

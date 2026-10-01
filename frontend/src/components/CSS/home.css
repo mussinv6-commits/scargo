@@ -1,8 +1,8 @@
 /* ===== Hero ===== */
 .home-hero {
   position: relative;
-  width: 100vw;
-  margin-left: calc(50% - 50vw);
+  width: 100%; /* 26.09.30: 100vw → 100% (가로 스크롤 방지) */
+  margin-left: 0;
   min-height: 440px;
   display: flex;
   align-items: center;
@@ -21,8 +21,13 @@
   width: 100%;
   max-width: 1200px;
   margin: 0 auto;
-  padding: 80px 32px;
+  padding: 64px 32px;
   text-align: left;
+  /* 26.09.30: 왼쪽 소개 문구 + 오른쪽 항만 날씨 위젯 */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  align-items: center;
+  gap: 40px;
 }
 
 .home-kicker {
@@ -133,6 +138,10 @@
 
 /* ===== Responsive ===== */
 @media (max-width: 900px) {
+  .home-hero-inner {
+    grid-template-columns: 1fr;
+    padding: 48px 20px;
+  }
   .home-card-grid {
     grid-template-columns: 1fr;
   }

@@ -6,32 +6,13 @@ CargoScan(YOLO11 + CRNN + EasyOCR) 인식 결과를 scargo 백엔드(Spring Boot
 PostgreSQL)의 게이트 통과 이력 API(/api/v1/gate-logs)에 실시간으로 전송하는
 발표용 데모 스크립트.
 
-batch_test_images.py 와 완전히 동일한 검출/인식 로직(모델 선택, 패딩, CRNN+
-EasyOCR 폴백, 번호판 문법 필터)을 그대로 재사용함 - 별도로 다시 구현하지 않고
-batch_test_images.py 에서 그대로 import 해서 씀(정확도가 이미 실측 검증된
-로직을 이중 관리하지 않기 위함).
-
-실행 전 준비:
-    1. PostgreSQL에 scargo 데이터베이스가 존재해야 함 (pgAdmin에서 생성)
-    2. scargo 백엔드(Spring Boot)가 http://localhost:8080 에서 구동 중이어야 함
-       (콘솔에 ">>> [AdminInitializer] admin 계정 최초 생성 완료" 등이 찍히면 정상)
-    3. scargo_vue_0922 프론트엔드(npm run dev, localhost:5173)의
-       "🚦 인식 데모" 화면을 열어두면 이 스크립트가 보내는 기록이 실시간으로 보임
-
-실행 예시:
-    python gate_live_demo.py
-    python gate_live_demo.py --images valid/images --limit 10 --delay 2.5
-    python gate_live_demo.py --gate-name "인천항 2번 게이트" --gate-type OUT
-
-발표(영상 녹화) 시나리오:
-    화면을 두 개 띄워놓고(왼쪽: 이 스크립트를 실행하는 터미널, 오른쪽: 브라우저의
-    "🚦 인식 데모" 화면) 이 스크립트를 실행하면, 사진 한 장을 처리할 때마다
-    --delay 초 간격으로 터미널에 인식 결과가 출력되고 동시에 브라우저 쪽 실시간
-    피드에도 새 줄이 나타남 -> 그 화면을 그대로 녹화하면 됨.
+- 등록 차량: 백엔드 조회를 통해 해당 차량의 지정 게이트 ID를 자동으로 매칭
+- 미등록 차량: 1번~4번 게이트 중 랜덤으로 gateId 지정
 """
 import argparse
 import json
 import os
+import random
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
@@ -46,7 +27,7 @@ import torch
 APP_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(APP_DIR))
 
-from batch_test_images import (  # noqa: E402  (경로 설정 뒤에 import 필요)
+from batch_test_images import (  # noqa: E402
     CRNN_CHARS_PATH,
     CRNN_CONF_THRESHOLD,
     CRNN_MODEL_PATH,
@@ -69,38 +50,68 @@ DEFAULT_LOGIN_PW = "admin1234"
 
 
 def login(session: requests.Session, api_base: str, user_id: str, user_pw: str) -> None:
-    """scargo 백엔드에 세션 로그인 - 이후 POST /api/v1/gate-logs 에 필요한
-    ADMIN 권한 쿠키(JSESSIONID)를 session 객체에 저장함."""
+    """scargo 백엔드에 세션 로그인 후 쿠키 저장 상태를 확인합니다."""
     resp = session.post(
         f"{api_base}/api/accounts/login",
         json={"userId": user_id, "userPw": user_pw},
         timeout=5,
     )
+    print(f"[로그인 시도] status={resp.status_code}, 응답 내용={resp.text}")
+    print(f"[확보된 세션 쿠키 목록] {session.cookies.get_dict()}")
+
     if resp.status_code != 200:
         raise RuntimeError(
             f"로그인 실패 (status={resp.status_code}): {resp.text}\n"
-            f"-> scargo 백엔드가 http://localhost:8080 에서 실행 중인지, "
-            f"계정 '{user_id}'가 존재하는지 확인하세요."
+            f"-> scargo 백엔드가 http://localhost:8080 에서 실행 중인지, 계정 정보가 정확한지 확인하세요."
         )
+    
+    # 만약 쿠키가 담기지 않았다면 수동으로 응답 헤더의 Set-Cookie를 추출해 세션에 강제 주입하는 안전장치
+    if not session.cookies.get_dict():
+        print("[경고] requests.Session이 자동으로 쿠키를 저장하지 못했습니다. 수동 헤더 주입을 시도합니다.")
+        set_cookie = resp.headers.get("Set-Cookie")
+        if set_cookie:
+            # JSESSIONID 등 쿠키 추출 파싱
+            session.headers.update({"Cookie": set_cookie})
+
     print(f"[로그인 성공] {user_id}")
 
 
+def check_vehicle_registration(session: requests.Session, api_base: str, plate_no: str) -> dict:
+    """
+    백엔드에 번호판이 등록된 차량인지 조회합니다.
+    """
+    try:
+        resp = session.get(f"{api_base}/api/v1/vehicles/search", params={"plateNo": plate_no}, timeout=3)
+        if resp.status_code == 200:
+            data = resp.json()
+            if data: 
+                return {"isRegistered": True, "gateId": data.get("assignedGateId", 1)}
+    except Exception:
+        pass
+    
+    return {"isRegistered": False, "gateId": None}
+
+
 def post_gate_log(session: requests.Session, api_base: str, payload: dict) -> None:
+    """
+    세션 쿠키를 포함하여 게이트 로그를 전송합니다.
+    """
+    # 전송 시 현재 세션에 유지 중인 쿠키 상태 출력
+    print(f"  -> [전송 시도] 현재 쿠키 상태: {session.cookies.get_dict()}")
+    
     resp = session.post(f"{api_base}/api/v1/gate-logs", json=payload, timeout=5)
     if resp.status_code == 201:
         body = resp.json()
         print(
             f"  -> DB 저장 완료 (gate_log_id={body.get('gateLogId')}, "
-            f"status={payload['recognitionStatus']})"
+            f"gateId={payload['gateId']}, status={payload['recognitionStatus']})"
         )
     else:
         print(f"  -> 전송 실패 (status={resp.status_code}): {resp.text}")
+        print(f"     (거부된 쿠키 상태: {session.cookies.get_dict()})")
 
 
 def recognize_one(model, crnn, ocr_reader, image_path: Path):
-    """batch_test_images.py의 main() 루프 안 로직과 동일 (검출 + CRNN/EasyOCR
-    폴백 + 번호판 문법 필터). 반환: (pred_text, ocr_conf, engine, det_conf,
-    line_count, crnn_raw_text, crnn_raw_conf) - pred_text가 빈 문자열이면 판독불가."""
     img = cv2.imread(str(image_path))
     if img is None:
         return "", None, "", None, None, "", None
@@ -147,15 +158,15 @@ def main():
     global IMGSZ
 
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--images", default="test/images", help="인식할 사진 폴더 (기본: test/images)")
-    parser.add_argument("--limit", type=int, default=8, help="처리할 사진 최대 장수 (기본: 8)")
-    parser.add_argument("--delay", type=float, default=2.0, help="사진 사이 대기 시간(초) - 발표 시연용 (기본: 2.0)")
-    parser.add_argument("--gate-name", default="인천항 1번 게이트", help="gate_logs.gate_name 값")
+    parser.add_argument("--images", default="test/images", help="인식할 사진 폴더")
+    parser.add_argument("--limit", type=int, default=8, help="처리할 사진 최대 장수")
+    parser.add_argument("--delay", type=float, default=2.0, help="사진 사이 대기 시간(초)")
+    parser.add_argument("--gate-name", default="인천항 통합 게이트", help="gate_logs.gate_name 값")
     parser.add_argument("--gate-type", default="IN", choices=["IN", "OUT"], help="gate_logs.gate_type 값")
     parser.add_argument("--vehicle-type", default="TRUCK", help="gate_logs.vehicle_type 값")
-    parser.add_argument("--api-base", default=DEFAULT_API_BASE, help="scargo 백엔드 주소 (기본: http://localhost:8080)")
-    parser.add_argument("--login-id", default=DEFAULT_LOGIN_ID, help="로그인 계정 ID (기본: admin)")
-    parser.add_argument("--login-pw", default=DEFAULT_LOGIN_PW, help="로그인 비밀번호 (기본: admin1234)")
+    parser.add_argument("--api-base", default=DEFAULT_API_BASE, help="scargo 백엔드 주소")
+    parser.add_argument("--login-id", default=DEFAULT_LOGIN_ID, help="로그인 ID")
+    parser.add_argument("--login-pw", default=DEFAULT_LOGIN_PW, help="로그인 PW")
     args = parser.parse_args()
 
     session = requests.Session()
@@ -177,7 +188,7 @@ def main():
         print("[CRNN] 가중치를 못 찾음 - EasyOCR만 사용")
 
     use_gpu = torch.cuda.is_available()
-    print(f"[EasyOCR] GPU 사용: {use_gpu} - 로딩 중(시간 좀 걸림)...")
+    print(f"[EasyOCR] GPU 사용: {use_gpu} 로딩 중...")
     ocr_reader = easyocr.Reader(["ko", "en"], gpu=use_gpu)
 
     image_dir = (APP_DIR / args.images).resolve()
@@ -191,7 +202,7 @@ def main():
     print(f"\n[시작] {len(files)}장을 {args.delay}초 간격으로 처리 -> {args.api_base}/api/v1/gate-logs\n")
 
     for i, path in enumerate(files, 1):
-        gt = extract_ground_truth(path.stem)  # 참고용 (실제 서비스라면 없는 정보, 시연 로그에만 표시)
+        gt = extract_ground_truth(path.stem)
         pred, ocr_conf, engine, det_conf, line_count, crnn_raw_text, crnn_raw_conf = recognize_one(
             model, crnn, ocr_reader, path
         )
@@ -199,12 +210,25 @@ def main():
         recognition_status = "SUCCESS" if pred else "FAILED"
         plate_confidence = round(ocr_conf * 100, 2) if ocr_conf is not None else None
 
+        target_gate_id = 1
+        if pred:
+            vehicle_info = check_vehicle_registration(session, args.api_base, pred)
+            if vehicle_info["isRegistered"]:
+                target_gate_id = vehicle_info["gateId"] or 1
+                print(f"  [등록 차량 매칭] 번호판={pred} -> 지정 게이트 ID: {target_gate_id}")
+            else:
+                target_gate_id = random.randint(1, 4)
+                print(f"  [미등록 차량] 번호판={pred} -> 랜덤 게이트 ID: {target_gate_id} 할당")
+        else:
+            target_gate_id = random.randint(1, 4)
+
         gt_note = f" (정답={gt})" if gt else ""
         print(f"[{i}/{len(files)}] {path.name}{gt_note}")
         print(f"  인식결과={pred or '(판독불가)'}  엔진={engine or '-'}  검출확신도={det_conf}")
 
         payload = {
-            "gateName": args.gate_name,
+            "gateId": int(target_gate_id),
+            "gateName": f"인천항 {target_gate_id}번 게이트",
             "gateType": args.gate_type,
             "recognizedPlateNo": pred or None,
             "plateConfidence": plate_confidence,

@@ -1,15 +1,16 @@
 /* 사업자(업체) 섹션 전용 스타일. theme.css 의 --color-* 토큰을 그대로 사용한다. */
 
 .biz-shell {
-  max-width: 980px;
+  text-align: center;
+  max-width: 1080px;
   margin: 0 auto;
   padding: 32px 16px 64px;
 }
 
 .biz-header {
   display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
+  align-items: center;
+  justify-content: center;
   margin-bottom: 18px;
 }
 .biz-header h1 {
@@ -18,15 +19,19 @@
   font-weight: 700;
   color: var(--color-text);
   margin: 0 0 4px;
+  text-align: center;
 }
 .biz-header p {
   font-size: 13.5px;
   color: var(--color-subtext);
   margin: 0;
+  text-align: center;
 }
 
 .biz-tabs {
   display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
   gap: 6px;
   border-bottom: 1px solid #e3e8ef;
   margin-bottom: 22px;
@@ -38,9 +43,19 @@
   color: var(--color-subtext);
   text-decoration: none;
   border-bottom: 2px solid transparent;
+  text-align: center;
 }
 .biz-tab:hover { color: var(--color-primary); }
 .biz-tab.active { color: var(--color-primary); border-bottom-color: var(--color-accent); }
+
+.biz-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.biz-content > * {
+  width: 100%;
+}
 
 /* ---- 업체 정보 카드 ---- */
 .dash-wrap { display: flex; justify-content: center; }
@@ -63,6 +78,74 @@
 .truck-table td { padding: 10px; border-bottom: 1px solid #f0f2f5; }
 .empty-text { color: #98a2b3; font-size: 14px; text-align: center; padding: 20px 0; }
 .hint-text { color: var(--color-subtext); font-size: 12.5px; margin-top: 6px; }
+
+/* ---- 사업자 대시보드 ---- */
+.biz-dash { text-align: left; width: 100%; }
+.biz-dash-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.biz-dash-date {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--color-text);
+  line-height: 1.4;
+}
+.biz-dash-refresh {
+  width: auto;
+  flex-shrink: 0;
+  padding: 5px 10px;
+  font-size: 12px;
+}
+.biz-dash-refresh:disabled { opacity: 0.55; cursor: default; }
+.biz-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.biz-kpi {
+  display: block;
+  text-align: left;
+  text-decoration: none;
+  background: var(--color-card);
+  border: 1px solid #eef1f8;
+  border-radius: 14px;
+  padding: 16px 18px;
+  box-shadow: 0 8px 22px rgba(10, 37, 64, 0.06);
+}
+.biz-kpi:hover { border-color: var(--color-accent); }
+.biz-kpi-label { display: block; font-size: 12.5px; font-weight: 600; color: var(--color-subtext); }
+.biz-kpi-value {
+  display: block;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--color-text);
+  line-height: 1.15;
+  margin-top: 4px;
+}
+.biz-kpi-value small {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-subtext);
+  margin-left: 3px;
+}
+.biz-chart-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.biz-chart-grid .mapping-card { text-align: left; }
+@media (max-width: 800px) {
+  .biz-kpi-grid,
+  .biz-chart-grid { grid-template-columns: 1fr; }
+}
 
 /* ---- 배차 매핑 화면 ---- */
 .mapping-grid {
@@ -114,7 +197,13 @@
   font-size: 14px;
   cursor: pointer;
 }
-.mapping-submit-btn:disabled { background: #cbd5e1; cursor: not-allowed; }
+.mapping-card--form {
+  max-width: 480px;
+  margin: 0 auto;
+  text-align: center;
+}
+.mapping-card--form h3 { text-align: center; }
+.mapping-card--form .mapping-field label { text-align: center; }
 
 .mapping-status {
   margin-top: 14px;
@@ -159,3 +248,182 @@
 }
 .mapping-truck-card .truck-no { font-weight: 700; color: var(--color-text); font-size: 13.5px; }
 .mapping-truck-card .truck-meta { font-size: 12px; color: var(--color-subtext); margin-top: 3px; }
+
+/* ---- 관리자 셸을 쓰는 사업자 레이아웃 ---- */
+.admin-gnb-org {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.82);
+  padding: 0 8px;
+}
+.biz-side-brand {
+  display: inline-block;
+  margin-top: 6px;
+  color: rgba(255, 255, 255, 0.78);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+.biz-today-btn {
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--a-border, #e3e8ef);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--a-text, #0a2540);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.biz-today-btn.on {
+  background: #0a2540;
+  border-color: #0a2540;
+  color: #fff;
+}
+.biz-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+.biz-ops .ops-kpi-hint.up { color: #059669; font-weight: 700; }
+.biz-notice-panel { display: flex; flex-direction: column; }
+.biz-notice-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex: 1;
+}
+.biz-notice-list li + li { border-top: 1px solid #f1f4f8; }
+.biz-notice-list a {
+  display: grid;
+  grid-template-columns: 52px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  color: inherit;
+}
+.biz-notice-title {
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.biz-notice-list time {
+  font-size: 12px;
+  color: var(--a-text-muted, #64748b);
+  white-space: nowrap;
+}
+.biz-dispatch-cta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #ff6b00;
+  color: #fff !important;
+  font-size: 14px;
+  font-weight: 800;
+}
+.biz-dispatch-cta .bi-chevron-right { margin-left: auto; }
+.biz-chart-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--a-text-muted, #64748b);
+}
+.biz-chart-legend i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  margin-right: 4px;
+}
+.biz-chart-legend i.ship { background: #1d4ed8; }
+.biz-chart-legend i.delay { background: #f97316; }
+.biz-week-hour { height: 160px; }
+.biz-week-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 100%;
+}
+.biz-week-bar {
+  width: 10px;
+  border-radius: 6px 6px 2px 2px;
+  display: block;
+}
+.biz-week-bar.ship { background: #93c5fd; }
+.biz-week-col.peak .biz-week-bar.ship,
+.ops-hour-col:has(.ops-hour-peak) .biz-week-bar.ship { background: #1d4ed8; }
+.biz-week-bar.delay { background: #fdba74; }
+.biz-metrics { list-style: none; margin: 0; padding: 4px 0 0; }
+.biz-metrics li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 4px;
+  border-bottom: 1px solid #f1f4f8;
+  font-size: 13.5px;
+  color: var(--a-text, #0a2540);
+}
+.biz-metrics li span { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; }
+.biz-metrics li i { color: #64748b; }
+.biz-metrics b {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+}
+.biz-metrics small { font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 600; margin-left: 2px; color: #64748b; }
+.biz-recent { margin-top: 14px; }
+.biz-table { font-size: 12.5px; }
+.biz-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 120px;
+}
+.biz-progress-track {
+  flex: 1;
+  height: 8px;
+  background: #eef2f6;
+  border-radius: 99px;
+  overflow: hidden;
+}
+.biz-progress-track span {
+  display: block;
+  height: 100%;
+  background: #2563eb;
+  border-radius: 99px;
+}
+.biz-progress em {
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748b;
+  min-width: 32px;
+  text-align: right;
+}
+.admin-app .badge-type {
+  display: inline-block;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  text-align: center;
+}
+.admin-app .badge-default { background: rgba(10, 37, 64, 0.08); color: #0a2540; }
+.admin-app .badge-must-read { background: rgba(255, 107, 0, 0.14); color: #ff6b00; }
+.admin-app .badge-urgent { background: rgba(217, 92, 69, 0.16); color: #c2410c; }
+
+@media (max-width: 1280px) {
+  .biz-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+}
+@media (max-width: 720px) {
+  .biz-kpis { grid-template-columns: 1fr !important; }
+  .biz-notice-list a { grid-template-columns: 52px 1fr; }
+  .biz-notice-list time { grid-column: 2; }
+}

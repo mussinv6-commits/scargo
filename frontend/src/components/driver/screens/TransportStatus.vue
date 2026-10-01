@@ -18,13 +18,13 @@
   <!-- 등록된 차량이 없음 -->
   <main v-else-if="!vehicleNo" class="page empty-state">
     <p class="hint-text">차량을 먼저 등록해야 배차를 받을 수 있어요.</p>
-    <RouterLink to="/driver/app/my-page" class="btn-primary link-btn">MY/차량에서 차량 등록하기</RouterLink>
+    <RouterLink to="/driver/app/my-page#register" class="drv-cta">차량 등록하러 가기</RouterLink>
   </main>
 
   <!-- 진행 중인 배차 없음 -->
   <main v-else-if="!dispatch" class="page empty-state">
     <p class="hint-text">진행 중인 배차가 없습니다.</p>
-    <RouterLink to="/driver/app/dispatch-list" class="btn-primary link-btn">배차목록에서 확인하기</RouterLink>
+    <RouterLink to="/driver/app/dispatch-list" class="drv-cta">배차목록 보기</RouterLink>
   </main>
 
   <!-- 진행 중인 배차 -->
@@ -150,6 +150,7 @@
 </template>
 
 <script setup>
+import { fetchMyVehicleNo } from '@/utils/driverTruck.js'
 import { ref, computed, onMounted } from 'vue'
 import axios from 'axios'
 import { authState } from '@/auth/authState.js'
@@ -274,10 +275,8 @@ function formatWonShort(n) {
 
 // ---- 초기 로딩 ----
 onMounted(async () => {
-  const userId = authState.user?.userId
-  if (userId) {
-    vehicleNo.value = localStorage.getItem(`scargo_myTruck_${userId}`)
-  }
+  // 26.09.30 수정: 배정 차량을 서버에서 조회 (localStorage 값은 더 이상 저장되지 않음)
+  vehicleNo.value = await fetchMyVehicleNo()
   await loadCurrentDispatch()
   loading.value = false
 })
@@ -288,10 +287,7 @@ onMounted(async () => {
 .driver-chip .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 3px var(--green-soft); }
 .driver-chip .dot.off { background: var(--text-muted); box-shadow: none; }
 
-.page { padding: 28px 32px; }
 .col-main { min-width: 0; }
-.empty-state { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 100px 20px; text-align: center; }
-.link-btn { display: inline-block; text-decoration: none; text-align: center; width: auto; padding: 12px 24px; }
 
 /* 스테퍼 */
 .stepper { display: flex; align-items: flex-start; justify-content: space-between; padding: 4px 4px 22px; position: relative; }
@@ -339,7 +335,7 @@ onMounted(async () => {
 
 /* 우측 실행 패널 */
 .action-card { display: flex; flex-direction: column; gap: 10px; }
-.btn-primary { width: 100%; padding: 16px; border-radius: var(--radius); border: none; background: var(--amber); color: #1A1300; font-family: 'Barlow Condensed', sans-serif; font-size: 19px; font-weight: 700; cursor: pointer; }
+.btn-primary { width: 100%; padding: 16px; border-radius: var(--radius); border: none; background: var(--amber); color: #fff; font-family: 'Barlow Condensed', sans-serif; font-size: 19px; font-weight: 700; cursor: pointer; }
 .btn-primary:active { transform: scale(0.98); }
 .btn-primary:disabled { opacity: 0.6; cursor: default; }
 .btn-secondary { width: 100%; padding: 14px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 15px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; }

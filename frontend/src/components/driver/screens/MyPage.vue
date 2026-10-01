@@ -46,12 +46,54 @@
         <span>트레일러 번호</span><b>{{ myTruck.trailerNo || '-' }}</b>
       </div>
       <div class="info-row"><span>최대 적재 중량</span><b>{{ myTruck.maxLoadWeight ?? '-' }} kg</b></div>
+      <!-- 26.09.22 추가: 진입 허가 상태 - 불허 상태로 야드에 헛걸음하지 않도록 기사도 바로 확인 가능하게 -->
+      <div class="info-row">
+        <span>진입 허가</span>
+        <b :class="entryApprovalClass">{{ entryApprovalLabel }}</b>
+      </div>
+      <p v-if="myTruck.entryApproval === 'REJECTED'" class="error-text">
+        진입이 반려된 차량입니다. 소속 업체 또는 관리자에게 문의해주세요.
+      </p>
+      <p v-else-if="myTruck.entryApproval === 'PENDING'" class="hint-text">
+        관리자 진입 허가 심사 대기 중입니다.
+      </p>
     </div>
 
-    <div v-else class="card lookup-card">
-      <p class="hint-text">
-        아직 배정된 차량이 없습니다. 소속 업체 또는 관리자에게 차량 배정을 요청해주세요.
-      </p>
+    <!-- 26.09.30 추가: 기사 화면에 차량 등록 기능이 없던 문제 → 배정 차량이 없으면 등록 신청 폼 표시 -->
+    <div v-else id="register" class="card register-card">
+      <template v-if="pendingVehicleNo">
+        <p class="hint-text" style="margin-top:0;">
+          <b>{{ pendingVehicleNo }}</b> 차량 등록을 신청했습니다.
+          소속 업체에서 기사 배정을 완료하고 관리자 진입 허가가 나면 이 화면에 차량 정보가 표시됩니다.
+        </p>
+        <button type="button" class="btn-outline" @click="pendingVehicleNo = ''; savePending('')">다른 차량 등록하기</button>
+      </template>
+      <form v-else class="register-form" novalidate @submit.prevent="registerTruck">
+        <p class="hint-text" style="margin-top:0;">
+          아직 배정된 차량이 없습니다. 운행할 차량을 등록하면 소속 업체와 관리자에게 알림이 전달됩니다.
+        </p>
+        <label class="field">
+          <span>차량 번호 <em>*</em></span>
+          <input class="input" v-model.trim="reg.vehicleNo" placeholder="예: 12가3456" maxlength="20" />
+        </label>
+        <label class="field">
+          <span>차종</span>
+          <input class="input" v-model.trim="reg.truckType" placeholder="예: 카고 / 윙바디 / 트랙터" maxlength="30" />
+        </label>
+        <label class="field">
+          <span>최대 적재 중량 (kg)</span>
+          <input class="input" v-model="reg.maxLoadWeight" type="number" min="0" step="1" placeholder="예: 25000" />
+        </label>
+        <label class="check-row">
+          <input type="checkbox" v-model="reg.isSemiTrailer" /> 세미트레일러(트랙터+트레일러) 차량입니다
+        </label>
+        <label v-if="reg.isSemiTrailer" class="field">
+          <span>트레일러 번호 <em>*</em></span>
+          <input class="input" v-model.trim="reg.trailerNo" placeholder="트레일러 번호판" maxlength="20" />
+        </label>
+        <p v-if="regMsg" class="error-text">{{ regMsg }}</p>
+        <button type="submit" class="btn-fill" :disabled="registering">{{ registering ? '등록 중...' : '차량 등록 신청' }}</button>
+      </form>
     </div>
 
     <!-- 적재 위치(야드) 현황 -->
@@ -164,6 +206,9 @@ import { useRouter } from 'vue-router'
 import axios from 'axios'
 import { authState, clearLogin } from '@/auth/authState.js'
 import { API_BASE } from '@/utils/apiBase.js'
+import { fetchMyTruck as fetchAssignedTruck } from '@/utils/driverTruck.js'
+import { friendlyError, withBoolAliases } from '@/utils/apiHelpers.js'
+import { VEHICLE_NO_PATTERN, VEHICLE_NO_MESSAGE, normalizeVehicleNo } from '@/utils/validators.js'
 
 const router = useRouter()
 
@@ -200,23 +245,82 @@ async function fetchCompany() {
 const myTruck = ref(null)
 
 async function fetchMyTruck() {
-  try {
-    const resp = await axios.get(`${API_BASE}/api/trucks/my`, { withCredentials: true })
-    myTruck.value = resp.data
+  // 204 No Content(배정된 차량 없음) / 에러는 null
+  myTruck.value = await fetchAssignedTruck()
+  if (myTruck.value) {
+    savePending('')
     await fetchLocations()
     await fetchRecords()
-  } catch (err) {
-    // 204 No Content(배정된 차량 없음) 포함, 그 외 에러도 일단 "배정 없음"으로 처리
-    myTruck.value = null
   }
 }
+
+// ---- 26.09.30 추가: 차량 등록 신청 (POST /api/trucks) ----
+// 등록 후 기사 배정은 사업자(기사 관리 메뉴), 진입 허가는 관리자가 처리한다.
+const reg = reactive({ vehicleNo: '', truckType: '', maxLoadWeight: '', isSemiTrailer: false, trailerNo: '' })
+const regMsg = ref('')
+const registering = ref(false)
+const pendingKey = () => `scargo_pendingTruck_${user.value?.userId}`
+const pendingVehicleNo = ref(localStorage.getItem(pendingKey()) || '')
+function savePending(v) {
+  try {
+    if (v) localStorage.setItem(pendingKey(), v)
+    else localStorage.removeItem(pendingKey())
+  } catch (e) { /* 저장 실패는 무시 */ }
+}
+
+async function registerTruck() {
+  regMsg.value = ''
+  const vehicleNo = normalizeVehicleNo(reg.vehicleNo)
+  if (!vehicleNo) return (regMsg.value = '차량 번호를 입력해주세요.')
+  if (!VEHICLE_NO_PATTERN.test(vehicleNo)) return (regMsg.value = VEHICLE_NO_MESSAGE)
+  if (reg.isSemiTrailer && !reg.trailerNo) return (regMsg.value = '트레일러 번호를 입력해주세요.')
+  if (reg.maxLoadWeight !== '' && Number(reg.maxLoadWeight) <= 0) return (regMsg.value = '최대 적재 중량은 0보다 커야 합니다.')
+  if (!user.value?.companyId) return (regMsg.value = '소속 업체 정보가 없어 등록할 수 없습니다. 관리자에게 문의해주세요.')
+
+  registering.value = true
+  try {
+    await axios.post(
+      `${API_BASE}/api/trucks`,
+      withBoolAliases(
+        {
+          vehicleNo,
+          companyId: user.value.companyId,
+          isSemiTrailer: reg.isSemiTrailer,
+          trailerNo: reg.isSemiTrailer ? reg.trailerNo : null,
+          truckType: reg.truckType || null,
+          maxLoadWeight: reg.maxLoadWeight === '' ? null : Number(reg.maxLoadWeight),
+        },
+        ['isSemiTrailer']
+      ),
+      { withCredentials: true }
+    )
+    pendingVehicleNo.value = vehicleNo
+    savePending(vehicleNo)
+    Object.assign(reg, { vehicleNo: '', truckType: '', maxLoadWeight: '', isSemiTrailer: false, trailerNo: '' })
+    await fetchMyTruck()
+  } catch (err) {
+    regMsg.value = `차량 등록에 실패했습니다. ${friendlyError(err)}`
+  } finally {
+    registering.value = false
+  }
+}
+
+// 26.09.22 추가: 진입 허가 상태 표시용
+const entryApprovalLabel = computed(() => {
+  return { PENDING: '심사대기', APPROVED: '허가', REJECTED: '반려' }[myTruck.value?.entryApproval] || '심사대기'
+})
+const entryApprovalClass = computed(() => {
+  if (myTruck.value?.entryApproval === 'APPROVED') return 'text-approved'
+  if (myTruck.value?.entryApproval === 'REJECTED') return 'text-rejected'
+  return 'text-pending'
+})
 
 // ---- 적재 위치(야드) 현황 (GET /api/loading-locations) ----
 const locations = ref([])
 async function fetchLocations() {
   try {
     const resp = await axios.get(`${API_BASE}/api/loading-locations`, { withCredentials: true })
-    locations.value = resp.data
+    locations.value = Array.isArray(resp.data) ? resp.data : []
   } catch (err) {
     console.error(err)
   }
@@ -240,7 +344,7 @@ async function submitCheckin() {
       `${API_BASE}/api/loading-records`,
       {
         vehicleNo: myTruck.value.vehicleNo,
-        containerNo: checkin.containerNo.trim(),
+        containerNo: checkin.containerNo.trim().toUpperCase(),
         locationId: checkin.locationId,
       },
       { withCredentials: true }
@@ -251,17 +355,21 @@ async function submitCheckin() {
     await fetchRecords()
   } catch (err) {
     checkinMsg.value =
-      err.response?.status === 404
-        ? '체크인 API가 아직 백엔드에 준비되지 않았습니다. (LoadingRecordController 필요)'
-        : err.response?.data?.message || '체크인 등록에 실패했습니다.'
+      err.response?.status === 403
+        ? '체크인 기록은 소속 업체 또는 관리자가 등록합니다. 업체에 요청해주세요.'
+        : `체크인 등록에 실패했습니다. ${friendlyError(err)}`
   }
 }
 
 async function fetchRecords() {
   if (!myTruck.value) return
   try {
-    const resp = await axios.get(`${API_BASE}/api/loading-records/vehicle/${myTruck.value.vehicleNo}`, { withCredentials: true })
-    records.value = resp.data
+    // 26.09.30 수정: 실제 백엔드 경로는 /api/loading-records/truck/{vehicleNo} (Page 응답)
+    const resp = await axios.get(`${API_BASE}/api/loading-records/truck/${encodeURIComponent(myTruck.value.vehicleNo)}`, {
+      params: { page: 0, size: 20 },
+      withCredentials: true,
+    })
+    records.value = resp.data?.content || []
   } catch (err) {
     records.value = []
   }
@@ -361,6 +469,14 @@ onMounted(async () => {
 
 .hint-text { color: var(--text-muted); font-size: 13px; }
 .error-text { color: var(--red); font-size: 13px; margin-top: 4px; }
+.register-form { display: flex; flex-direction: column; gap: 10px; }
+.register-form .field { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--text-muted); font-weight: 600; }
+.register-form .field em { color: var(--amber); font-style: normal; }
+.register-form .check-row { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--text); cursor: pointer; }
+/* 26.09.22 추가: 진입 허가 상태 색상 */
+.text-approved { color: var(--green) !important; }
+.text-rejected { color: var(--red) !important; }
+.text-pending { color: var(--amber) !important; }
 
 .lookup-row { display: flex; gap: 8px; margin: 8px 0; }
 .input {
@@ -376,7 +492,7 @@ onMounted(async () => {
   padding: 10px 14px; border-radius: 8px; font-size: 13.5px; font-weight: 600; cursor: pointer; margin-top: 8px;
 }
 .btn-outline { background: transparent; border: 1px solid var(--amber); color: var(--amber); }
-.btn-fill { border: none; background: var(--amber); color: #1A1300; width: 100%; }
+.btn-fill { border: none; background: var(--amber); color: #fff; width: 100%; }
 .btn-outline:active, .btn-fill:active { transform: scale(0.98); }
 
 .location-item {

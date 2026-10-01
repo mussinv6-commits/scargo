@@ -6,15 +6,19 @@
     <!-- 히어로 -->
     <section class="home-hero">
       <div class="home-hero-inner">
+        <div class="home-hero-text">
         <span class="home-kicker">SMART LOGISTICS PLATFORM</span>
         <h1 class="home-title">
-          <span>못먹어도S카고</span>와 함께하는<br />
+          <span>못먹어도 S Cargo</span>와 함께하는<br />
           스마트한 화물 운송 관리
         </h1>
         <p class="home-subtitle">
           기사, 업체, 관리자가 하나의 화면에서 배차부터 입출차,
           운행 이력까지 실시간으로 확인하고 관리할 수 있습니다.
         </p>
+        </div>
+        <!-- 26.09.30 추가: 항만 날씨 위젯 -->
+        <WeatherWidget />
       </div>
     </section>
 
@@ -48,11 +52,13 @@
 
 <script>
 import NoticeSlide from "@/components/notice/noticeSlide.vue";
+import WeatherWidget from "@/components/home/WeatherWidget.vue";
 
 export default {
   name: "home",
   components: {
     NoticeSlide,
+    WeatherWidget,
   },
 };
 </script>

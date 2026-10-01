@@ -32,6 +32,7 @@
             <th>차량번호</th>
             <th>차종</th>
             <th>세미트레일러</th>
+            <th>배정 기사</th>
           </tr>
         </thead>
         <tbody>
@@ -39,11 +40,44 @@
             <td>{{ t.vehicleNo }}</td>
             <td>{{ t.truckType || "-" }}</td>
             <td>{{ t.isSemiTrailer ? "예" : "아니오" }}</td>
+            <td>
+              <span v-if="t.assignedDriverName">{{ t.assignedDriverName }}</span>
+              <span v-else class="empty-text" style="padding:0;">미배정</span>
+            </td>
           </tr>
         </tbody>
       </table>
       <p v-else class="empty-text">등록된 차량이 없습니다.</p>
-      <p class="hint-text">트레일러 번호, 최대 적재 중량 등 상세 정보는 관리자 페이지에서 확인할 수 있습니다.</p>
+      <!-- 26.09.30 추가: 소속 기사 정보 (기존에는 불러오지 못해 표시되지 않았음) -->
+      <div class="section-title" style="display:flex; align-items:center; justify-content:space-between;">
+        <span>소속 기사 ({{ drivers.length }}명)</span>
+        <RouterLink to="/company/drivers" style="font-size:13px; font-weight:700;">기사 관리 ›</RouterLink>
+      </div>
+      <table class="truck-table" v-if="drivers.length">
+        <thead>
+          <tr>
+            <th>이름</th>
+            <th>아이디</th>
+            <th>연락처</th>
+            <th>배정 차량</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="d in drivers" :key="d.accountId">
+            <td>{{ d.userName || "-" }}</td>
+            <td>{{ d.userId }}</td>
+            <td>{{ d.phoneNum || "-" }}</td>
+            <td>{{ truckOfDriver(d.accountId) || "미배정" }}</td>
+          </tr>
+        </tbody>
+      </table>
+      <p v-else class="empty-text">{{ driverError || "소속된 기사가 없습니다." }}</p>
+
+      <!-- 26.09.22 수정: 기사 배정 관리는 "기사 관리" 탭으로 이동. 여기는 조회만. -->
+      <p class="hint-text">
+        기사 배정은 <RouterLink to="/company/drivers">기사 관리</RouterLink> 메뉴에서 하실 수 있습니다.
+        트레일러 번호, 최대 적재 중량 등 상세 정보는 관리자 페이지에서 확인할 수 있습니다.
+      </p>
     </div>
   </div>
 </template>
@@ -52,6 +86,7 @@
 import axios from "axios";
 import { authState } from "@/auth/authState.js";
 import { API_BASE } from "@/utils/apiBase.js";
+import { fetchCompanyDrivers, fetchCompanyTrucks } from "@/utils/companyDrivers.js";
 
 export default {
   name: "CompanyInfo",
@@ -60,6 +95,8 @@ export default {
       user: null,
       company: null,
       trucks: [],
+      drivers: [],
+      driverError: "",
       loadedCompany: false,
     };
   },
@@ -77,14 +114,15 @@ export default {
       return;
     }
 
-    await this.fetchCompany();
-    await this.fetchTrucks();
+    await Promise.all([this.fetchCompany(), this.fetchTrucks(), this.fetchDrivers()]);
   },
   methods: {
     async fetchCompany() {
       try {
         // 수정: 실제 백엔드 경로는 /api/companies/{companyId} 이다.
-        const resp = await axios.get(`${API_BASE}/api/companies/${this.user.companyId}`);
+        const resp = await axios.get(`${API_BASE}/api/companies/${this.user.companyId}`, {
+          withCredentials: true,
+        });
         this.company = resp.data;
       } catch (err) {
         console.error(err);
@@ -94,14 +132,20 @@ export default {
     },
     async fetchTrucks() {
       try {
-        // 수정: 회사별 차량 상세 목록 API가 없어, 드롭다운/옵션용 경량 목록 API를 사용한다.
-        const resp = await axios.get(`${API_BASE}/api/trucks/options`, {
-          params: { companyId: this.user.companyId },
-        });
-        this.trucks = resp.data;
+        this.trucks = await fetchCompanyTrucks();
       } catch (err) {
         console.error(err);
       }
+    },
+    async fetchDrivers() {
+      try {
+        this.drivers = await fetchCompanyDrivers();
+      } catch (err) {
+        this.driverError = err.message;
+      }
+    },
+    truckOfDriver(accountId) {
+      return this.trucks.find((t) => t.assignedAccountId === accountId)?.vehicleNo || "";
     },
   },
 };

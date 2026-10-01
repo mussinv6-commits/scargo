@@ -3,7 +3,6 @@ import { authState } from '@/auth/authState.js';
 
 // vite.config.js 에 @를 설정해야 @/ 경로를 사용할 수 있다
 import member from '@/router/member/member.js';
-import bbs from '@/router/bbs/bbs';
 import notice from '@/router/notice/notice.js';
 import company from '@/router/company/company.js';
 import driverApp from '@/router/driver/driverApp.js';
@@ -15,7 +14,6 @@ const router = createRouter({
     history: createWebHistory(),
     routes: [
         ...member,
-        ...bbs,
         ...notice,
         ...company,
         ...driverApp,
@@ -59,6 +57,13 @@ router.beforeEach((to, from, next) => {
             alert('승인된 회사 계정만 접근할 수 있습니다.');
             return next({ name: 'home' });
         }
+    }
+
+    // 로그인만 필요한 화면
+    if (to.matched.some((r) => r.meta.requiresAuth) && !user) {
+        alert('로그인이 필요합니다.');
+        sessionStorage.setItem('location', to.fullPath);
+        return next({ name: 'login' });
     }
 
     // 기사 화면: 로그인만 되어 있으면 접근 가능

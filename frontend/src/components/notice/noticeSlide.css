@@ -1,9 +1,13 @@
-.notice-marquee {
+/* =========================================
+   공지사항 슬라이드 전체 영역
+========================================= */
+
+.notice-slide {
   width: 100%;
   height: 42px;
-
-  /* 검은색 띠 */
-  background: #171717;
+  background: #FFF4CC;
+  margin-left: 0;
+  box-sizing: border-box;
 
   /* 화면 밖으로 나가는 내용 숨기기 */
   overflow: hidden;
@@ -12,26 +16,170 @@
   display: flex;
   align-items: center;
 
-  /* 테두리 */
-  border-top: 2px solid #333;
-  border-bottom: 2px solid #333;
+  /* 배너 글자는 왼쪽 정렬 */
+  justify-content: flex-start;
+
+  /* ⭐ 파스텔 노란색과 어울리는 연한 테두리 */
+  border-top: 2px solid #F3DFA3;
+  border-bottom: 2px solid #EED58F;
 
   /* 마우스 올렸을 때 손가락 */
   cursor: default;
+
+  padding: 0 24px;
 }
 
 
 /* =========================================
-   움직이는 전체 영역
+   공지 내용 영역
+========================================= */
+
+.notice-content {
+  display: flex;
+
+  /* 세로 가운데 정렬 */
+  align-items: center;
+
+  /* 글자 왼쪽 정렬 */
+  justify-content: flex-start;
+
+  gap: 12px;
+
+  /* ⭐ 가운데 영역을 기준으로 사용 */
+  flex: 1;
+
+  /* 내용이 넘치면 숨김 */
+  overflow: hidden;
+
+  /* 넘치는 글자를 ...으로 표시 */
+  text-overflow: ellipsis;
+
+  /* 줄바꿈하지 않음 */
+  white-space: nowrap;
+}
+
+
+/* =========================================
+   공지 타입 (일반, 필독, 긴급 등)
+========================================= */
+
+.notice-type {
+
+  /* ⭐ 공지 타입 글자 색상 - 다홍색 */
+  color: #D95C45;
+
+  /*   긴급/필독 박스를 화면 왼쪽에서 띄움 */
+  margin-left: 0;
+
+  /* ⭐ 공지 타입 글자 크기 */
+  font-size: 17px;
+
+  /* ⭐ 공지 타입 글자 굵기 */
+  font-weight: 700;
+
+  letter-spacing: 0.08em;
+  flex-shrink: 0;
+
+  /* ⭐ 공지 타입 뒤쪽 배경 */
+  background: #FFE6B8;
+
+  padding: 4px 10px;
+  border-radius: 3px;
+
+  /* ⭐ 공지 타입 테두리 */
+  border: 1px solid #E8B878;
+
+  /* ⭐ 기존 강한 그림자 제거 */
+  box-shadow: none;
+
+  text-transform: uppercase;
+}
+
+
+/* =========================================
+   공지 제목
+========================================= */
+
+.notice-title {
+
+  /* ⭐ 공지 제목 글자 색상 - 다홍색 */
+  color: #D95C45;
+
+  /* ⭐ 공지 제목 글자 크기 */
+  font-size: 19px;
+
+  /* ⭐ 공지 제목 글자 굵기 */
+  font-weight: 600;
+
+  letter-spacing: 0.5px;
+  cursor: pointer;
+
+  transition: color 0.2s ease;
+
+  overflow: hidden; /*넘어간 글자는 숨겨!*/
+  text-overflow: ellipsis; /* 넘치면 ...으로 표시 */
+  white-space: nowrap; /* 줄바꿈하지마 */
+
+  /* ⭐ 기존 그림자 제거 */
+  text-shadow: none;
+
+  position: relative;
+}
+
+.notice-title.is-clickable {
+  cursor: pointer;
+}
+
+
+/* =========================================
+   공지 제목 마우스 올렸을 때
+========================================= */
+
+.notice-title:hover {
+
+  /* ⭐ 마우스를 올렸을 때 조금 진한 다홍색 */
+  color: #af701d;
+
+  /* ⭐ 기존 그림자 제거 */
+  text-shadow: none;
+
+  filter: none;
+}
+
+
+/* =========================================
+   공지 날짜
+========================================= */
+
+.notice-date {
+
+  /* ⭐ 날짜 글자 색상 */
+  color: #d82b00;
+
+  /* ⭐ 날짜 글자 크기 */
+  font-size: 12px;
+
+  /* ⭐ 날짜 글자 굵기 */
+  font-weight: 500;
+
+  flex-shrink: 0;
+  margin-left: 12px;
+
+  /* ⭐ 기존 그림자 제거 */
+  text-shadow: none;
+}
+
+
+/* =========================================
+   움직이는 전체 영역 (마퀴용)
 ========================================= */
 
 .marquee-track {
   display: flex;
 
-  /* 내용이 줄바꿈되지 않도록 */
+  /* ⭐ 내용 전체 크기만큼 사용 */
   width: max-content;
 
-  /* 왼쪽으로 계속 이동 */
   animation: marquee 25s linear infinite;
 }
 
@@ -43,16 +191,16 @@
 .marquee-content {
   display: flex;
 
-  /* 세로 가운데 정렬 */
+  /* ⭐ 세로 가운데 정렬 */
   align-items: center;
 
-  /* 줄바꿈 방지 */
+  /* ⭐ 내용 가로 가운데 정렬 */
+  justify-content: center;
+
   white-space: nowrap;
 
-  /* 각 내용 사이의 간격 */
   gap: 14px;
 
-  /* 두 번째 내용과 연결되는 간격 */
   padding-right: 50px;
 }
 
@@ -63,9 +211,13 @@
 
 .notice-icon {
   font-size: 20px;
-
-  /* 아이콘이 작아지지 않도록 */
   flex-shrink: 0;
+
+  /* ⭐ 아이콘 색상 - 다홍색 */
+  color: #da3b1f;
+
+  /* ⭐ 기존 그림자 제거 */
+  filter: none;
 }
 
 
@@ -74,13 +226,19 @@
 ========================================= */
 
 .notice-text {
-  color: white;
+
+  /* ⭐ 공지 글자 색상 - 다홍색 */
+  color: #D95C45;
 
   font-size: 14px;
 
-  font-weight: 500;
+  /* ⭐ 공지 글자 굵기 */
+  font-weight: 600;
 
   letter-spacing: 0.3px;
+
+  /* ⭐ 기존 그림자 제거 */
+  text-shadow: none;
 }
 
 
@@ -89,11 +247,34 @@
 ========================================= */
 
 .star {
-  color: #ffd43b;
 
-  font-size: 17px;
+  /* ⭐ 별 색상 - 다홍색 */
+  color: #D95C45;
 
-  margin: 0 3px;
+  font-size: 18px;
+  margin: 0 4px;
+
+  /* ⭐ 기존 그림자 제거 */
+  filter: none;
+
+  animation: starTwinkle 1.2s ease-in-out infinite;
+}
+
+
+/* =========================================
+   별 반짝이는 애니메이션
+========================================= */
+
+@keyframes starTwinkle {
+  0%, 100% {
+    opacity: 1;
+    filter: none;
+  }
+
+  50% {
+    opacity: 0.7;
+    filter: none;
+  }
 }
 
 
@@ -102,13 +283,38 @@
 ========================================= */
 
 .arrow {
-  color: #ffd43b;
+
+  /* ⭐ 화살표 색상 - 다홍색 */
+  color: #D95C45;
 
   font-size: 22px;
 
-  font-weight: bold;
+  /* ⭐ 화살표 글자 굵기 */
+  font-weight: 600;
 
   margin: 0 8px;
+
+  animation: arrowPulse 1.5s ease-in-out infinite;
+
+  /* ⭐ 기존 그림자 제거 */
+  filter: none;
+}
+
+
+/* =========================================
+   화살표 깜빡이는 애니메이션
+========================================= */
+
+@keyframes arrowPulse {
+  0%, 100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  50% {
+    opacity: 0.6;
+    transform: translateX(2px);
+  }
 }
 
 
@@ -117,13 +323,10 @@
 ========================================= */
 
 @keyframes marquee {
-
-  /* 시작 위치 */
   0% {
     transform: translateX(0);
   }
 
-  /* 왼쪽으로 이동 */
   100% {
     transform: translateX(-50%);
   }
@@ -145,23 +348,71 @@
 
 @media (max-width: 768px) {
 
-  .notice-marquee {
+  .notice-slide {
+
+    /* ⭐ 모바일에서도 화면 전체 너비 */
+    width: 100vw;
+
     height: 38px;
+
+    /* ⭐ 모바일에서 화면 왼쪽 끝으로 맞춤 */
+    margin-left: calc(50% - 50vw);
+
+    border-top: 2px solid #F3DFA3;
+    border-bottom: 2px solid #EED58F;
+
+    padding: 0 16px;
+    justify-content: flex-start;
   }
 
+
+  .notice-type {
+
+    /* ⭐ 모바일 공지 타입 글자 크기 */
+    font-size: 10px;
+
+    padding: 3px 8px;
+  }
+
+
+  .notice-title {
+
+    /* ⭐ 모바일 공지 제목 글자 크기 */
+    font-size: 13px;
+  }
+
+
+  .notice-date {
+
+    /* ⭐ 모바일 날짜 글자 크기 */
+    font-size: 11px;
+  }
+
+
   .notice-text {
+
+    /* ⭐ 모바일 공지 글자 크기 */
     font-size: 12px;
   }
 
+
   .notice-icon {
+
+    /* ⭐ 모바일 아이콘 크기 */
     font-size: 16px;
   }
 
+
   .star {
-    font-size: 14px;
+
+    /* ⭐ 모바일 별 크기 */
+    font-size: 16px;
   }
 
+
   .arrow {
+
+    /* ⭐ 모바일 화살표 크기 */
     font-size: 18px;
   }
 }

@@ -43,11 +43,13 @@
 
 <script setup>
 import { onMounted, onBeforeUnmount, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { authState } from '@/auth/authState.js'
 import { adminApi, pickErrorMessage } from '@/utils/adminApi'
 // 26.09.21 추가: assets 폴더에 저장된 종 이미지(bell.png)를 아이콘으로 사용
 import bellIcon from '@/assets/bell.png'
 
+const router = useRouter()
 const panelOpen = ref(false)
 const notifications = ref([])
 const unreadCount = ref(0)
@@ -113,16 +115,51 @@ function closePanel() {
   panelOpen.value = false
 }
 
-async function handleItemClick(n) {
-  if (n.read) return // 26.09.21 수정: 백엔드 응답 키가 isRead가 아니라 read임 (Jackson boolean 직렬화 규칙)
-  try {
-    await adminApi.patch(`/api/notifications/${n.notificationId}/read`)
-    n.read = true
-    unreadCount.value = Math.max(0, unreadCount.value - 1)
-  } catch (err) {
-    // 26.09.21 수정: 실패를 콘솔에만 조용히 남기지 않고 사용자에게도 알림
-    alert(pickErrorMessage(err, '읽음 처리에 실패했습니다.'))
+// 26.09.30 추가: 알림을 누르면 관련 기능 화면으로 이동
+// 백엔드 알림 유형(NotificationType): CORPORATE_APPROVAL / OVERLOAD_WARNING / NOTICE / SYSTEM
+//  - CORPORATE_APPROVAL : 기업회원 가입 신청(관리자) · 승인 완료(사업자)       referenceId = accountId
+//  - OVERLOAD_WARNING   : 과적 위반 발생                                      referenceId = checkId
+//  - NOTICE             : 차량 등록/진입 허가 결과 등 운영 안내, 공지사항
+function resolveTarget(n) {
+  const role = authState.user?.userType
+  const text = `${n.title || ''} ${n.message || ''}`
+  switch (n.notificationType) {
+    case 'CORPORATE_APPROVAL':
+      return role === 'ADMIN' ? '/admin/accounts' : role === 'CORPORATE_APPROVED' ? '/company' : '/'
+    case 'OVERLOAD_WARNING':
+      return role === 'ADMIN' ? '/admin/overload-checks' : role === 'GENERAL' ? '/driver/app/status' : '/company'
+    case 'NOTICE':
+    case 'SYSTEM':
+    default:
+      if (/공지/.test(text)) return n.referenceId && /게시|공지사항/.test(text) ? `/notice/${n.referenceId}` : '/notice'
+      if (/차량|진입|허가|반려|배정/.test(text)) {
+        if (role === 'ADMIN') return '/admin/trucks'
+        if (role === 'CORPORATE_APPROVED') return /배정/.test(text) ? '/company/drivers' : '/company'
+        if (role === 'GENERAL') return '/driver/app/my-page'
+      }
+      if (/배차/.test(text) && role === 'GENERAL') return '/driver/app/dispatch-list'
+      if (/정산|세금계산서/.test(text) && role === 'GENERAL') return '/driver/app/settlement'
+      if (role === 'ADMIN') return '/admin'
+      if (role === 'CORPORATE_APPROVED') return '/company'
+      if (role === 'GENERAL') return '/driver/app/status'
+      return null
   }
+}
+
+async function handleItemClick(n) {
+  // 백엔드 응답 키가 isRead 가 아니라 read (Jackson boolean 직렬화 규칙)
+  if (!n.read) {
+    try {
+      await adminApi.patch(`/api/notifications/${n.notificationId}/read`)
+      n.read = true
+      unreadCount.value = Math.max(0, unreadCount.value - 1)
+    } catch (err) {
+      console.log('읽음 처리 실패:', err)
+    }
+  }
+  const target = resolveTarget(n)
+  panelOpen.value = false
+  if (target) router.push(target)
 }
 
 async function markAllRead() {

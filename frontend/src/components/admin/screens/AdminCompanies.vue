@@ -1,9 +1,6 @@
 <template>
   <div>
-    <div class="admin-page-header">
-      <h1>업체 관리</h1>
-      <p>화주/운송사 업체 정보를 등록, 수정, 삭제합니다.</p>
-    </div>
+    <AdminPageHeader title="업체 관리" description="화주/운송사 업체 정보를 등록, 수정, 삭제합니다." />
 
     <CrudTable
       title="업체"
@@ -12,6 +9,8 @@
       :rows="rows"
       :loading="loading"
       :form-fields="formFields"
+      :page-size="10"
+      :row-label="(r) => r.companyName"
       :on-create="handleCreate"
       :on-update="handleUpdate"
       :on-delete="handleDelete"
@@ -22,13 +21,16 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import CrudTable from '@/components/admin/CrudTable.vue'
+import AdminPageHeader from '@/components/admin/AdminPageHeader.vue'
 import { adminApi, pickErrorMessage } from '@/utils/adminApi'
+import { friendlyError, updateWithFallback, deleteError, normalizeRows } from '@/utils/apiHelpers'
+import { BUSINESS_NO_PATTERN, BUSINESS_NO_MESSAGE, normalizeBusinessNo } from '@/utils/validators'
 
 const rows = ref([])
 const loading = ref(true)
 
 const columns = [
-  { key: 'companyId', label: 'ID', width: '60px' },
+  { key: 'companyId', label: 'ID', width: '60px', align: 'center' },
   { key: 'companyName', label: '업체명' },
   { key: 'representativeName', label: '대표자' },
   { key: 'industryType', label: '업종' },
@@ -40,7 +42,7 @@ const columns = [
 const formFields = [
   { key: 'companyName', label: '업체명', required: true, placeholder: '(주)스카고로지스틱스' },
   { key: 'address', label: '주소', required: true, placeholder: '업체 주소를 입력하세요' },
-  { key: 'businessNo', label: '사업자 등록번호', placeholder: '000-00-00000' },
+  { key: 'businessNo', label: '사업자 등록번호', placeholder: '123-45-67890', pattern: BUSINESS_NO_PATTERN, patternMessage: BUSINESS_NO_MESSAGE },
   { key: 'industryType', label: '업종', placeholder: '컨테이너 운송업' },
   { key: 'representativeName', label: '대표자명', placeholder: '홍길동' },
 ]
@@ -48,20 +50,9 @@ const formFields = [
 async function loadRows() {
   loading.value = true
   try {
-    const optionsRes = await adminApi.get('/api/companies/options')
-    const options = optionsRes.data // { companyId, companyName, address }
-
-    // CompanyResponse(목록 API)에는 companyId가 빠져있어 매칭이 불가능하므로,
-    // options 목록을 기준으로 각 업체의 상세 정보를 병렬로 채워넣는다.
-    const details = await Promise.all(
-      options.map((o) =>
-        adminApi
-          .get(`/api/companies/${o.companyId}`)
-          .then((r) => ({ companyId: o.companyId, ...r.data }))
-          .catch(() => ({ companyId: o.companyId, companyName: o.companyName, address: o.address }))
-      )
-    )
-    rows.value = details
+    // 26.09.30 수정: 백엔드 CompanyResponse 에 companyId 가 포함되어 있어 N+1 조회 없이 목록 API 하나로 조회
+    const res = await adminApi.get('/api/companies')
+    rows.value = normalizeRows(res.data, { idKey: 'companyId' })
   } catch (err) {
     alert(pickErrorMessage(err, '업체 목록을 불러오지 못했습니다.'))
   } finally {
@@ -69,13 +60,42 @@ async function loadRows() {
   }
 }
 
+// 26.09.30 수정: 신규 등록 실패 시 서버 원문(JSON/SQL) 대신 원인별 안내 문구 표시
+function companyError(err) {
+  const status = err?.response?.status
+  const raw = JSON.stringify(err?.response?.data || '')
+  if (status === 409 || /duplicate|unique|이미/i.test(raw)) {
+    return '이미 등록된 업체이거나 사업자등록번호가 중복됩니다. 기존 목록을 확인해주세요.'
+  }
+  if (status === 403) return '업체를 등록할 권한이 없습니다. 관리자 계정으로 다시 로그인해주세요.'
+  if (status === 400) {
+    const msg = friendlyError(err, '')
+    return msg && msg !== '입력값을 다시 확인해주세요.'
+      ? msg
+      : '필수 항목(업체명, 주소)과 사업자등록번호 형식(123-45-67890)을 확인해주세요.'
+  }
+  return friendlyError(err, '업체 정보를 저장하지 못했습니다. 잠시 후 다시 시도해주세요.')
+}
+
+function buildPayload(payload) {
+  return { ...payload, businessNo: normalizeBusinessNo(payload.businessNo) }
+}
+
 async function handleCreate(payload) {
-  await adminApi.post('/api/companies', payload)
+  try {
+    await adminApi.post('/api/companies', buildPayload(payload))
+  } catch (err) {
+    throw new Error(companyError(err))
+  }
   await loadRows()
 }
 
 async function handleUpdate(id, payload) {
-  await adminApi.put(`/api/companies/${id}`, payload)
+  try {
+    await updateWithFallback(adminApi, `/api/companies/${id}`, buildPayload(payload), 'put')
+  } catch (err) {
+    throw new Error(companyError(err))
+  }
   await loadRows()
 }
 
@@ -84,7 +104,8 @@ async function handleDelete(id) {
     await adminApi.delete(`/api/companies/${id}`)
     await loadRows()
   } catch (err) {
-    alert(pickErrorMessage(err, '삭제 중 오류가 발생했습니다.'))
+    alert(`업체 삭제에 실패했습니다.
+${deleteError(err, '업체')}`)
   }
 }
 

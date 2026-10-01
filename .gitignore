@@ -1,0 +1,33 @@
+# ===== SCargo 공통 =====
+.DS_Store
+Thumbs.db
+*.log
+.idea/
+.vscode/
+
+# ===== 이클립스/STS 설정 (사람마다 달라서 올리지 않음) =====
+.project
+.classpath
+.factorypath
+.settings/
+.apt_generated/
+.apt_generated_tests/
+
+# ===== 백엔드 (Spring Boot / Gradle) =====
+backend/scargo/build/
+backend/scargo/bin/
+backend/scargo/.gradle/
+backend/scargo/out/
+backend/scargo/src/main/resources/firebase/
+
+# ===== 프론트엔드 (Vue / Vite) =====
+frontend/node_modules/
+frontend/dist/
+
+# ===== 파이썬 (게이트 OCR) =====
+__pycache__/
+*.pyc
+python/runs/
+python/build/
+python/dist/
+python/crash_log.txt

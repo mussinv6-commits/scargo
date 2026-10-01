@@ -13,6 +13,9 @@
   --color-text: #0a2540;           /* Text - 메인 컬러를 그대로 텍스트에도 사용 */
   --color-subtext: #64748b;        /* Sub Text - 그레이 */
 
+  /* 26.09.30 추가: 상단 네비 높이 - 관리자 사이드바 sticky 위치 계산에 사용 */
+  --nav-h: 60px;
+
   /* 물류 상태 표시 */
   --status-delivered: #10b981;   /* 배송완료 */
   --status-in-transit: #0a2540;  /* 배송중 - 메인 네이비 */

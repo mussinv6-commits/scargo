@@ -81,7 +81,8 @@
               />
             </div>
 
-            <!-- 6, 7. 휴대폰 번호 (숫자만, 11자리 제한) -->
+            <!-- 6, 7. 휴대폰 번호 (숫자만 입력하면 '-'가 자동으로 들어감, 최대 13자) -->
+            <!-- 26.09.30 수정: 하이픈이 포함된 형태(010-1234-5678)로 저장하기 위해 maxlength를 13으로 변경 -->
             <div class="form-row">
               <label class="form-label">휴대폰 번호</label>
               <input
@@ -90,8 +91,8 @@
                 class="form-control"
                 v-model="form.phoneNum"
                 @input="onPhoneInput"
-                maxlength="11"
-                placeholder="'-' 없이 숫자만 입력하세요"
+                maxlength="13"
+                placeholder="숫자만 입력하면 '-'가 자동으로 들어갑니다"
               />
             </div>
 
@@ -148,7 +149,7 @@
                     class="form-control"
                     v-model="form.businessNo"
                     @input="onBusinessNoInput"
-                    maxlength="10"
+                    maxlength="12"
                     inputmode="numeric"
                     placeholder="선택한 업체와 동일한 사업자번호 10자리(숫자만)"
                   />
@@ -208,7 +209,7 @@
                     class="form-control"
                     v-model="form.businessNo"
                     @input="onBusinessNoInput"
-                    maxlength="10"
+                    maxlength="12"
                     inputmode="numeric"
                     placeholder="'-' 없이 숫자 10자리만 입력하세요"
                   />
@@ -320,16 +321,37 @@ export default {
       this.selectedAddress = selected ? selected.address : "";
     },
 
-    // 7. 숫자만 허용하고 11자리로 제한
+    // 7. 휴대폰 번호: 숫자만 남기고 '-'를 자동으로 넣는다
+    // 26.09.30 수정: 기존에는 숫자만 저장했지만, 이제 하이픈이 포함된 값(010-1234-5678)을 그대로 저장한다.
     onPhoneInput(e) {
-      const digitsOnly = e.target.value.replace(/\D/g, "").slice(0, 11);
-      this.form.phoneNum = digitsOnly;
+      const formatted = this.formatPhone(e.target.value);
+      this.form.phoneNum = formatted;
+      // form 값만 바꾸면 포맷 결과가 이전과 같을 때 화면이 갱신되지 않아 입력한 문자가 남을 수 있으므로 화면 값도 맞춘다.
+      e.target.value = formatted;
+    },
+
+    // 26.09.30 추가: 숫자만 추출해서 전화번호 형식으로 변환
+    formatPhone(value) {
+      const n = String(value || "").replace(/\D/g, "").slice(0, 11);
+
+      if (n.length <= 3) return n;
+      if (n.length <= 7) return `${n.slice(0, 3)}-${n.slice(3)}`;
+
+      // 010 외 번호(011, 016 등)는 10자리일 수 있음 -> 3-3-4
+      if (n.length <= 10 && !n.startsWith("010")) {
+        return `${n.slice(0, 3)}-${n.slice(3, 6)}-${n.slice(6)}`;
+      }
+
+      // 11자리 -> 3-4-4
+      return `${n.slice(0, 3)}-${n.slice(3, 7)}-${n.slice(7)}`;
     },
 
     // 26.09.21 추가: 사업자등록번호도 '-' 없이 숫자 10자리만 입력받도록 제한
     onBusinessNoInput(e) {
-      const digitsOnly = e.target.value.replace(/\D/g, "").slice(0, 10);
+      // 붙여넣기(123-45-67890) 시 maxlength=10 이면 하이픈 포함 앞 10글자만 들어와 숫자가 8자리가 된다.
+      const digitsOnly = String(e.target.value || "").replace(/\D/g, "").slice(0, 10);
       this.form.businessNo = digitsOnly;
+      e.target.value = digitsOnly;
     },
 
     // 26.09.21 추가: 화면에는 숫자 10자리만 입력받지만, DB(companies.business_no)는
@@ -371,8 +393,10 @@ export default {
       this.businessNoError = "";
       this.newCompanyError = "";
 
-      if (this.form.phoneNum && this.form.phoneNum.length !== 11) {
-        alert("휴대폰 번호 11자리를 입력해주세요.");
+      // 26.09.30 수정: 휴대폰 번호는 입력한 경우에만 형식(010-1234-5678)을 검사한다.
+      // (기존 코드도 비워두면 통과하는 구조였으므로 동일하게 유지. 필수로 바꾸려면 앞의 this.form.phoneNum && 를 지운다)
+      if (this.form.phoneNum && !/^01[016789]-\d{3,4}-\d{4}$/.test(this.form.phoneNum)) {
+        alert("휴대폰 번호를 올바르게 입력해주세요. (예: 010-1234-5678)");
         return;
       }
 

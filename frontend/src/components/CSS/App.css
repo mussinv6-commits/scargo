@@ -1,12 +1,56 @@
+/* 26.09.30 합본: 전면 정리(새) + 줄바꿈/겹침 방지·역할메뉴 강조(구) */
+
 #app {
-  font-family: Avenir, Helvetica, Arial, sans-serif;
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  font-family: 'Inter', 'Pretendard', Avenir, Helvetica, Arial, sans-serif;
   text-align: center;
   color: var(--color-text);
+  box-sizing: border-box;
+  overflow-x: clip;
+}
+
+#app *,
+#app *::before,
+#app *::after {
+  box-sizing: border-box;
 }
 
 .wrapper {
-  max-width: 1600px;
-  margin: 0 auto;
+  width: 100%;
+  flex: 1 0 auto;
+}
+
+.wrapper-app {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - var(--nav-h, 60px));
+}
+.wrapper-app > :deep(*) {
+  flex: 1 1 auto;
+  display: flex;
+  width: 100%;
+  min-height: 0;
+}
+
+.wrapper-admin {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+.wrapper-admin > :deep(*) {
+  flex: 1 1 auto;
+  display: flex;
+  width: 100%;
+  min-height: 100vh;
+}
+.wrapper-admin :deep(.admin-app) {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 100vh;
+  height: 100vh;
 }
 
 a {
@@ -15,11 +59,10 @@ a {
 
 nav.navbar,
 footer {
-  width: 100vw;
-  margin-left: calc(50% - 50vw);
+  width: 100%;
+  margin-left: 0;
 }
 
-/* ===== 브랜드 컬러 (헤더 / 푸터 공통 - Main 네이비) ===== */
 .bg-brand {
   background: var(--color-primary) !important;
 }
@@ -36,60 +79,160 @@ footer.bg-brand .nav-link:hover {
   color: var(--color-accent) !important;
 }
 
-/* ===== 헤더(네비게이션): Main 네이비 배경 + 포인트 오렌지 ===== */
+/* ===== 상단 네비게이션 ===== */
+.site-nav,
 nav.navbar.bg-brand {
+  min-height: var(--nav-h);
+  padding-top: 0;
+  padding-bottom: 0;
   background: var(--color-primary) !important;
   box-shadow: 0 1px 0 rgba(0, 0, 0, 0.08);
+  z-index: 1030;
+}
+
+.nav-grid {
+  position: relative;
+  min-height: var(--nav-h);
+  padding-left: 24px;
+  padding-right: 24px;
+  gap: 8px;
+}
+
+.nav-brand {
+  font-family: 'Barlow Condensed', 'Inter', sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  color: #fff !important;
+  margin-right: 20px;
+  padding: 0;
+  letter-spacing: 0.3px;
+}
+.nav-brand span {
+  color: var(--color-accent);
+  margin-left: 1px;
+}
+
+.brand-logo {
+  display: flex;
+  align-items: center;
+  padding: 0;
+  margin-right: 16px;
+}
+.brand-logo img {
+  height: 44px;
+  width: auto;
+  display: block;
+  object-fit: contain;
+}
+
+.nav-grid .navbar-collapse,
+.navbar-collapse {
+  display: flex;
+  align-items: center;
 }
 
 .navbar-nav > li {
-  padding-left: 20px;
-  padding-right: 20px;
+  padding-left: 10px;
+  padding-right: 10px;
 }
 
-/* 로고/메뉴: 아이스 화이트, hover: 포인트 오렌지 */
+.main-menu,
+.nav-grid .navbar-nav:not(.auth-menu) {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+/* lg 이상: 홈/공지사항을 네비바 정중앙에 배치 (로고·로그인과 독립) */
+@media (min-width: 992px) {
+  .nav-grid .navbar-collapse,
+  .navbar-collapse {
+    flex: 1 1 auto;
+    position: static;
+    justify-content: flex-end;
+  }
+  .main-menu,
+  .nav-grid .navbar-nav:not(.auth-menu) {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1;
+  }
+}
+
 .navbar-dark .navbar-nav .nav-link {
-  color: var(--color-bg);
+  color: rgba(244, 246, 248, 0.86);
+  font-size: 15px;
   font-weight: 600;
-  transition: color 0.15s ease;
+  white-space: nowrap;
+  padding: 8px 12px;
+  border-radius: 8px;
+  transition: color 0.15s ease, background 0.15s ease;
 }
-
 .navbar-dark .navbar-nav .nav-link:hover {
-  color: var(--color-accent);
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
 }
-
-/* 선택된(현재) 메뉴: 포인트 오렌지 */
+.navbar-dark .navbar-nav .nav-link.is-active,
 .navbar-dark .navbar-nav .nav-link.nav-link-active {
   color: var(--color-accent);
 }
 
-.auth-menu {
-  padding: 0 15px;
+.auth-menu,
+.nav-grid .auth-menu {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  margin-left: auto;
+  gap: 2px;
+  padding: 0 8px;
 }
 
 .auth-menu .nav-item {
-  padding: 0 8px !important;
+  padding: 0 6px !important;
 }
 
 .auth-link {
-  display: flex;
+  display: inline-flex !important;
   align-items: center;
-  gap: 5px;
-  font-size: 0.9rem;
+  gap: 6px;
+  font-size: 14px !important;
+  white-space: nowrap;
   color: var(--color-bg) !important;
 }
-
 .auth-link:hover {
   color: var(--color-accent) !important;
 }
-
 .auth-link i {
-  font-size: 1rem;
+  font-size: 15px;
 }
 
+.auth-cta {
+  border: 1px solid rgba(255, 255, 255, 0.35);
+}
+
+.auth-user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  margin: 0 4px;
+  border-left: 1px solid rgba(255, 255, 255, 0.18);
+  border-right: 1px solid rgba(255, 255, 255, 0.18);
+  white-space: nowrap;
+}
+.auth-name,
+.auth-welcome {
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+}
 .auth-welcome {
   color: var(--color-accent);
-  font-weight: 600;
 }
 
 .auth-divider {
@@ -100,35 +243,30 @@ nav.navbar.bg-brand {
   padding: 0 !important;
 }
 
-.nav-grid .navbar-collapse {
-  display: flex;
-  align-items: center;
+.role-badge {
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 5px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
 }
+.role-badge.role-admin { background: rgba(255, 107, 0, 0.18); color: #ffc58f; }
+.role-badge.role-biz { background: rgba(125, 170, 220, 0.2); color: #cfe2f7; }
+.role-badge.role-driver { background: rgba(16, 185, 129, 0.18); color: #9be8c8; }
+.role-badge.role-pending { background: rgba(255, 255, 255, 0.1); color: rgba(255, 255, 255, 0.7); }
 
-.nav-spacer {
-  flex: 1;
-}
-
-.nav-grid .navbar-nav:not(.auth-menu) {
-  flex: 1;
-  display: flex;
-  justify-content: center;
-}
-
-.auth-menu {
-  flex: 1;
-  display: flex;
-  justify-content: flex-end;
-}
-/* ===== 드롭다운 메뉴 (게시판/관리자/사업자/화물차기사 공통) ===== */
+/* ===== 드롭다운 ===== */
+.dropdown { position: relative; }
 .dropdown-menu {
   border: none;
   border-radius: 10px;
   box-shadow: 0 14px 34px rgba(10, 37, 64, 0.18);
   padding: 8px;
-  margin-top: 10px;
+  margin-top: 8px;
+  min-width: 190px;
+  text-align: left;
 }
-
 .dropdown-item {
   color: var(--color-text);
   font-size: 13.5px;
@@ -136,32 +274,34 @@ nav.navbar.bg-brand {
   border-radius: 6px;
   padding: 8px 12px;
 }
-
 .dropdown-item:hover,
 .dropdown-item:focus {
   background: rgba(10, 37, 64, 0.06);
   color: var(--color-primary);
 }
-
-.dropdown-item.router-link-active {
+.dropdown-item.is-current,
+.dropdown-item.router-link-exact-active {
   color: var(--color-accent);
   background: rgba(255, 107, 0, 0.08);
 }
+.navbar-dark .dropdown-toggle::after {
+  border-top-color: currentColor;
+  vertical-align: 0.2em;
+}
 
-/* ===== 역할별 메인 메뉴(관리자/사업자/화물차기사) 강조 ===== */
+/* 역할별 메인 메뉴 토글 강조 (구 마크업 role-menu 호환) */
 .role-menu > .dropdown-toggle {
   border-radius: 20px;
   padding: 5px 14px !important;
 }
-
-.role-admin > .dropdown-toggle {
+.role-menu.role-admin > .dropdown-toggle {
   background: rgba(255, 107, 0, 0.16);
   color: #ffd7b0 !important;
 }
-.role-biz > .dropdown-toggle {
+.role-menu.role-biz > .dropdown-toggle {
   background: rgba(59, 86, 116, 0.4);
 }
-.role-driver > .dropdown-toggle {
+.role-menu.role-driver > .dropdown-toggle {
   background: rgba(16, 185, 129, 0.16);
 }
 
@@ -171,7 +311,46 @@ nav.navbar.bg-brand {
   cursor: default;
 }
 
-/* 부트스트랩 dropdown-toggle 화살표가 흰 배경 기준으로 그려지는 문제 보정 */
-.navbar-dark .dropdown-toggle::after {
-  border-top-color: currentColor;
+/* ===== 좁은 화면 / 확대 시 (lg 미만): 햄버거 메뉴로 접힘 ===== */
+@media (max-width: 991.98px) {
+  .nav-grid { padding-left: 16px; padding-right: 16px; }
+  .navbar-collapse { padding-bottom: 12px; }
+  .main-menu,
+  .auth-menu,
+  .nav-grid .navbar-nav:not(.auth-menu) {
+    position: static;
+    left: auto;
+    transform: none;
+    align-items: stretch;
+    text-align: left;
+    white-space: normal;
+  }
+  .auth-menu,
+  .nav-grid .auth-menu {
+    margin-left: 0;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-start;
+  }
+  .auth-user { border: none; padding: 0 8px 0 0; margin: 0; }
+  .dropdown-menu { position: static; box-shadow: none; margin: 4px 0 8px; }
+}
+
+/* ===== 푸터 ===== */
+.footer-top {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: var(--color-bg);
+  border-radius: 999px;
+  padding: 5px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.footer-top:hover {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
 }

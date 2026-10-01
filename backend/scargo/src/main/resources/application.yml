@@ -1,0 +1,36 @@
+spring:
+  application:
+    name: scargo
+
+  # PostgreSQL 연결 설정
+  datasource:
+    url: jdbc:postgresql://localhost:5432/scargo
+    username: postgres
+    password: '1234'
+    driver-class-name: org.postgresql.Driver
+
+  # JPA 및 Hibernate 설정
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+    show-sql: true
+
+# [FCM 비활성화 26.09.30] Firebase 설정 주석 처리 (다시 쓰려면 주석 해제)
+# # Firebase Cloud Messaging 설정
+# # firebase 콘솔 > 프로젝트 설정 > 서비스 계정 > "새 비공개 키 생성" 으로 받은 json 파일을
+# # src/main/resources/firebase/service-account.json 경로에 넣어주세요. (git에는 올리지 말 것)
+# firebase:
+#   credentials-path: classpath:firebase/service-account.json
+#   enabled: true
+
+# 26.10.01 추가: 재시작할 때 이전 로그인 세션을 파일에서 되살리지 않음
+# (DevTools 재시작 시 "Cannot deserialize session attribute [SPRING_SECURITY_CONTEXT]" /
+#  "Exception loading sessions from persistent storage" 오류가 찍히던 문제 - 재시작 후에는 다시 로그인)
+server:
+  servlet:
+    session:
+      persistent: false

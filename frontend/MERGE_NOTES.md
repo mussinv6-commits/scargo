@@ -113,3 +113,56 @@ npm run dev
 이 부분은 프론트 구조 병합 범위 밖이라 그대로 두었으니, 실제 사용하시려면
 백엔드 주소를 프로젝트의 `API_BASE`(`src/utils/apiBase.js`)에 맞게 수정하거나
 해당 API를 제공하는 백엔드를 `:3000`에 별도로 띄워주셔야 합니다.
+
+---
+
+## 6. 2026.09.30 병합 (scargo_vue_0928 + 프론트엔드 + 홈화면_수정)
+
+| 출처 | 반영 내용 |
+|---|---|
+| 프론트엔드.zip (기준) | Leaflet 지도(야드/적재위치/컨테이너/게이트 지도 모달), 검문소(게이트) 관리 화면·라우트·사이드바, CrudTable `align`/`formatter` 지원, 상단 메뉴 '공지사항' |
+| scargo_vue_0928.zip | 사업자 '기사 관리'(CompanyDrivers) 화면·라우트·메뉴, CompanyInfo 배정기사 표시 및 `/api/mappings/my-trucks` 사용, 관리자 차량관리 → '진입 허가 심사'로 변경, 기사 MyPage 진입 허가 상태 표시 |
+| 홈화면_수정.zip | 로그인 화면 개편(login.vue/login.css, 좌측 소개 영역 + 로고), App.css 상단 메뉴 줄바꿈 개선, regi.css 배경 교체, 이미지 3종(src/assets) |
+
+### 병합 중 수정한 것
+- `login.vue` 가 `@/assets/safecargo-logo.png`(하이픈)를 import 하지만 실제 파일명은 `safecargo_logo.png`(언더바) → import 경로를 실제 파일명으로 수정.
+- `Companytruckregister.vue` / `Companydrivers.vue` 파일명을 라우터 import 와 같은 `CompanyTruckRegister.vue` / `CompanyDrivers.vue` 로 변경.
+  (Windows 에서는 대소문자를 무시해서 동작했지만 Linux/배포 서버에서는 빌드 실패함)
+
+---
+
+## 7. 2026.09.30 피드백 반영 (백엔드 scargo_260928 기준으로 API 맞춤)
+
+### 공통
+- `utils/apiHelpers.js` 신규: 서버 에러(SQL/스택트레이스/JSON)를 한글 안내문으로 변환(`friendlyError`), 삭제 실패 안내(`deleteError`),
+  boolean 필드명 차이(`isSemiTrailer` ↔ `semiTrailer`) 흡수(`normalizeRows`, `withBoolAliases`), PUT/PATCH 405 재시도(`updateWithFallback`)
+- `utils/validators.js` 신규: 차량번호/사업자번호 형식 검사
+- 상단 네비 재작성(App.vue): 게시판 직접 이동, 역할 배지, Vue 로 드롭다운/햄버거 제어(확대 시 접힘), 날씨 메뉴 → 홈 위젯
+- 푸터 Top: 메인 이동 → 현재 화면 맨 위로 스크롤
+- `100vw` 제거 + `#app { overflow-x: clip }` → 메인 하단 가로 스크롤바 제거, `.wrapper` 전체 폭 사용
+
+### 관리자
+- CrudTable 재작성: th/td 정렬 통일, 관리 칸 `display:flex` 로 표가 깨지던 문제 수정, 입력칸별 검증 메시지, boolean 색상 반전(invert)
+- AdminPageHeader 공통 제목 컴포넌트, 사이드바에서 '내 정보' 분리, 관리자 화면 전체 왼쪽 정렬
+- 대시보드: KPI 3열 정렬, 승인/심사 대기·과적 위반·적재 위치 가용률, 바로가기명 = 사이드바 메뉴명
+- 야드 위도/경도 제거(수정 시 기존 좌표 보존), 상태/이용가능 컬럼 의미 분리
+- 과적검사 위반여부 [정상 초록 / 위반 빨강], 수정 시 계측값 잠금(백엔드 UpdateRequest 미지원 필드)
+- 진입 허가 심사: 불허 → 반려, 차량번호 URL 인코딩
+- 컨테이너: 빈 JSON 칸 → null, 하이큐브 표시, 적재 위치 선택형
+
+### 게시판 / 공지
+- 게시판을 `/api/v1/posts` (category=FREE) + 댓글 `/api/comments` 로 재작성 (`components/board/PostEditor.vue` 공용 작성/수정)
+- 공지 등록 시 accountId 고정(1) 제거, 비관리자 글쓰기/수정/삭제 숨김 + 라우트 가드(meta.requiresAdmin)
+
+### 기사 / 사업자 / 기타
+- 기사 화면: 배정 차량을 `/api/trucks/my` 로 조회(`utils/driverTruck.js`), MY/차량에 차량 등록 신청 폼, 제목/버튼 크기 통일
+- 사업자: 소속 기사 조회 실패 대비(`utils/companyDrivers.js`), 업체 정보에 소속 기사 표
+- 알림 클릭 시 유형별 화면 이동, 알림 내용 왼쪽 정렬
+- 아이디 저장: 로그인 성공 시 실제 로그인한 아이디로 저장
+
+### 백엔드 확인 필요
+1. `/api/gates` 컨트롤러 없음 (GateLog 만 존재) → 검문소 관리 화면은 안내 문구 표시
+2. FK 위반 삭제 시 500 + 빈 메시지 → `DataIntegrityViolationException` 핸들러(409) 추가 권장
+3. `POST /api/loading-records` 는 업체/관리자 전용이라 기사 체크인 불가
+4. `/api/dispatches`, `/api/settlements` 컨트롤러 없음 (배차목록/정산 화면 데이터 없음)
+5. PostResponse 에 작성자 이름 없음 → `/api/accounts/{id}` 로 조회(로그인 필요)

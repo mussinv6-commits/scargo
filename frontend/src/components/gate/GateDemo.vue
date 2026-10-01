@@ -1,25 +1,19 @@
 <template>
   <div class="gate-page">
     <div class="gate-header">
-      <h1>🚦 번호판 인식 게이트 데모</h1>
+      <h1>🔍 게이트 OCR 검사</h1>
       <p>
-        CargoScan AI(YOLO11 탐지 + CRNN 문자 인식)가 화물차 번호판을 인식해서
-        게이트 통과 여부를 자동으로 판단하는 과정을 미리 보여드립니다.
-      </p>
-      <p class="gate-note">
-        ⓘ 아래 8장은 실제 <code>batch_test_images.py</code> 검증 결과(전체 767장 중
-        정확히 일치 665장 · 86.7%)에서 가져온 실제 화물차 사진과 실제 인식 결과입니다.
-        사진을 클릭하면 그 인식 과정을 재현합니다.
+        CargoScan AI(YOLO11 탐지 + CRNN 문자 인식)가 화물차 번호판을 OCR로
+        판독해서 게이트 통과 여부를 자동으로 검사합니다.
       </p>
 
       <div class="gate-live-scan-cta">
         <button class="gate-live-scan-btn" :disabled="liveScanBusy" @click="runLiveScan">
-          {{ liveScanBusy ? '인식 중...' : '🚛 게이트인 (실시간 인식)' }}
+          {{ liveScanBusy ? 'OCR 검사 중...' : '🔍 게이트인 (실시간 OCR 검사)' }}
         </button>
         <span class="gate-live-scan-hint">
           실제 AI(CargoScan)가 감시 폴더("게이트_수신함")의 사진을 지금 무작위로
-          한 장 골라 인식하고, 등록차량 DB와 대조해서 차단기를 엽니다. (아래
-          예시 사진 갤러리는 미리 준비된 샘플이고, 이 버튼만 실제 백엔드가 동작합니다)
+          한 장 골라 OCR로 판독하고, 등록차량 DB와 대조해서 차단기를 엽니다.
         </span>
         <p v-if="liveScanError" class="gate-live-scan-error">⚠ {{ liveScanError }}</p>
       </div>
@@ -77,20 +71,20 @@
           </svg>
         </div>
         <div class="gate-status-line" :class="state">
-          <span v-if="state === 'idle'">사진을 선택해 주세요</span>
-          <span v-else-if="state === 'scanning'">번호판 인식 중...</span>
+          <span v-if="state === 'idle'">게이트인 버튼을 눌러주세요</span>
+          <span v-else-if="state === 'scanning'">번호판 OCR 검사 중...</span>
           <span v-else-if="state === 'pass'">✅ 통과</span>
           <span v-else>⛔ 인식 보류 · 수동 확인</span>
         </div>
         <button v-if="selected" class="gate-reset-btn" @click="reset">
-          다른 사진으로 다시 시도
+          다시 시도
         </button>
       </div>
 
       <!-- 우측: 선택한 사진 + 결과 -->
       <div class="gate-result-card">
         <div v-if="!selected" class="gate-placeholder">
-          아래 예시 사진 중 하나를 선택하면<br />여기에 인식 과정이 표시됩니다.
+          🔍 게이트인 버튼을 누르면<br />여기에 실시간 OCR 검사 과정이 표시됩니다.
         </div>
         <template v-else>
           <div class="gate-photo-wrap">
@@ -101,16 +95,19 @@
 
           <div v-if="state === 'pass' || state === 'fail'" class="gate-result-info">
             <div class="plate-box" :class="state">
-              {{ state === 'pass' ? selected.plate : (selected.isLive && selected.plate ? selected.plate : '판독불가') }}
+              {{ selected.plate || '판독불가' }}
             </div>
-            <span v-if="selected.isLive" class="gate-live-tag" :class="state">
+            <span class="gate-live-tag" :class="state">
               {{ selected.matchResult === 'AUTHORIZED' ? '등록차량 일치' : selected.matchResult === 'DENIED' ? '미등록 차량' : '판독불가' }}
             </span>
             <p v-if="state === 'pass'" class="gate-explain ok">
-              {{ selected.isLive
-                  ? '등록차량(trucks) DB와 번호판·차종이 모두 일치하여 차단기가 열립니다.'
-                  : '등록된 번호판 형식과 일치하여 자동으로 통과 처리됩니다.' }}
+              등록차량(trucks) DB와 번호판이 일치하여 차단기가 열립니다.
+              이 차량은 계중대 계량 대기열에 자동으로 올라갑니다.
             </p>
+            <!-- 26.10.01 추가: 게이트 통과 차량은 계중대(검사소) 대기열로 넘어감 -->
+            <RouterLink v-if="state === 'pass'" to="/admin/weighbridge" class="gate-next-link">
+              계중대 계량 화면 열기
+            </RouterLink>
             <p v-else class="gate-explain warn">
               {{ liveDenyExplain }}
             </p>
@@ -119,25 +116,9 @@
       </div>
     </div>
 
-    <div class="gate-gallery">
-      <h2>예시 사진 선택</h2>
-      <div class="gate-grid">
-        <button
-          v-for="ex in GATE_EXAMPLES"
-          :key="ex.id"
-          class="gate-thumb"
-          :class="{ active: selected && selected.id === ex.id }"
-          @click="runExample(ex)"
-        >
-          <img :src="ex.image" />
-          <span class="gate-thumb-tag" :class="ex.status">{{ ex.tag }}</span>
-        </button>
-      </div>
-    </div>
-
     <!-- 실시간 백엔드 연동 (gate_live_demo.py -> scargo 백엔드 -> 이 화면) -->
     <div class="gate-live-section">
-      <h2>🔴 실시간 게이트 로그</h2>
+      <h2>🔴 실시간 게이트 OCR 검사 기록</h2>
       <p class="gate-live-sub">
         <code>gate_live_demo.py</code> / <code>gate_watch_service.py</code> / 위
         "게이트인" 버튼(<code>gate_api.py</code>) 중 무엇으로 인식하든, scargo
@@ -186,20 +167,10 @@ import { ref, computed, onBeforeUnmount, onMounted } from 'vue'
 import axios from 'axios'
 import { API_BASE } from '@/utils/apiBase.js'
 import { GATE_SCAN_API_BASE } from '@/utils/gateApiBase.js'
-import { GATE_EXAMPLES } from './gateExamples.js'
 
 const selected = ref(null)
 const state = ref('idle') // idle | scanning | pass | fail
 let timer = null
-
-function runExample(ex) {
-  clearTimeout(timer)
-  selected.value = ex
-  state.value = 'scanning'
-  timer = setTimeout(() => {
-    state.value = ex.status
-  }, 1300)
-}
 
 function reset() {
   clearTimeout(timer)
@@ -211,23 +182,18 @@ function reset() {
 onBeforeUnmount(() => clearTimeout(timer))
 
 // ---- 실시간 게이트인 버튼 (gate_api.py, localhost:8001, POST /scan) ----
-// 2026-09-30: "이거 버튼누르면 게이트인하는 로직이 나오는게 나을까??" 확인 -
-// 위 예시 갤러리(runExample)는 미리 준비된 샘플을 setTimeout으로 재생하는
-// 목업이고, 이 버튼은 실제로 gate_api.py를 호출해서 실시간 인식+DB매칭 결과를
-// 그대로 보여줌(트리거 방식만 다르고 인식 로직 자체는 gate_watch_service.py/
+// 2026-09-30: 정식 버전으로 전환 - 예시 사진 갤러리(미리 준비된 샘플 mock)를
+// 제거하고, 이 버튼을 눌러 gate_api.py를 호출해서 실시간 인식+DB매칭 결과를
+// 그대로 보여주는 흐름만 남김(인식 로직 자체는 gate_watch_service.py/
 // gate_live_demo.py와 동일한 코드를 재사용함).
 const liveScanBusy = ref(false)
 const liveScanError = ref('')
 
 const liveDenyExplain = computed(() => {
-  if (selected.value && selected.value.isLive) {
-    if (selected.value.matchResult === 'DENIED') {
-      return '번호판은 인식했지만 등록차량(trucks) 목록에 없어 차단기를 열지 않습니다.'
-    }
-    return '번호판을 판독하지 못해 안전하게 통과를 보류하고, 사람이 다시 확인하도록 합니다.'
+  if (selected.value && selected.value.matchResult === 'DENIED') {
+    return '번호판은 인식했지만 등록차량(trucks) 목록에 없어 차단기를 열지 않습니다.'
   }
-  return '신뢰도가 낮은 추측을 억지로 표시하지 않고 "판독불가"로 안전하게 처리한 뒤, ' +
-    '사람이 다시 확인하도록 합니다. (오인식으로 잘못 통과시키는 사고를 방지하기 위한 설계입니다.)'
+  return '번호판을 판독하지 못해 안전하게 통과를 보류하고, 사람이 다시 확인하도록 합니다.'
 })
 
 async function runLiveScan() {
@@ -319,19 +285,6 @@ onBeforeUnmount(() => clearInterval(livePollId))
   line-height: 1.6;
   margin: 0 0 6px;
 }
-.gate-note {
-  background: rgba(10, 37, 64, 0.05);
-  border: 1px solid rgba(10, 37, 64, 0.1);
-  border-radius: 10px;
-  padding: 10px 14px;
-  font-size: 12.5px !important;
-}
-.gate-note code {
-  background: rgba(10, 37, 64, 0.08);
-  padding: 1px 5px;
-  border-radius: 4px;
-}
-
 /* ---- 실시간 게이트인 버튼 ---- */
 .gate-live-scan-cta {
   margin-top: 14px;
@@ -592,6 +545,18 @@ onBeforeUnmount(() => clearInterval(livePollId))
   line-height: 1.6;
 }
 .gate-explain.ok { color: #059669; }
+.gate-next-link {
+  display: inline-block;
+  margin-top: 10px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.gate-next-link:hover { background: var(--color-primary-hover); }
 .gate-explain.warn { color: #b45309; }
 
 .gate-live-tag {
@@ -613,52 +578,6 @@ onBeforeUnmount(() => clearInterval(livePollId))
   text-align: center;
   color: var(--color-subtext);
   font-size: 13px;
-}
-
-/* ---- 예시 갤러리 ---- */
-.gate-gallery h2 {
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: 20px;
-  font-weight: 700;
-  margin-bottom: 14px;
-}
-.gate-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 14px;
-}
-.gate-thumb {
-  position: relative;
-  border: 2px solid transparent;
-  border-radius: 10px;
-  overflow: hidden;
-  padding: 0;
-  cursor: pointer;
-  background: var(--color-card);
-  line-height: 0;
-}
-.gate-thumb img {
-  width: 100%;
-  height: 96px;
-  object-fit: cover;
-  display: block;
-}
-.gate-thumb.active {
-  border-color: var(--color-accent);
-}
-.gate-thumb-tag {
-  position: absolute;
-  left: 6px;
-  bottom: 6px;
-  font-size: 10.5px;
-  font-weight: 700;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: rgba(10, 37, 64, 0.75);
-  color: #fff;
-}
-.gate-thumb-tag.fail {
-  background: rgba(239, 68, 68, 0.85);
 }
 
 /* ---- 실시간 백엔드 연동 ---- */

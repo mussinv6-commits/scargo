@@ -1,202 +1,208 @@
 <script setup>
-import { computed } from "vue";
-import { useRouter } from "vue-router";
+import { computed, ref, watch, onMounted, onBeforeUnmount } from "vue";
+import { useRouter, useRoute } from "vue-router";
 import axios from "axios";
 import Main from "./views/Main.vue";
 import NotificationBell from "@/components/common/NotificationBell.vue";
 import { authState, clearLogin } from "@/auth/authState.js";
 import { API_BASE } from "@/utils/apiBase.js";
+import { ADMIN_MENU } from "@/components/admin/adminMenu.js";
+import { COMPANY_MENU, COMPANY_EXTRA_MENU } from "@/components/company/companyMenu.js";
+import safeCargoLogo from "@/assets/safecargo_logo_4x.png";
 
 const router = useRouter();
+const route = useRoute();
 
 const isAdmin = computed(() => authState.user?.userType === "ADMIN");
 const isCorporateApproved = computed(() => authState.user?.userType === "CORPORATE_APPROVED");
 const isCorporatePending = computed(() => authState.user?.userType === "CORPORATE_PENDING");
 const isDriver = computed(() => authState.user?.userType === "GENERAL");
 
-// 26.09.21 추가: "내정보"가 항상 화물차 기사 화면으로 고정되어 있던 문제 수정.
-// 로그인한 계정의 역할에 맞는 화면으로 보내준다.
+// 26.09.30 수정: 로그인 유형 표시가 어색하던 문제 → 이름 옆 작은 배지로 정리
+const roleBadge = computed(() => {
+  if (isAdmin.value) return { label: "관리자", cls: "role-admin" };
+  if (isCorporateApproved.value) return { label: "사업자", cls: "role-biz" };
+  if (isCorporatePending.value) return { label: "사업자 승인대기", cls: "role-pending" };
+  if (isDriver.value) return { label: "화물차 기사", cls: "role-driver" };
+  return null;
+});
+
 const myInfoLink = computed(() => {
   if (isAdmin.value) return "/admin/profile";
   if (isCorporateApproved.value) return "/company";
-  if (isCorporatePending.value) return "/"; // 승인 대기 중엔 아직 전용 정보 화면이 없어 홈으로
+  if (isCorporatePending.value) return "/";
   return "/driver/app/my-page";
 });
+
+// 역할별 메인 메뉴 (관리자 메뉴는 사이드바와 같은 정의를 사용)
+const roleMenu = computed(() => {
+  if (isAdmin.value) {
+    return {
+      label: "관리자",
+      icon: "bi-gear",
+      base: "/admin",
+      groups: [
+        [{ to: "/admin", label: "대시보드" }],
+        ADMIN_MENU.member,
+        ADMIN_MENU.vehicle,
+        ADMIN_MENU.yard,
+        ADMIN_MENU.etc.filter((m) => m.to.startsWith("/admin")),
+      ],
+    };
+  }
+  if (isCorporateApproved.value) {
+    return {
+      label: "사업자",
+      icon: "bi-building",
+      base: "/company",
+      groups: [[...COMPANY_MENU, ...COMPANY_EXTRA_MENU]],
+    };
+  }
+  if (isDriver.value) {
+    return {
+      label: "화물차 기사",
+      icon: "bi-truck",
+      base: "/driver",
+      groups: [[
+        { to: "/driver/app/status", label: "운송현황" },
+        { to: "/driver/app/dispatch-list", label: "배차목록" },
+        { to: "/driver/app/settlement", label: "정산/매출" },
+        { to: "/driver/app/my-page", label: "MY/차량" },
+      ]],
+    };
+  }
+  return null;
+});
+
+// 26.09.30 수정: 부트스트랩 JS(data-bs-toggle)에 의존하던 드롭다운/햄버거 메뉴를 Vue 상태로 직접 제어.
+const navOpen = ref(false);
+const roleOpen = ref(false);
+const roleMenuEl = ref(null);
+
+function closeMenus() {
+  navOpen.value = false;
+  roleOpen.value = false;
+}
+watch(() => route.fullPath, closeMenus);
+
+function onDocClick(e) {
+  if (roleMenuEl.value && !roleMenuEl.value.contains(e.target)) roleOpen.value = false;
+}
+onMounted(() => document.addEventListener("click", onDocClick));
+onBeforeUnmount(() => document.removeEventListener("click", onDocClick));
+
+const isDriverApp = computed(() => route.path.startsWith("/driver"));
+const isAdminApp = computed(() => route.path.startsWith("/admin"));
+const isCompanyApp = computed(() => route.path.startsWith("/company"));
+const hideChrome = computed(() => isDriverApp.value || isAdminApp.value || isCompanyApp.value);
+
+function isSection(prefix) {
+  return route.path === prefix || route.path.startsWith(prefix + "/");
+}
 
 function handleLogout() {
   axios
     .post(`${API_BASE}/api/accounts/logout`, {}, { withCredentials: true })
-    .then(() => {
-      clearLogin();
-      router.push("/login");
-    })
-    .catch(() => {
+    .catch(() => {})
+    .finally(() => {
       clearLogin();
       router.push("/login");
     });
+}
+
+// 26.09.30 수정: 푸터 Top 버튼이 메인 화면('/')으로 이동하던 문제 → 현재 화면 맨 위로 스크롤
+function scrollToTop() {
+  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 </script>
 
 <template>
   <div id="app">
-    <!-- 전체폭 -->
-    <nav class="navbar navbar-expand-md navbar-dark bg-brand sticky-top">
+    <nav v-if="!isAdminApp && !isCompanyApp" class="navbar navbar-expand-lg navbar-dark bg-brand sticky-top site-nav">
       <div class="container-fluid nav-grid">
-        <RouterLink to="/" class="navbar-brand d-md-none">S카고</RouterLink>
+        <RouterLink to="/" class="navbar-brand brand-logo">
+          <img :src="safeCargoLogo" alt="SafeCargo" />
+        </RouterLink>
+
         <button
           class="navbar-toggler"
           type="button"
-          data-bs-toggle="collapse"
-          data-bs-target="#collapsibleNavbar"
-          aria-controls="collapsibleNavbar"
-          aria-expanded="false"
+          :aria-expanded="navOpen"
+          aria-controls="mainNavbar"
           aria-label="메뉴 열기/닫기"
+          @click="navOpen = !navOpen"
         >
           <span class="navbar-toggler-icon"></span>
         </button>
-        <div class="collapse navbar-collapse" id="collapsibleNavbar">
-          <div class="nav-spacer"></div>
 
+        <div id="mainNavbar" class="collapse navbar-collapse" :class="{ show: navOpen }">
           <ul class="navbar-nav main-menu">
             <li class="nav-item">
-              <RouterLink to="/" class="nav-link">홈</RouterLink>
+              <RouterLink to="/" class="nav-link" :class="{ 'is-active': route.path === '/' }">홈</RouterLink>
             </li>
-
-            <!-- 공통: 게시판 -->
-            <li class="nav-item dropdown">
-              <a href="#" class="nav-link dropdown-toggle" data-bs-toggle="dropdown">게시판</a>
-              <ul class="dropdown-menu">
-                <li><RouterLink to="/bbslist" class="dropdown-item">게시판</RouterLink></li>
-                <li><RouterLink to="/scrlist" class="dropdown-item">게시판2 (무한스크롤)</RouterLink></li>
-              </ul>
-            </li>
-
-            <!-- 공통: 공지사항 -->
             <li class="nav-item">
-              <RouterLink to="/notice" class="nav-link">공지사항</RouterLink>
+              <RouterLink to="/notice" class="nav-link" :class="{ 'is-active': isSection('/notice') }">공지사항</RouterLink>
             </li>
+            <!-- 26.10.01: 게이트 OCR 검사는 관리자 메뉴(/admin/gate-ocr)로 이동 -->
 
-            <!-- 공통: 날씨 -->
-            <li class="nav-item">
-              <RouterLink to="/weather" class="nav-link">
-                <i class="bi bi-cloud-sun"></i> 날씨
-              </RouterLink>
-            </li>
-
-            <!-- 공통: 번호판 인식 게이트 데모 (26.09.28 추가) -->
-            <li class="nav-item">
-              <RouterLink to="/gate-demo" class="nav-link">
-                🚦 인식 데모
-              </RouterLink>
-            </li>
-
-            <!-- 메인 메뉴 1: 관리자 (ADMIN 계정에게만 노출) -->
-            <li v-if="isAdmin" class="nav-item dropdown role-menu role-admin">
-              <a href="#" class="nav-link dropdown-toggle" data-bs-toggle="dropdown">
-                🛠️ 관리자
+            <!-- 역할별 메인 메뉴 (관리자 / 사업자 / 화물차 기사) -->
+            <li v-if="roleMenu" ref="roleMenuEl" class="nav-item dropdown">
+              <a
+                href="#"
+                class="nav-link dropdown-toggle"
+                :class="{ 'is-active': isSection(roleMenu.base) }"
+                :aria-expanded="roleOpen"
+                @click.prevent="roleOpen = !roleOpen"
+              >
+                {{ roleMenu.label }} 메뉴
               </a>
-              <ul class="dropdown-menu">
-                <li><RouterLink to="/admin" class="dropdown-item">대시보드</RouterLink></li>
-                <li><hr class="dropdown-divider" /></li>
-                <li><RouterLink to="/admin/accounts" class="dropdown-item">회원 관리</RouterLink></li>
-                <li><RouterLink to="/admin/companies" class="dropdown-item">업체 관리</RouterLink></li>
-                <li><hr class="dropdown-divider" /></li>
-                <li><RouterLink to="/admin/trucks" class="dropdown-item">차량 관리</RouterLink></li>
-                <li><RouterLink to="/admin/containers" class="dropdown-item">컨테이너 관리</RouterLink></li>
-                <li><hr class="dropdown-divider" /></li>
-                <li><RouterLink to="/admin/yards" class="dropdown-item">야드 관리</RouterLink></li>
-                <li><RouterLink to="/admin/loading-locations" class="dropdown-item">적재 위치 관리</RouterLink></li>
-                <li><RouterLink to="/admin/loading-records" class="dropdown-item">적재 기록 조회</RouterLink></li>
-                <li><hr class="dropdown-divider" /></li>
-                <li><RouterLink to="/admin/overload-checks" class="dropdown-item">과적 검사 관리</RouterLink></li>
-              </ul>
-            </li>
-
-            <!-- 메인 메뉴 2: 사업자 (승인된 기업 회원에게만 노출) -->
-            <li v-if="isCorporateApproved" class="nav-item dropdown role-menu role-biz">
-              <a href="#" class="nav-link dropdown-toggle" data-bs-toggle="dropdown">
-                🏢 사업자
-              </a>
-              <ul class="dropdown-menu">
-                <li><RouterLink to="/company" class="dropdown-item">업체 정보</RouterLink></li>
-                <li><RouterLink to="/company/trucks/new" class="dropdown-item">차량 등록</RouterLink></li>
-                <li><RouterLink to="/company/mapping" class="dropdown-item">차량-컨테이너 매핑</RouterLink></li>
-              </ul>
-            </li>
-
-            <!-- 기업회원 승인 대기 중: 메뉴 대신 안내만 노출 -->
-            <li v-else-if="isCorporatePending" class="nav-item">
-              <span class="nav-link pending-hint" title="관리자 승인 후 사업자 메뉴가 열립니다.">
-                🏢 사업자(승인대기)
-              </span>
-            </li>
-
-            <!-- 메인 메뉴 3: 화물차 기사 (일반회원에게만 노출) -->
-            <li v-if="isDriver" class="nav-item dropdown role-menu role-driver">
-              <a href="#" class="nav-link dropdown-toggle" data-bs-toggle="dropdown">
-                🚚 화물차 기사
-              </a>
-              <ul class="dropdown-menu">
-                <li><RouterLink to="/driver/app/status" class="dropdown-item">운송현황</RouterLink></li>
-                <li><RouterLink to="/driver/app/dispatch-list" class="dropdown-item">배차목록</RouterLink></li>
-                <li><RouterLink to="/driver/app/settlement" class="dropdown-item">정산/매출</RouterLink></li>
-                <li><RouterLink to="/driver/app/my-page" class="dropdown-item">MY/차량</RouterLink></li>
+              <ul class="dropdown-menu" :class="{ show: roleOpen }">
+                <template v-for="(group, gi) in roleMenu.groups" :key="gi">
+                  <li v-if="gi > 0"><hr class="dropdown-divider" /></li>
+                  <li v-for="m in group" :key="m.to">
+                    <RouterLink :to="m.to" class="dropdown-item" :class="{ 'is-current': route.path === m.to }">{{ m.label }}</RouterLink>
+                  </li>
+                </template>
               </ul>
             </li>
           </ul>
 
-          <ul v-if="!authState.user" class="navbar-nav align-items-center auth-menu">
+          <ul v-if="!authState.user" class="navbar-nav auth-menu">
             <li class="nav-item">
-              <RouterLink to="/login" class="nav-link auth-link">
-                <i class="bi bi-box-arrow-in-right"></i> 로그인
-              </RouterLink>
+              <RouterLink to="/login" class="nav-link auth-link"><i class="bi bi-box-arrow-in-right"></i> 로그인</RouterLink>
             </li>
-            <li class="nav-item auth-divider">|</li>
             <li class="nav-item">
-              <RouterLink to="/regi" class="nav-link auth-link">
-                <i class="bi bi-person-plus"></i> 회원가입
-              </RouterLink>
+              <RouterLink to="/regi" class="nav-link auth-link auth-cta"><i class="bi bi-person-plus"></i> 회원가입</RouterLink>
             </li>
           </ul>
 
-          <ul v-else class="navbar-nav align-items-center auth-menu">
-            <!-- 26.09.21 추가: 알림 종 아이콘 -->
+          <ul v-else class="navbar-nav auth-menu">
             <NotificationBell />
-            <li class="nav-item auth-divider">|</li>
-            <li class="nav-item">
-              <span class="nav-link auth-link auth-welcome">
-                {{ authState.user.userName }}님
-              </span>
+            <li class="nav-item auth-user">
+              <span v-if="roleBadge" class="role-badge" :class="roleBadge.cls">{{ roleBadge.label }}</span>
+              <span class="auth-name">{{ authState.user.userName }}님</span>
             </li>
-            <li class="nav-item auth-divider">|</li>
             <li class="nav-item">
-              <RouterLink :to="myInfoLink" class="nav-link auth-link">
-                <i class="bi bi-person-circle"></i> 내정보
-              </RouterLink>
+              <RouterLink :to="myInfoLink" class="nav-link auth-link"><i class="bi bi-person-circle"></i> 내정보</RouterLink>
             </li>
-            <li class="nav-item auth-divider">|</li>
             <li class="nav-item">
-              <a href="#" class="nav-link auth-link" @click.prevent="handleLogout">
-                <i class="bi bi-box-arrow-right"></i> 로그아웃
-              </a>
+              <a href="#" class="nav-link auth-link" @click.prevent="handleLogout"><i class="bi bi-box-arrow-right"></i> 로그아웃</a>
             </li>
           </ul>
         </div>
       </div>
     </nav>
 
-    <div class="wrapper">
+    <div class="wrapper" :class="{ 'wrapper-app': isDriverApp, 'wrapper-admin': isAdminApp || isCompanyApp }">
       <Main />
     </div>
 
-    <footer class="py-4 bg-brand mt-auto">
+    <footer v-if="!hideChrome" class="py-4 bg-brand mt-auto">
       <div class="container text-center">
-        <ul class="nav justify-content-center mb-3">
-          <li class="nav-item">
-            <RouterLink class="nav-link" to="/">Top</RouterLink>
-          </li>
-        </ul>
-        <p>
+        <button type="button" class="footer-top" @click="scrollToTop">
+          <i class="bi bi-arrow-up"></i> Top
+        </button>
+        <p class="mb-0 mt-2">
           <small>Copyright &copy; 못먹어도S카고</small>
         </p>
       </div>

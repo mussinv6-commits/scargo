@@ -70,7 +70,7 @@
       <div class="mapping-truck-grid">
         <div v-for="t in trucks" :key="t.vehicleNo" class="mapping-truck-card">
           <div class="truck-no">{{ t.vehicleNo }}</div>
-          <div class="truck-meta">{{ t.truckType || '차종미상' }} · 트레일러 {{ t.isSemiTrailer ? 'Y' : 'N' }}</div>
+          <div class="truck-meta">{{ t.truckType || '차종미상' }} · 트레일러 {{ (t.isSemiTrailer ?? t.semiTrailer) ? 'Y' : 'N' }}</div>
         </div>
         <p v-if="trucks.length === 0" class="mapping-empty">소속 차량이 없습니다.</p>
       </div>

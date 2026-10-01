@@ -1,15 +1,18 @@
+/*2026.09.28수정*/
 /* 로그인 화면과 동일한 배경(야간 고속도로) + 오버레이를 사용해 인증 플로우 톤을 통일 */
 .regi-page {
   position: relative;
-  width: 100vw;
-  margin-left: calc(50% - 50vw);
+  /* 합본: 구버전 100vw + margin-left: calc(50% - 50vw) 대신
+     부모 기준 100% — 스크롤바 폭만큼 가로 스크롤이 생기지 않음 */
+  width: 100%;
+  margin-left: 0;
   min-height: 100vh;
   display: flex;
   align-items: flex-start;
   justify-content: center;
   padding: 60px 20px;
   box-sizing: border-box;
-  background-image: url("@/assets/logistics.png");
+  background-image: url("@/assets/loginbg.png");
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;

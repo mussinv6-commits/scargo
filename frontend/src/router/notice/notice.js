@@ -8,22 +8,22 @@ export default [
         path: '/notice',
         name: 'notice',
         component: noticeList
-        // http://localhost:5173/notice
+    },
+    {
+        path: '/notice/write',
+        name: 'noticeWrite',
+        component: noticeWrite,
+        meta: { requiresAdmin: true },
+    },
+    {
+        path: '/notice/update/:id',
+        name: 'noticeUpdate',
+        component: noticeUpdate,
+        meta: { requiresAdmin: true },
     },
     {
         path: '/notice/:id',
         name: 'noticeDetail',
         component: noticeDetail
-        // http://localhost:5173/notice/1
-    },
-    {
-        path: '/notice/update/:id',
-        name: 'noticeUpdate',
-        component: noticeUpdate
-    },
-    {
-        path: '/notice/write',
-        name: 'noticeWrite',
-        component: noticeWrite
     },
 ]

@@ -1,0 +1,57 @@
+====================================================
+scargo 프로젝트 실행 명령어 정리
+====================================================
+[파트 A] 지금 이 컴퓨터에서, 평소에 켤 때마다 쓰는 명령어
+[파트 B] 다른 컴퓨터로 폴더를 옮겼을 때, 딱 1번만 준비하면 되는 것
+
+평소엔 [파트 A]만 보면 됩니다.
+
+
+====================================================
+[파트 A] 평소 실행 순서 (켤 때마다, 1→2→3 순서 지킬 것)
+====================================================
+
+1단계. 백엔드 (Spring Boot) - 포트 8080
+  STS에서 scargo 프로젝트 우클릭 → Run As → Spring Boot App
+  (또는 터미널: cd scargo → gradlew.bat bootRun)
+
+2단계. 게이트 OCR 서버 (gate_api.py) - 포트 8001
+    conda activate yolo
+    cd C:\Users\user\Desktop\SCargo_1001 _am11\python
+    set GATE_API_ID=admin
+    set GATE_API_PW=admin1234
+    uvicorn gate_api:app --host 0.0.0.0 --port 8001
+  * cmd 창 닫으면 GATE_API_ID/PW 초기화됨 → 새 창마다 5줄 다시 입력
+  * 1단계 재시작하면 2단계도 같이 재시작
+
+3단계. 프론트엔드 (Vue) - 포트 5173
+    cd C:\Users\user\Desktop\scargo\frontend
+    npm run dev
+
+
+====================================================
+[파트 B] 다른 컴퓨터로 옮겼을 때 - 딱 1번만 준비
+====================================================
+
+B-1. 파이썬 환경 (yolo는 이 컴퓨터에만 있음 → 새로 만들어야 함)
+    conda create -n yolo python=3.10 -y
+    (이 컴퓨터에서 미리) pip freeze > requirements.txt  → scargo\python\requirements.txt
+    (새 컴퓨터에서) pip install -r requirements.txt
+
+B-2. 프론트엔드 패키지
+    cd scargo\frontend
+    npm install
+
+B-3. PostgreSQL (application.yml 기준: DB명 scargo / 계정 postgres / 비번 1234)
+    설치 → postgres 비번 1234로 설정 → scargo 데이터베이스 하나 생성
+    (테이블은 백엔드 첫 실행 시 자동 생성됨, schema.sql 따로 실행 불필요)
+
+
+====================================================
+새 컴퓨터 최초 세팅 체크리스트
+====================================================
+[ ] scargo 폴더 복사
+[ ] B-3 PostgreSQL + scargo DB 생성
+[ ] B-2 npm install
+[ ] B-1 yolo 환경 + pip install
+[ ] 이후 [파트 A] 순서대로 실행

@@ -1,11 +1,26 @@
-# 학습 산출물 / 대용량 모델 파일 (GitHub 용량 문제로 제외 - 필요하면 Git LFS나 별도 백업으로 관리)
-runs/
+# 학습 산출물 / 대용량 모델 파일 (대부분 제외하되, 실제 서비스에 쓰는 모델 1세트는
+# 다른 컴퓨터에서 바로 돌려볼 수 있게 예외로 포함시킴 - 둘 다 50MB 미만이라 GitHub에
+# LFS 없이도 그냥 올라감)
+runs/*
+!runs/detect
+runs/detect/*
+!runs/detect/plate_detect_m_expanded-2
+runs/detect/plate_detect_m_expanded-2/*
+!runs/detect/plate_detect_m_expanded-2/weights
+!runs/detect/plate_detect_m_expanded-2/args.yaml
+!runs/detect/plate_detect_m_expanded-2/results.csv
+runs/detect/plate_detect_m_expanded-2/weights/*
+!runs/detect/plate_detect_m_expanded-2/weights/best.pt
+
 weights/
 *.pt
-*.pth
+!runs/detect/plate_detect_m_expanded-2/weights/best.pt
+
 ocr_model/
 ocr_model_attn/backup_*.pth
 ocr_model_attn/*backup*.pth
+*.pth
+!ocr_model_attn/best_recognizer_attn.pth
 
 # 데이터셋 / 학습용 대용량 이미지
 ocr_train_data/

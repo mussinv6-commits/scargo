@@ -9,7 +9,7 @@
   <main class="page">
     <div v-if="!vehicleNo" class="empty-state">
       <p class="hint-text">차량을 먼저 등록해야 배차를 받을 수 있어요.</p>
-      <RouterLink to="/driver/app/my-page" class="btn-fill link-btn">MY/차량에서 차량 등록하기</RouterLink>
+      <RouterLink to="/driver/app/my-page#register" class="drv-cta">차량 등록하러 가기</RouterLink>
     </div>
 
     <template v-else>
@@ -77,6 +77,7 @@
 </template>
 
 <script setup>
+import { fetchMyVehicleNo } from '@/utils/driverTruck.js'
 import { ref, computed, onMounted } from 'vue'
 import axios from 'axios'
 import { authState } from '@/auth/authState.js'
@@ -137,26 +138,21 @@ function formatWon(n) {
 }
 
 onMounted(async () => {
-  const userId = authState.user?.userId
-  if (userId) {
-    vehicleNo.value = localStorage.getItem(`scargo_myTruck_${userId}`)
-  }
+  // 26.09.30 수정: 배정 차량을 서버에서 조회 (localStorage 값은 더 이상 저장되지 않음)
+  vehicleNo.value = await fetchMyVehicleNo()
   await loadDispatches()
 })
 </script>
 
 <style scoped>
-.page { padding: 28px 32px; }
 .segment { max-width: 360px; }
-.empty-state { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 80px 20px; text-align: center; }
-.link-btn { display: inline-block; text-decoration: none; text-align: center; width: auto; padding: 12px 24px; }
 
 /* 세그먼트 탭 */
 .segment { display: flex; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 4px; margin-bottom: 18px; }
 .segment-btn { flex: 1; padding: 10px 0; border: none; background: transparent; color: var(--text-muted); font-size: 14px; font-weight: 600; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; }
 .segment-btn.active { background: var(--surface-alt); color: var(--amber); }
 .segment-btn .count { font-size: 11px; background: var(--amber-soft); color: var(--amber); padding: 1px 6px; border-radius: 999px; }
-.segment-btn.active .count { background: var(--amber); color: #1A1300; }
+.segment-btn.active .count { background: var(--amber); color: #fff; }
 
 .list { display: flex; flex-direction: column; gap: 12px; }
 .empty, .hint-text { text-align: center; color: var(--text-muted); font-size: 14px; padding: 40px 0; }
@@ -172,6 +168,6 @@ onMounted(async () => {
 .job-actions { display: flex; gap: 8px; }
 .btn-outline, .btn-fill { flex: 1; padding: 10px 0; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
 .btn-outline { border: 1px solid var(--border); background: transparent; color: var(--text-muted); }
-.btn-fill { border: none; background: var(--amber); color: #1A1300; }
+.btn-fill { border: none; background: var(--amber); color: #fff; }
 .btn-outline:active, .btn-fill:active { transform: scale(0.98); }
 </style>

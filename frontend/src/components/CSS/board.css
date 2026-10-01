@@ -1,0 +1,309 @@
+/* 26.09.30 추가: 게시판 / 공지사항 공용 스타일 (목록 · 상세 · 작성 · 수정) */
+
+.board-page,
+#notice-list {
+  width: 100%;
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 40px 20px 64px;
+  text-align: center;
+}
+
+#notice-list .notice-list-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  margin-bottom: 20px;
+  padding-bottom: 14px;
+  border-bottom: 2px solid var(--color-primary);
+}
+#notice-list .notice-list-title {
+  text-align: center;
+}
+#notice-list .notice-list-sub {
+  text-align: center;
+}
+
+.notice-toolbar {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.notice-write-row {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 0 8px;
+}
+.notice-write-btn {
+  min-width: 80px;
+  text-align: center;
+}
+.notice-search-input {
+  width: 260px;
+  max-width: 60vw;
+}
+.notice-pager {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  margin-top: 24px;
+}
+.pager-btn {
+  min-width: 36px;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid #d7dce4;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--color-primary);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.pager-btn:hover:not(:disabled):not(.active) {
+  border-color: var(--color-primary);
+}
+.pager-btn.active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+  cursor: default;
+}
+.pager-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.notice-list-title,
+.board-title {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--color-text);
+  margin: 0 0 4px;
+}
+.board-head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding-bottom: 14px;
+  border-bottom: 2px solid var(--color-primary);
+  text-align: center;
+}
+.notice-list-sub,
+.board-sub {
+  font-size: 13.5px;
+  color: var(--color-subtext);
+  margin: 0;
+}
+
+.notice-table,
+.board-table {
+  background: #fff;
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 0;
+  table-layout: fixed;
+}
+.notice-table th,
+.board-table th {
+  background: #f1f4f8 !important;
+  color: var(--color-subtext);
+  font-size: 12.5px;
+  font-weight: 700;
+  padding: 12px 10px;
+  vertical-align: middle;
+  text-align: center;
+}
+.notice-table td,
+.board-table td {
+  padding: 13px 10px;
+  vertical-align: middle;
+  font-size: 14px;
+  text-align: center;
+}
+.notice-row,
+.board-row {
+  cursor: pointer;
+}
+.notice-row:hover td,
+.board-row:hover td {
+  background: rgba(10, 37, 64, 0.03);
+}
+.title-text {
+  font-weight: 600;
+  color: var(--color-text);
+}
+.comment-count {
+  color: var(--color-accent);
+  font-size: 12.5px;
+  font-weight: 700;
+  margin-left: 4px;
+}
+
+.badge-type {
+  display: inline-block;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+.badge-default {
+  background: rgba(10, 37, 64, 0.08);
+  color: var(--color-primary);
+}
+.badge-must-read {
+  background: rgba(255, 107, 0, 0.14);
+  color: var(--color-accent);
+}
+.badge-urgent {
+  background: rgba(217, 92, 69, 0.16);
+  color: #c2410c;
+}
+
+/* ---- 작성/수정 폼 카드 ---- */
+.board-form {
+  background: #fff;
+  border: 1px solid #e3e8ef;
+  border-radius: 14px;
+  padding: 24px;
+  max-width: 720px;
+  margin: 0 auto;
+  text-align: center;
+}
+.board-form .form-label {
+  font-weight: 700;
+  font-size: 13.5px;
+  text-align: center;
+}
+.board-form-actions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 20px;
+}
+.board-file-list {
+  list-style: none;
+  padding: 0;
+  margin: 10px 0 0;
+}
+.board-file-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  padding: 6px 10px;
+  background: #f4f6f8;
+  border-radius: 8px;
+  margin-bottom: 4px;
+}
+
+/* ---- 상세 ---- */
+.board-detail {
+  background: #fff;
+  border: 1px solid #e3e8ef;
+  border-radius: 14px;
+  overflow: hidden;
+}
+.board-detail-head {
+  padding: 22px 24px 16px;
+  border-bottom: 1px solid #eef1f5;
+}
+.board-detail-head h3 {
+  font-size: 20px;
+  font-weight: 800;
+  margin: 0 0 10px;
+  word-break: break-all;
+}
+.board-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  font-size: 13px;
+  color: var(--color-subtext);
+}
+.board-body {
+  padding: 24px;
+  min-height: 200px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.75;
+  font-size: 15px;
+}
+.board-attachments {
+  padding: 12px 24px 18px;
+  border-top: 1px dashed #e3e8ef;
+  font-size: 13.5px;
+}
+.board-attachments a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 12px;
+}
+.board-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+/* ---- 댓글 ---- */
+.board-comments {
+  margin-top: 24px;
+  background: #fff;
+  border: 1px solid #e3e8ef;
+  border-radius: 14px;
+  padding: 18px 20px;
+}
+.board-comments h4 {
+  font-size: 15px;
+  font-weight: 800;
+  margin: 0 0 12px;
+}
+.comment-item {
+  padding: 12px 0;
+  border-bottom: 1px solid #f0f2f5;
+}
+.comment-item:last-of-type {
+  border-bottom: none;
+}
+.comment-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12.5px;
+  color: var(--color-subtext);
+  margin-bottom: 4px;
+}
+.comment-top b {
+  color: var(--color-text);
+  margin-right: 8px;
+}
+.comment-text {
+  font-size: 14px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+}
+.comment-form {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+.comment-form textarea {
+  flex: 1;
+  resize: vertical;
+}
+
+@media (max-width: 640px) {
+  .board-hide-sm { display: none; }
+  .board-form { padding: 16px; }
+}

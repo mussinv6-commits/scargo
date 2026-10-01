@@ -55,11 +55,11 @@ const route = useRoute()
   padding: 11px 12px;
   border-radius: 8px;
   text-decoration: none;
-  color: var(--text-muted);
+  color: rgba(255, 255, 255, 0.78);
   font-size: 14px;
   font-weight: 600;
 }
-.nav-item:hover { background: var(--surface-alt); color: var(--text); }
-.nav-item.active { background: var(--amber-soft); color: var(--amber); }
+.nav-item:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
+.nav-item.active { background: rgba(255, 107, 0, 0.18); color: #ffd7b0; }
 .nav-item svg { width: 18px; height: 18px; flex-shrink: 0; }
 </style>

@@ -9,18 +9,18 @@
    ============================================================ */
 
 .driver-app-shell {
-  --bg: #12161C;
-  --surface: #1B212A;
-  --surface-alt: #232A35;
-  --border: #2E3742;
-  --text: #EDEFF2;
-  --text-muted: #8B94A3;
-  --amber: #FFB020;
-  --amber-soft: rgba(255, 176, 32, 0.12);
-  --green: #2FBF71;
-  --green-soft: rgba(47, 191, 113, 0.12);
-  --red: #FF5A5F;
-  --red-soft: rgba(255, 90, 95, 0.12);
+  --bg: var(--color-bg, #f4f6f8);
+  --surface: var(--color-card, #ffffff);
+  --surface-alt: #eef1f6;
+  --border: #e3e8ef;
+  --text: var(--color-text, #0a2540);
+  --text-muted: var(--color-subtext, #64748b);
+  --amber: var(--color-accent, #ff6b00);
+  --amber-soft: rgba(255, 107, 0, 0.12);
+  --green: var(--status-delivered, #10b981);
+  --green-soft: rgba(16, 185, 129, 0.12);
+  --red: var(--status-delayed, #ef4444);
+  --red-soft: rgba(239, 68, 68, 0.1);
   --radius: 10px;
 
   background: var(--bg);
@@ -28,15 +28,18 @@
   font-family: 'Inter', -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
 
-  max-width: 1240px;
-  margin: 32px auto;
-  border-radius: 16px;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  border-radius: 0;
+  box-shadow: none;
   overflow: hidden;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
 
   display: flex;
   align-items: stretch;
-  min-height: 760px;
+  flex: 1 1 auto;
+  min-height: calc(100vh - var(--nav-h, 60px));
+  text-align: left;
 }
 
 .driver-app-shell * { box-sizing: border-box; }
@@ -55,8 +58,8 @@
 .driver-app-shell .driver-sidebar {
   width: 224px;
   flex-shrink: 0;
-  background: var(--surface);
-  border-right: 1px solid var(--border);
+  background: var(--color-primary, #0a2540);
+  border-right: none;
   padding: 24px 14px;
   display: flex;
   flex-direction: column;
@@ -67,7 +70,7 @@
   font-size: 20px;
   font-weight: 700;
   padding: 4px 10px 20px;
-  color: var(--text);
+  color: #fff;
 }
 .driver-app-shell .driver-sidebar .brand-mark span { color: var(--amber); }
 
@@ -75,18 +78,22 @@
 .driver-app-shell .driver-main {
   flex: 1;
   min-width: 0;
-  max-height: 760px;
+  max-height: none;
+  min-height: calc(100vh - var(--nav-h, 60px));
   overflow-y: auto;
 }
 
-/* 공통 상단바 */
+/* 공통 상단바 - 26.09.30: 4개 화면 제목 위치/높이 통일 */
 .driver-app-shell .topbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 24px 32px 18px;
+  gap: 16px;
+  min-height: 88px;
+  padding: 20px 32px;
   border-bottom: 1px solid var(--border);
 }
+.driver-app-shell .topbar > div:first-child { min-width: 0; }
 .driver-app-shell .topbar .brand {
   font-family: 'Barlow Condensed', sans-serif;
   font-size: 26px;
@@ -96,6 +103,50 @@
   font-size: 13.5px;
   color: var(--text-muted);
   margin-top: 3px;
+}
+
+/* 공통 본문 영역 */
+.driver-app-shell .page { padding: 28px 32px; }
+
+/* 빈 화면 안내 (차량 미배정, 배차 없음 등) */
+.driver-app-shell .empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 96px 20px;
+  text-align: center;
+}
+
+/* 26.09.30 추가: 빈 화면 이동 버튼 - 화면마다 크기/글꼴이 달랐던 것을 하나로 */
+.driver-app-shell .drv-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 24px;
+  border-radius: 8px;
+  background: var(--amber);
+  color: #fff;
+  font-size: 14.5px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.driver-app-shell .drv-cta:hover { filter: brightness(1.05); color: #fff; }
+
+/* 26.09.30 추가: 화면별 액션 버튼 크기 통일 (높이 42px / 14.5px / 굵게) */
+.driver-app-shell .driver-main :is(.btn-fill, .btn-outline, .btn-primary, .btn-secondary, .btn-request) {
+  min-height: 42px;
+  padding: 0 18px;
+  font-family: inherit;
+  font-size: 14.5px;
+  font-weight: 700;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
 /* 공통 섹션 타이틀 */
@@ -153,6 +204,11 @@
 }
 
 @media (max-width: 900px) {
+  .driver-app-shell { flex-direction: column; margin: 0; min-height: calc(100vh - var(--nav-h, 60px)); }
+  .driver-app-shell .driver-sidebar { width: 100%; flex-direction: row; overflow-x: auto; border-right: none; border-bottom: 1px solid var(--border); }
+  .driver-app-shell .driver-sidebar .brand-mark { display: none; }
+  .driver-app-shell .driver-main { max-height: none; min-height: 0; }
+  .driver-app-shell .page, .driver-app-shell .topbar { padding-left: 18px; padding-right: 18px; }
   .driver-app-shell .layout-2col { grid-template-columns: 1fr; }
   .driver-app-shell .side-panel { position: static; }
 }

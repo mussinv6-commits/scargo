@@ -9,7 +9,7 @@
   <main class="page">
     <div v-if="!vehicleNo" class="empty-state">
       <p class="hint-text">차량을 먼저 등록해야 정산 내역을 볼 수 있어요.</p>
-      <RouterLink to="/driver/app/my-page" class="btn-fill link-btn">MY/차량에서 차량 등록하기</RouterLink>
+      <RouterLink to="/driver/app/my-page#register" class="drv-cta">차량 등록하러 가기</RouterLink>
     </div>
 
     <template v-else>
@@ -105,6 +105,7 @@
 </template>
 
 <script setup>
+import { fetchMyVehicleNo } from '@/utils/driverTruck.js'
 import { ref, computed, onMounted, watch } from 'vue'
 import axios from 'axios'
 import { authState } from '@/auth/authState.js'
@@ -210,18 +211,13 @@ function formatWonShort(n) {
 watch([year, month], loadSettlement)
 
 onMounted(async () => {
-  const userId = authState.user?.userId
-  if (userId) {
-    vehicleNo.value = localStorage.getItem(`scargo_myTruck_${userId}`)
-  }
+  // 26.09.30 수정: 배정 차량을 서버에서 조회 (localStorage 값은 더 이상 저장되지 않음)
+  vehicleNo.value = await fetchMyVehicleNo()
   await loadSettlement()
 })
 </script>
 
 <style scoped>
-.page { padding: 28px 32px; }
-.empty-state { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 80px 20px; text-align: center; }
-.link-btn { display: inline-block; text-decoration: none; text-align: center; width: auto; padding: 12px 24px; }
 
 /* 월 이동 */
 .month-nav { display: flex; align-items: center; justify-content: center; gap: 20px; margin-bottom: 16px; }
@@ -275,5 +271,5 @@ onMounted(async () => {
 .invoice-note.done { color: var(--green); }
 
 .hint-text { text-align: center; color: var(--text-muted); font-size: 14px; padding: 40px 0; }
-.btn-fill { border: none; background: var(--amber); color: #1A1300; font-weight: 600; border-radius: 8px; cursor: pointer; }
+.btn-fill { border: none; background: var(--amber); color: #fff; font-weight: 600; border-radius: 8px; cursor: pointer; }
 </style>

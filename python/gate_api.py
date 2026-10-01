@@ -47,7 +47,7 @@ gate_watch_service.py(폴더 상시 감시)를 HTTP로 트리거하는 방식으
   사라지고 gate_id(FK)로 바뀜 - scargo 백엔드(GateLog 엔티티/서비스/DTO)도
   이에 맞춰 gate_id 참조 구조로 같이 업데이트함(GateLogCreateRequest가 이제
   gateCode를 받음). 이 파일도 그에 맞춰 payload의 "gateName"/"gateType"을
-  "gateCode": DEFAULT_GATE_CODE 하나로 교체함(위 DEFAULT_GATE_CODE 참고).
+  "gateId": gate_id 하나로 교체함(위 DEFAULT_GATE_CODE 참고).
 
 실행 전 준비 (필수):
     1. 환경변수 설정 (PowerShell 예시)
@@ -82,6 +82,7 @@ import json
 import logging
 import os
 import random
+import re
 import shutil
 import sys
 import time
@@ -137,6 +138,9 @@ DEFAULT_SCARGO_API_BASE = "http://localhost:8080"
 # 심어둔 4개 게이트 코드(Gate-ABC-01/Gate-I-01/Gate-H-01/Gate-DEFG-01) 중
 # 하나를 그대로 씀 - 스키마가 재실행돼도(SERIAL이 바뀌어도) 코드는 고정이라 안전함.
 DEFAULT_GATE_CODE = "Gate-ABC-01"
+# 2026-10-01 추가: 이 서버(gate_api.py)가 사진을 서빙하는 주소 - gate_logs.front_image_url에
+# 절대주소로 남겨서 다른 화면(계중대 등)에서도 <img src>로 바로 쓸 수 있게 함
+GATE_PUBLIC_BASE = os.environ.get("GATE_PUBLIC_BASE", "http://localhost:8001")
 DEFAULT_VEHICLE_TYPE = "TRUCK"  # gate_logs.vehicle_type에 쓰는 값 (trucks.truck_type과 매칭 비교에도 씀)
 IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png")
 
@@ -208,8 +212,19 @@ def login(session, api_base, user_id, user_pw):
         json={"userId": user_id, "userPw": user_pw},
         timeout=5,
     )
+    logger.info(f"[로그인 시도] status={resp.status_code}, 응답 내용={resp.text}")
+    logger.info(f"[확보된 세션 쿠키 목록] {session.cookies.get_dict()}")
+
     if resp.status_code != 200:
         raise RuntimeError(f"scargo 로그인 실패 (status={resp.status_code}): {resp.text}")
+    
+    # requests.Session이 자동으로 쿠키를 저장하지 못한 경우 대비 수동 주입
+    if not session.cookies.get_dict():
+        set_cookie = resp.headers.get("Set-Cookie")
+        if set_cookie:
+            session.headers.update({"Cookie": set_cookie})
+            logger.warning("[경고] 세션 쿠키가 자동으로 저장되지 않아 헤더에 수동 주입했습니다.")
+
     logger.info(f"scargo 로그인 성공: {user_id}")
 
 
@@ -233,7 +248,7 @@ def get_db_connection():
         port=int(os.environ.get("PGPORT", "5432")),
         database=os.environ.get("PGDATABASE", "scargo"),
         user=os.environ.get("PGUSER", "postgres"),
-        password=os.environ.get("PGPASSWORD"),
+        password=os.environ.get("PGPASSWORD", "1234")
     )
 
 
@@ -244,10 +259,6 @@ def ensure_dummy_trucks(conn):
     따라 trucks가 비어 있을 때만(count==0) 테스트 사진 중 실제로 존재하는
     번호판 몇 개를 씨드해둠. company_id는 NOT NULL FK라서 companies 테이블에
     이미 있는 실제 업체(schema.sql 더미 데이터) 중 하나를 그대로 씀."""
-    # 2026-09-30 변경: psycopg2 -> pg8000 교체에 따라 with 블록(컨텍스트 매니저)을
-    # 못 씀(pg8000의 Cursor는 __enter__/__exit__을 지원 안 함: TypeError: 'Cursor'
-    # object does not support the context manager protocol - 사용자 실행 중 확인).
-    # try/finally로 동일하게 커서를 닫아줌.
     cur = conn.cursor()
     try:
         cur.execute("SELECT COUNT(*) FROM trucks")
@@ -290,12 +301,10 @@ def lookup_vehicle(conn, plate_no: str, truck_type: str = None):
     수정함(truck_type 인자는 호출부 호환을 위해 남겨두되 더 이상 안 씀)."""
     if not plate_no:
         return None
-    # 2026-09-30 변경: pg8000의 Cursor는 컨텍스트 매니저(with)를 지원 안 해서
-    # try/finally로 교체(위 ensure_dummy_trucks와 동일 이유).
     cur = conn.cursor()
     try:
         cur.execute(
-            "SELECT vehicle_no, truck_type, company_id, status FROM trucks "
+            "SELECT vehicle_no, truck_type, company_id, status, planned_route FROM trucks "
             "WHERE vehicle_no = %s",
             (plate_no,),
         )
@@ -304,7 +313,27 @@ def lookup_vehicle(conn, plate_no: str, truck_type: str = None):
         cur.close()
     if row is None:
         return None
-    return {"vehicleNo": row[0], "truckType": row[1], "companyId": row[2], "status": row[3]}
+    return {
+        "vehicleNo": row[0],
+        "truckType": row[1],
+        "companyId": row[2],
+        "status": row[3],
+        "plannedRoute": row[4],
+    }
+
+
+def lookup_gate_id(conn, gate_code: str):
+    """활성 gates 레코드의 실제 gate_id를 gate_code로 조회한다."""
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "SELECT gate_id FROM gates WHERE gate_code = %s AND is_active = TRUE",
+            (gate_code,),
+        )
+        row = cur.fetchone()
+    finally:
+        cur.close()
+    return row[0] if row else None
 
 
 def recognize_one(image_path: Path):
@@ -395,6 +424,35 @@ def _pick_random_stable_file(watch_dir: Path) -> Optional[Path]:
     return None
 
 
+def _recycle_processed(watch_dir: Path) -> int:
+    """2026-10-01 추가: 감시 폴더가 비면 processed 에 있던 사진을 다시 감시 폴더로 되돌림.
+    시연 중에 사진이 다 떨어져 "처리할 사진이 없습니다"가 뜨는 것을 막기 위함.
+    - _move_safely 가 붙인 "_1790...(13자리 타임스탬프)" 중복본은 원본 이름으로 되돌리고,
+      같은 이름이 이미 있으면 그 중복본은 processed 에 그대로 둔다.
+    - 환경변수 GATE_RECYCLE=0 이면 이 기능을 끈다."""
+    if os.environ.get("GATE_RECYCLE", "1") == "0":
+        return 0
+    processed_dir = watch_dir / "processed"
+    if not processed_dir.exists():
+        return 0
+    moved = 0
+    for p in sorted(processed_dir.iterdir()):
+        if not (p.is_file() and p.suffix.lower() in IMAGE_SUFFIXES):
+            continue
+        stem = re.sub(r"_\d{13}$", "", p.stem)
+        dest = watch_dir / f"{stem}{p.suffix}"
+        if dest.exists():
+            continue
+        try:
+            shutil.move(str(p), str(dest))
+            moved += 1
+        except OSError:
+            logger.exception(f"[{p.name}] 감시 폴더로 되돌리기 실패")
+    if moved:
+        logger.info(f"감시 폴더가 비어서 processed 의 사진 {moved}장을 다시 넣음")
+    return moved
+
+
 class ScanResult(BaseModel):
     fileName: str
     recognizedPlate: Optional[str] = None
@@ -457,6 +515,8 @@ def scan():
     failed_dir = watch_dir / "failed"
 
     path = _pick_random_stable_file(watch_dir)
+    if path is None and _recycle_processed(watch_dir) > 0:
+        path = _pick_random_stable_file(watch_dir)
     if path is None:
         raise HTTPException(status_code=204, detail="처리할 사진이 감시 폴더에 없음")
 
@@ -487,9 +547,37 @@ def scan():
         match_result = "DENIED"
     gate_open = match_result == "AUTHORIZED"
 
+    # 2026-10-01 변경: 게이트로그를 저장하기 "전에" 사진을 processed로 옮겨서, 저장되는 기록에
+    # 실제 사진 주소(frontImageUrl)를 같이 남김 - 계중대 계량 화면 등 다른 화면에서도 게이트에서
+    # 찍힌 사진을 다시 볼 수 있게 하기 위함. (파일명이 충돌하면 _move_safely가 타임스탬프를
+    # 붙이므로 반드시 이동 후 실제 파일명(final_path.name) 기준으로 URL을 만듦)
+    final_path = _move_safely(path, processed_dir)
+    image_url = f"/images/processed/{final_path.name}"
+
     plate_confidence = round(result["ocr_conf"] * 100, 2) if result["ocr_conf"] is not None else None
+    # 등록 차량은 planned_route.destination_gate를 사용하고, 미등록 차량은 기존 ABC야드 출입구를 사용
+    gate_code = DEFAULT_GATE_CODE
+    if matched_vehicle is not None:
+        planned_route = matched_vehicle.get("plannedRoute")
+        # pg8000 반환 형태에 따라 JSON 문자열이면 dict로 변환
+        if isinstance(planned_route, str):
+            try:
+                planned_route = json.loads(planned_route)
+            except json.JSONDecodeError:
+                planned_route = None
+        if isinstance(planned_route, dict):
+            destination_gate = planned_route.get("destination_gate")
+            if destination_gate:
+                # "Gate-DEFG-01 (DEFG야드 출입구)" -> "Gate-DEFG-01"
+                gate_code = destination_gate.split(" ", 1)[0].strip()
+
+    gate_id = lookup_gate_id(_state["db_conn"], gate_code)
+    if gate_id is None:
+        logger.error(f"게이트 ID 조회 실패: gateCode={gate_code}")
+        raise HTTPException(status_code=500, detail=f"활성 게이트를 찾을 수 없음: {gate_code}")
+
     payload = {
-        "gateCode": DEFAULT_GATE_CODE,
+        "gateId": gate_id,
         "recognizedPlateNo": pred or None,
         # 2026-09-30: trucks 테이블과 매칭된 경우에만 채움 - GateLog.java에
         # 이미 있는 실제 컬럼(actual_vehicle_no, "매칭된 차량 번호판 (trucks FK)"
@@ -498,6 +586,7 @@ def scan():
         "plateConfidence": plate_confidence,
         "recognitionStatus": recognition_status,
         "vehicleType": DEFAULT_VEHICLE_TYPE,
+        "frontImageUrl": f"{GATE_PUBLIC_BASE}{image_url}",  # 2026-10-01 추가
         "ocrRawData": json.dumps({
             "engine": result["engine"],
             "detConfidence": result["det_conf"],
@@ -515,20 +604,21 @@ def scan():
 
     gate_log_id = None
     try:
+        logger.info(f"  -> [게이트로그 전송 시도] 현재 사용 중인 쿠키: {_state['session'].cookies.get_dict()}")
+        logger.info(f"  -> [게이트로그 전송] gateCode={gate_code}, gateId={gate_id}")
+        
         resp = _state["session"].post(
             f"{DEFAULT_SCARGO_API_BASE}/api/v1/gate-logs", json=payload, timeout=5,
         )
         if resp.status_code == 201:
             gate_log_id = resp.json().get("gateLogId")
+            logger.info(f"  -> DB 저장 완료 (gate_log_id={gate_log_id})")
         else:
             logger.error(f"게이트로그 저장 실패 (status={resp.status_code}): {resp.text}")
+            logger.error(f"     (거부된 쿠키 상태: {_state['session'].cookies.get_dict()})")
     except requests.exceptions.RequestException:
         logger.exception("게이트로그 저장 중 네트워크 오류")
 
-    final_path = _move_safely(path, processed_dir)
-    # 2026-09-30: 파일명이 충돌해서 _move_safely가 타임스탬프를 붙였을 수 있으므로
-    # 반드시 이동 후 실제 파일명(final_path.name) 기준으로 URL을 만듦.
-    image_url = f"/images/processed/{final_path.name}"
 
     logger.info(f"[{path.name}] 인식={pred or '(판독불가)'} 매칭={match_result} 차단기={'오픈' if gate_open else '닫힘'}")
 
