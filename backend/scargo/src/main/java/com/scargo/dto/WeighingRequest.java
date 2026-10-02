@@ -15,8 +15,8 @@ import lombok.Setter;
 import java.util.List;
 
 /**
- * 26.10.01 추가(계중대 정식화): 계중대에서 한 대를 계량한 결과.
- * 축중기(또는 계중대 콘솔)가 축별 중량만 보내면, 총중량·위반 여부·통과 여부는 서버가 판정한다.
+ * 26.10.01 추가(검사소 정식화): 검사소에서 한 대를 계량한 결과.
+ * 축중기(또는 검사소 콘솔)가 축별 중량만 보내면, 총중량·위반 여부·통과 여부는 서버가 판정한다.
  * (화면에서 보낸 판정값을 그대로 믿지 않기 위함)
  */
 @Getter
@@ -35,13 +35,17 @@ public class WeighingRequest {
     @Size(max = 20, message = "컨테이너 번호는 최대 20자입니다.")
     private String containerNo;
 
-    @Size(max = 20, message = "계중대 코드는 최대 20자입니다.")
+    @Size(max = 20, message = "검사소 코드는 최대 20자입니다.")
     private String stationCode;
 
     @NotEmpty(message = "축별 중량이 없습니다.")
     @Size(min = 2, max = 8, message = "축 수는 2~8축이어야 합니다.")
     @Valid
     private List<Axle> axles;
+
+    // 26.10.02 추가: 컨테이너 총중량(VGM = 컨테이너 자체중량 + 화물). 컨테이너가 없으면 null
+    @PositiveOrZero(message = "VGM은 0 이상이어야 합니다.")
+    private Integer vgmWeightKg;
 
     @Getter
     @Setter

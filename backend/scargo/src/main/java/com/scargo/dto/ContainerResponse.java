@@ -31,6 +31,10 @@ public class ContainerResponse {
     private Long loadingLocationId;
     private OffsetDateTime createdAt;
 
+    // 26.10.01 병합: 사업자 매핑 화면(현재 매핑 목록)에서 배정 차량 표시용
+    private String vehicleNo;          // 배정된 차량 번호 (containers.assigned_vehicle_no, 미배정이면 null)
+    private OffsetDateTime assignedAt; // 차량 배정 일시
+
     public ContainerResponse(Container container) {
         this.containerNo = container.getContainerNo();
         this.companyId = container.getCompanyId();
@@ -49,5 +53,7 @@ public class ContainerResponse {
         }
         
         this.createdAt = container.getCreatedAt();
+        this.vehicleNo = container.getAssignedVehicleNo();
+        this.assignedAt = container.getAssignedAt();
     }
 }

@@ -21,7 +21,7 @@
 
       <div class="notif-list">
         <div v-if="loading" class="notif-empty">불러오는 중...</div>
-        <div v-else-if="error" class="notif-empty">없음</div>
+        <div v-else-if="error" class="notif-empty">{{ error }}</div>
         <div v-else-if="notifications.length === 0" class="notif-empty">없음</div>
         <div
           v-for="n in notifications"
@@ -131,13 +131,14 @@ function resolveTarget(n) {
     case 'NOTICE':
     case 'SYSTEM':
     default:
+      if (/미등록/.test(text) && role === 'ADMIN') return '/admin/trucks'
       if (/공지/.test(text)) return n.referenceId && /게시|공지사항/.test(text) ? `/notice/${n.referenceId}` : '/notice'
       if (/차량|진입|허가|반려|배정/.test(text)) {
         if (role === 'ADMIN') return '/admin/trucks'
         if (role === 'CORPORATE_APPROVED') return /배정/.test(text) ? '/company/drivers' : '/company'
         if (role === 'GENERAL') return '/driver/app/my-page'
       }
-      if (/배차/.test(text) && role === 'GENERAL') return '/driver/app/dispatch-list'
+      if (/배차|컨테이너|적재/.test(text) && role === 'GENERAL') return '/driver/app/dispatch-list'
       if (/정산|세금계산서/.test(text) && role === 'GENERAL') return '/driver/app/settlement'
       if (role === 'ADMIN') return '/admin'
       if (role === 'CORPORATE_APPROVED') return '/company'

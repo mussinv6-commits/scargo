@@ -40,8 +40,9 @@ const columns = [
   { key: 'checkId', label: 'ID', width: '60px', align: 'center', type: 'seq' },
   { key: 'vehicleNo', label: '차량번호' },
   { key: 'containerNo', label: '컨테이너번호' },
-  { key: 'totalWeight', label: '총중량(kg)', align: 'right', format: fmtNum },
-  { key: 'maxPayload', label: '최대적재량(kg)', align: 'right', format: fmtNum },
+  { key: 'totalWeight', label: '총중량(kg)', align: 'center', format: fmtNum },
+  { key: 'vgmWeight', label: '적재중량(kg)', align: 'center', format: fmtNum }, // 26.10.02 추가: 컨테이너 자중+화물 (최대적재량과 비교)
+  { key: 'maxPayload', label: '최대적재량(kg)', align: 'center', format: fmtNum },
   // 26.09.30 수정: 위반여부 색이 반대로(위반=초록) 나오던 문제 → invert 로 [정상: 초록 / 위반: 빨강]
   { key: 'isViolation', label: '위반여부', type: 'boolean', align: 'center', invert: true, trueLabel: '위반', falseLabel: '정상' },
   { key: 'isPassed', label: '최종통과', type: 'boolean', align: 'center', trueLabel: '통과', falseLabel: '미통과' },

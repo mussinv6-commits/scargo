@@ -21,11 +21,11 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * 26.10.02 추가: 계중대 화면 지도용 경로 계산 (방식 B - 지점끼리 선으로 연결)
+ * 26.10.02 추가: 검사소 화면 지도용 경로 계산 (방식 B - 지점끼리 선으로 연결)
  *
  *  출발(origin)    : planned_route 의 origin_gate/start_gate → 없으면 게이트 OCR 이 찍힌 게이트
  *                    → 그게 목적지와 같으면 다른 활성 게이트(항만 진입 게이트로 간주)
- *  계중대          : application.yml 의 scargo.weighbridge.lat/lng → 없으면 출발과 목적지 사이 35% 지점
+ *  검사소          : application.yml 의 scargo.weighbridge.lat/lng → 없으면 출발과 목적지 사이 35% 지점
  *  경유지(waypoints): planned_route 의 waypoints/path/route 배열 ([lat,lng] 또는 {lat,lng})
  *  목적지          : planned_route 의 destination_gate ("Gate-DEFG-01 (DEFG야드 출입구)" → Gate-DEFG-01)
  */
@@ -42,7 +42,7 @@ public class WeighbridgeRouteService {
     @Value("${scargo.weighbridge.station-code:WB-01}")
     private String stationCode;
 
-    // 계중대 실제 좌표를 알면 application.yml 에 넣으면 됨 (비워두면 자동 배치)
+    // 검사소 실제 좌표를 알면 application.yml 에 넣으면 됨 (비워두면 자동 배치)
     @Value("${scargo.weighbridge.lat:#{null}}")
     private Double wbLat;
 
@@ -110,7 +110,7 @@ public class WeighbridgeRouteService {
     }
 
     private Point weighbridgePoint(Point origin, Point destination) {
-        String name = "계중대 " + stationCode;
+        String name = "검사소 " + stationCode;
         if (wbLat != null && wbLng != null) {
             return new Point(stationCode, name, wbLat, wbLng);
         }

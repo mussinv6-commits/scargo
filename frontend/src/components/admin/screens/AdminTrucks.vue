@@ -29,7 +29,7 @@
             <option value="ALL">전체</option>
             <option value="PENDING">심사대기</option>
             <option value="APPROVED">허가</option>
-            <option value="REJECTED">반려</option>
+            <option value="REJECTED">불허</option>
           </select>
         </div>
       </div>
@@ -74,7 +74,7 @@
                     :disabled="t.entryApproval === 'REJECTED' || approvingVehicleNo === t.vehicleNo"
                     @click="setEntryApproval(t, 'REJECTED')"
                   >
-                    반려
+                    불허
                   </button>
                 </div>
               </td>
@@ -110,7 +110,7 @@ const columns = [
   // 26.09.30 수정: 응답 키가 semiTrailer 라서 항상 '아니오'로 보이던 문제 (normalizeRows 로 해결)
   { key: 'isSemiTrailer', label: '세미트레일러', type: 'badge', align: 'center', badge: (v) => (v ? { label: '예', tone: 'on' } : { label: '아니오', tone: 'muted' }) },
   { key: 'trailerNo', label: '트레일러번호' },
-  { key: 'maxLoadWeight', label: '최대적재중량(kg)', align: 'right', format: (v) => (v == null ? '-' : Number(v).toLocaleString('ko-KR')) },
+  { key: 'maxLoadWeight', label: '최대적재중량(kg)', align: 'center', format: (v) => (v == null ? '-' : Number(v).toLocaleString('ko-KR')) },
   { key: 'status', label: '상태', align: 'center', format: (s) => STATUS_LABEL[s] || s || '-' },
   { key: 'createdAt', label: '등록일', type: 'date' },
 ]
@@ -194,7 +194,7 @@ ${deleteError(err, '차량')}`)
 
 // ---- 진입 허가 심사 ----
 const approvingVehicleNo = ref(null)
-const APPROVAL_LABEL = { PENDING: '심사대기', APPROVED: '허가', REJECTED: '반려' } // 26.09.30: 불허 → 반려
+const APPROVAL_LABEL = { PENDING: '심사대기', APPROVED: '허가', REJECTED: '불허' }
 
 const APPROVAL_PAGE_SIZE = 5
 const approvalPage = ref(1)

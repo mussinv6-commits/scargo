@@ -1,5 +1,6 @@
 <template>
   <aside class="admin-sidebar">
+    <div class="admin-nav-scroll">
     <RouterLink
       v-for="m in COMPANY_MENU"
       :key="m.to"
@@ -22,6 +23,7 @@
       <i :class="['bi', m.icon]"></i>
       {{ m.label }}
     </RouterLink>
+    </div>
 
     <div class="admin-side-foot">
       <p>안전한 물류<br />스마트한 운송관리<br /><span class="biz-side-brand">SafeCargo</span></p>

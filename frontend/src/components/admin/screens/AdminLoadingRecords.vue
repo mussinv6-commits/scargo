@@ -63,10 +63,10 @@ const totalElements = ref(0)
 const pagerCount = computed(() => Math.max(1, totalPages.value || 1))
 
 function statusLabel(s) {
-  return { IN_PROGRESS: '진행중', COMPLETED: '완료', CANCELED: '취소' }[s] || s || '-'
+  return { PENDING: '대기', IN_PROGRESS: '진행중', COMPLETED: '완료', CANCELED: '취소' }[s] || s || '-'
 }
 function statusTone(s) {
-  return { IN_PROGRESS: 'pill-warn', COMPLETED: 'pill-on', CANCELED: 'pill-muted' }[s] || 'pill-muted'
+  return { PENDING: 'pill-warn', IN_PROGRESS: 'pill-warn', COMPLETED: 'pill-on', CANCELED: 'pill-muted' }[s] || 'pill-muted'
 }
 
 function formatDate(d) {

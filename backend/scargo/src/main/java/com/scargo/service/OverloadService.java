@@ -10,6 +10,8 @@ import com.scargo.repository.OverloadCheckRepository;
 import com.scargo.repository.TruckRepository;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -17,6 +19,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
 
+
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -26,7 +30,7 @@ public class OverloadService {
     private final NotificationService notificationService; // 알림 서비스 주입
     private final TruckRepository truckRepository; // 트럭 정보 조회를 위한 리포지토리 주입
 
- // 1. 과적 검사 기록 생성
+    // 1. 과적 검사 기록 생성
     @Transactional
     public OverloadCheckResponse createCheck(OverloadCheckCreateRequest request) {
         OverloadCheck check = OverloadCheck.builder()
@@ -77,30 +81,79 @@ public class OverloadService {
         OverloadCheck savedCheck = overloadCheckRepository.save(check);
 
         // ==========================================
-        // 2. [트리거] 과적 위반 또는 불합격 시 알림 자동 생성
+        // 2. [트리거] 과적 위반 또는 불합격 시 알림 자동 생성 (관리자 + 소속 기업)
         // ==========================================
         if (Boolean.TRUE.equals(savedCheck.getIsViolation()) || Boolean.FALSE.equals(savedCheck.getIsPassed())) {
-            
-            // 차량 번호(vehicleNo)를 이용해 해당 트럭의 소속 기업(companyId) 조회
-        	Long targetCompanyId = truckRepository.findByVehicleNo(savedCheck.getVehicleNo())
-        	        .map(truck -> truck.getCompany().getCompanyId()) 
-        	        .orElse(null);
-
-            NotificationCreateRequest notificationRequest = NotificationCreateRequest.builder()
-                    .companyId(targetCompanyId) // 조회한 기업 ID 대입
-                    .title("⚠️ 과적 단속/검사 경고")
-                    .message(String.format("차량 [%s] 과적 검사 결과 위반/불합격 판정되었습니다. (사유: %s)", 
-                            savedCheck.getVehicleNo(), 
-                            savedCheck.getViolationReason() != null ? savedCheck.getViolationReason() : "기준 초과"))
-                    .notificationType(NotificationType.OVERLOAD_WARNING) 
-                    .referenceId(savedCheck.getCheckId()) // 스키마 PK 컬럼명에 맞춰 getCheckId() 사용
-                    .build();
-
-            notificationService.createNotification(notificationRequest);
+            notifyOverload(savedCheck, false);
         }
 
         return new OverloadCheckResponse(savedCheck);
     }
+
+    // 과적 알림: 관리자 + 해당 차량 소속 기업.
+    // 어떤 이유로 실패해도 검사 기록 저장에는 영향을 주지 않음 (WeighbridgeService.reweigh 에서도 호출)
+    public void notifyOverload(OverloadCheck check, boolean reweigh) {
+        try {
+            String reason = check.getViolationReason() != null ? check.getViolationReason() : "기준 초과";
+            String message = reweigh
+                    ? String.format("차량 [%s] 재계량(%d차) 결과에도 과적 판정되었습니다. (사유: %s)",
+                            check.getVehicleNo(),
+                            check.getRetryCount() != null ? check.getRetryCount() : 0,
+                            reason)
+                    : String.format("차량 [%s] 과적 검사 결과 위반/불합격 판정되었습니다. (사유: %s)",
+                            check.getVehicleNo(), reason);
+
+            // 차량 번호로 소속 기업 조회 (소속이 없거나 조회에 실패해도 관리자 알림은 계속 진행)
+            Long companyId = null;
+            try {
+                companyId = truckRepository.findByVehicleNo(check.getVehicleNo())
+                        .map(truck -> truck.getCompany() != null ? truck.getCompany().getCompanyId() : null)
+                        .orElse(null);
+            } catch (Exception e) {
+                log.warn("과적 알림: 소속 기업 조회 실패 (vehicleNo={}): {}", check.getVehicleNo(), e.getMessage());
+            }
+
+         // 소속 기업 회원 전원 (종 아이콘은 accountId 기준 조회라 계정별로 보내야 보임)
+            if (companyId != null) {
+                try {
+                    for (Long accountId : notificationService.findCompanyAccountIds(companyId)) {
+                        sendOverloadNotification(accountId, companyId, message, check.getCheckId());
+                    }
+                } catch (Exception e) {
+                    log.warn("과적 알림: 기업 계정 조회 실패 (companyId={}): {}", companyId, e.getMessage());
+                }
+            }
+
+            // 관리자 전원
+            try {
+                for (Long adminId : notificationService.findAdminAccountIds()) {
+                    sendOverloadNotification(adminId, null, message, check.getCheckId());
+                }
+            } catch (Exception e) {
+                log.warn("과적 알림: 관리자 계정 조회 실패: {}", e.getMessage());
+            }
+        } catch (Exception e) {
+            log.warn("과적 알림 처리 중 오류 (checkId={}): {}", check.getCheckId(), e.getMessage());
+        }
+    }
+
+    // 알림 1건 발송: 별도 트랜잭션 + 실패 시 로그만 남김 (하나가 실패해도 나머지는 계속 발송)
+    private void sendOverloadNotification(Long accountId, Long companyId, String message, Long checkId) {
+        try {
+            notificationService.createNotificationInNewTx(NotificationCreateRequest.builder()
+                    .accountId(accountId)
+                    .companyId(companyId)
+                    .title("⚠️ 과적 단속/검사 경고")
+                    .message(message)
+                    .notificationType(NotificationType.OVERLOAD_WARNING)
+                    .referenceId(checkId) // 스키마 PK 컬럼명에 맞춰 getCheckId() 사용
+                    .build());
+        } catch (Exception e) {
+            log.warn("과적 알림 발송 실패 (checkId={}, accountId={}, companyId={}): {}",
+                    checkId, accountId, companyId, e.getMessage());
+        }
+    }
+
 
     // 2. 단건 조회
     public OverloadCheckResponse getCheckById(Long checkId) {

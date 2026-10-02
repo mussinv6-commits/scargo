@@ -38,7 +38,7 @@
 
       <section class="ops-panel">
         <div class="ops-panel-head">
-          <h2><img :src="dashIcons.section.안전관리현황" alt="" /> 안전 관리 현황</h2>
+          <h2><img :src="dashIcons.section.안전관리현황" alt="" /> 검사소 검사</h2>
           <RouterLink to="/admin/overload-checks">상세 보기 &gt;</RouterLink>
         </div>
         <div class="ops-safety">
@@ -318,10 +318,13 @@ const hourly = computed(() => {
   return hours.map((hour) => ({ hour, value: counts[hour] }))
 })
 
-const hourMax = computed(() => Math.max(40, ...hourly.value.map((h) => h.value)))
+const hourMax = computed(() => {
+  const peak = Math.max(0, ...hourly.value.map((h) => h.value))
+  return Math.max(10, peak)
+})
 const hourTicks = computed(() => {
   const max = hourMax.value
-  return [max, Math.round(max * 0.75), Math.round(max * 0.5), Math.round(max * 0.25), 0]
+  return [...new Set([max, Math.round(max * 0.75), Math.round(max * 0.5), Math.round(max * 0.25), 0])]
 })
 const peakHour = computed(() => {
   let best = hourly.value[0]
@@ -332,7 +335,8 @@ function padHour(h) {
   return String(h).padStart(2, '0')
 }
 function hourHeight(v) {
-  return `${Math.max(4, Math.round((v / hourMax.value) * 92))}px`
+  if (!v) return '0px'
+  return `${Math.round((v / hourMax.value) * 92)}px`
 }
 
 function fmtTime(d) {
@@ -359,7 +363,7 @@ const recentEvents = computed(() => {
       time: fmtTime(o.checkedAt),
       kind: '과적 검사',
       img: o.isViolation ? dashIcons.table.과적확인 : dashIcons.table.과적검사,
-      text: `차량 ${o.vehicleNo || '-'} 과적검사 ${o.isViolation ? '위반' : '완료'}`,
+      text: `${o.vehicleNo || '-'} 과적검사 ${o.isViolation ? '위반' : '완료'}`,
       status: o.isViolation ? '확인 필요' : '정상',
       tone: o.isViolation ? 'pill-off' : 'pill-on',
     })
@@ -371,7 +375,7 @@ const recentEvents = computed(() => {
       time: fmtTime(g.passAt || g.createdAt),
       kind: '검문소',
       img: dashIcons.table.검문소,
-      text: `차량 ${g.actualVehicleNo || g.recognizedPlateNo || '-'} ${type} (${g.gateName || '-'})`,
+      text: `${g.actualVehicleNo || g.recognizedPlateNo || '-'} ${type} (${g.gateName || '-'})`,
       status: '정상',
       tone: 'pill-on',
     })

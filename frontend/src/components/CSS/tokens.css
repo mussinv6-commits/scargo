@@ -42,6 +42,10 @@
   text-align: left;
 }
 
+.driver-app-shell thead th {
+  text-align: center !important;
+}
+
 .driver-app-shell * { box-sizing: border-box; }
 
 .driver-app-shell .num,
@@ -81,8 +85,8 @@
   max-height: none;
   min-height: calc(100vh - var(--nav-h, 60px));
   overflow-y: auto;
+  position: relative;
 }
-
 /* 공통 상단바 - 26.09.30: 4개 화면 제목 위치/높이 통일 */
 .driver-app-shell .topbar {
   display: flex;

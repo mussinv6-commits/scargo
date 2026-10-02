@@ -25,7 +25,7 @@ public class LoadingRecordUpdateRequest {
 
     private Long locationId; // 변경할 적재 장소 ID (LoadingLocation FK)
 
-    @Pattern(regexp = "^(IN_PROGRESS|COMPLETED|CANCELED)$", message = "올바른 작업 상태값이 아닙니다. (IN_PROGRESS, COMPLETED, CANCELED 중 선택)")
+    @Pattern(regexp = "^(PENDING|IN_PROGRESS|COMPLETED|CANCELED)$", message = "올바른 작업 상태값이 아닙니다. (PENDING, IN_PROGRESS, COMPLETED, CANCELED 중 선택)")
     private String status; // 변경할 작업 상태 (NULL일 경우 기존 값 유지)
 
     // Enum 변환 편의 메서드 (서비스 레이어에서 활용)

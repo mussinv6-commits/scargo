@@ -19,6 +19,8 @@
           <span class="mini-badge">{{ userTypeLabel }}</span>
           <span class="mini-badge">ID {{ user?.userId }}</span>
         </div>
+        <div class="info-row"><span>회원 번호</span><b>{{ user?.accountId ?? '-' }}</b></div>
+        <div class="info-row"><span>가입일</span><b>{{ memberSince }}</b></div>
       </div>
       <button class="edit-btn" @click="editProfile">수정</button>
     </div>
@@ -95,39 +97,6 @@
         <button type="submit" class="btn-fill" :disabled="registering">{{ registering ? '등록 중...' : '차량 등록 신청' }}</button>
       </form>
     </div>
-
-    <!-- 적재 위치(야드) 현황 -->
-    <template v-if="myTruck">
-      <div class="section-title" style="margin-top: 22px;">적재 위치 현황</div>
-      <div class="card location-card">
-        <p v-if="!locations.length" class="hint-text">불러올 야드 정보가 없습니다.</p>
-        <div v-for="loc in locations" :key="loc.locationId" class="location-item">
-          <div>
-            <b>야드 #{{ loc.yardId }}</b>
-            <span class="location-sector"> · {{ loc.sector }}</span>
-          </div>
-          <span class="badge" :class="loc.isAvailable ? 'done' : 'cancel'">
-            {{ loc.isAvailable ? '이용가능' : (loc.status || '이용불가') }}
-          </span>
-        </div>
-      </div>
-    </template>
-
-    <!-- 입·출차 체크인 -->
-    <template v-if="myTruck">
-      <div class="section-title" style="margin-top: 22px;">입·출차 체크인</div>
-      <form class="card checkin-form" @submit.prevent="submitCheckin">
-        <input class="input" v-model="checkin.containerNo" placeholder="컨테이너 번호" />
-        <select class="input" v-model.number="checkin.locationId">
-          <option value="" disabled>적재 장소 선택</option>
-          <option v-for="loc in locations" :key="loc.locationId" :value="loc.locationId">
-            야드 #{{ loc.yardId }} · {{ loc.sector }}
-          </option>
-        </select>
-        <button type="submit" class="btn-fill">체크인 등록</button>
-        <p v-if="checkinMsg" class="hint-text">{{ checkinMsg }}</p>
-      </form>
-    </template>
 
     <!-- 나의 운행 이력 -->
     <template v-if="myTruck">
@@ -215,6 +184,10 @@ const router = useRouter()
 // ---- 로그인 사용자 (authState는 로그인/로그아웃 시 전역으로 갱신됨) ----
 const user = computed(() => authState.user)
 const initial = computed(() => user.value?.userName?.[0] || '?')
+const memberSince = computed(() => {
+  const d = user.value?.createdAt
+  return d ? new Date(d).toLocaleDateString('ko-KR') : '-'
+})
 const userTypeLabel = computed(() => {
   const map = {
     GENERAL: '일반 회원',
@@ -249,7 +222,6 @@ async function fetchMyTruck() {
   myTruck.value = await fetchAssignedTruck()
   if (myTruck.value) {
     savePending('')
-    await fetchLocations()
     await fetchRecords()
   }
 }
@@ -315,51 +287,8 @@ const entryApprovalClass = computed(() => {
   return 'text-pending'
 })
 
-// ---- 적재 위치(야드) 현황 (GET /api/loading-locations) ----
-const locations = ref([])
-async function fetchLocations() {
-  try {
-    const resp = await axios.get(`${API_BASE}/api/loading-locations`, { withCredentials: true })
-    locations.value = Array.isArray(resp.data) ? resp.data : []
-  } catch (err) {
-    console.error(err)
-  }
-}
-
-// ---- 입·출차 체크인 / 운행 이력 ----
-// 주의: 백엔드에 LoadingRecordController/Service가 아직 없어(레포지토리만 존재)
-// 아래 두 API는 현재 항상 실패합니다. 컨트롤러가 추가되면 그대로 정상 동작합니다.
-const checkin = reactive({ containerNo: '', locationId: '' })
-const checkinMsg = ref('')
+// ---- 운행 이력 (매핑/게이트 통과 기록) ----
 const records = ref([])
-
-async function submitCheckin() {
-  checkinMsg.value = ''
-  if (!checkin.containerNo.trim() || !checkin.locationId) {
-    checkinMsg.value = '컨테이너 번호와 적재 장소를 입력해주세요.'
-    return
-  }
-  try {
-    await axios.post(
-      `${API_BASE}/api/loading-records`,
-      {
-        vehicleNo: myTruck.value.vehicleNo,
-        containerNo: checkin.containerNo.trim().toUpperCase(),
-        locationId: checkin.locationId,
-      },
-      { withCredentials: true }
-    )
-    checkinMsg.value = '체크인이 등록되었습니다.'
-    checkin.containerNo = ''
-    checkin.locationId = ''
-    await fetchRecords()
-  } catch (err) {
-    checkinMsg.value =
-      err.response?.status === 403
-        ? '체크인 기록은 소속 업체 또는 관리자가 등록합니다. 업체에 요청해주세요.'
-        : `체크인 등록에 실패했습니다. ${friendlyError(err)}`
-  }
-}
 
 async function fetchRecords() {
   if (!myTruck.value) return
@@ -459,7 +388,7 @@ onMounted(async () => {
   background: transparent; color: var(--text); font-size: 13px; font-weight: 600; cursor: pointer; flex-shrink: 0;
 }
 
-.company-card, .truck-card, .lookup-card, .location-card, .checkin-form { margin-bottom: 4px; }
+.company-card, .truck-card, .lookup-card { margin-bottom: 4px; }
 
 .info-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 14px; border-bottom: 1px solid var(--border); }
 .info-row:last-of-type { border-bottom: none; }
@@ -495,17 +424,8 @@ onMounted(async () => {
 .btn-fill { border: none; background: var(--amber); color: #fff; width: 100%; }
 .btn-outline:active, .btn-fill:active { transform: scale(0.98); }
 
-.location-item {
-  display: flex; align-items: center; justify-content: space-between;
-  background: var(--surface-alt); padding: 10px 12px; border-radius: 8px; font-size: 13px;
-}
-.location-item + .location-item { margin-top: 8px; }
-.location-sector { color: var(--text-muted); }
-
-.checkin-form { display: flex; flex-direction: column; gap: 10px; }
-
 .record-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.record-table th, .record-table td { padding: 8px; border-bottom: 1px solid var(--border); text-align: left; color: var(--text); }
+.record-table th, .record-table td { padding: 8px; border-bottom: 1px solid var(--border); text-align: center; color: var(--text); }
 .record-table th { color: var(--text-muted); font-weight: 600; }
 
 /* 알림 토글 */

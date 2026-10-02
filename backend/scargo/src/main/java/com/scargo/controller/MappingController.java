@@ -1,7 +1,9 @@
 package com.scargo.controller;
 
 import com.scargo.dto.ContainerOptionResponse;
+import com.scargo.dto.ContainerResponse; // 26.10.01 병합
 import com.scargo.dto.MappingCreateRequest;
+import com.scargo.dto.MappingUpdateRequest; // 26.10.01 병합
 import com.scargo.dto.TruckOptionResponse;
 import com.scargo.service.MappingService;
 import jakarta.servlet.http.HttpSession;
@@ -54,6 +56,25 @@ public class MappingController {
         mappingService.createMapping(accountId, request);
         // 생성 리소스 성공 응답은 200 OK보다 201 Created 사용이 RESTful 표준에 적합
         return ResponseEntity.status(HttpStatus.CREATED).build(); 
+    }
+
+    // 26.10.01 병합: 현재 매핑 목록 조회 (사업자 매핑 화면 "현재 매핑" 표)
+    @GetMapping("/active")
+    public ResponseEntity<List<ContainerResponse>> getActiveMappings(HttpSession session) {
+        Long accountId = getLoginAccountId(session);
+        return ResponseEntity.ok(mappingService.getActiveMappings(accountId));
+    }
+
+    // 26.10.01 병합: 매핑 수정 - 컨테이너의 배정 차량 변경 (body: {"vehicleNo": "..."})
+    @PutMapping("/{containerNo}")
+    public ResponseEntity<Void> changeMapping(
+            HttpSession session,
+            @PathVariable("containerNo") String containerNo,
+            @Valid @RequestBody MappingUpdateRequest request
+    ) {
+        Long accountId = getLoginAccountId(session);
+        mappingService.changeMapping(accountId, containerNo, request);
+        return ResponseEntity.ok().build();
     }
 
     // 차량-컨테이너 매핑(배정) 해제

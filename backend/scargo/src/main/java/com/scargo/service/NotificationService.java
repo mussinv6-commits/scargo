@@ -9,7 +9,9 @@ import com.scargo.repository.NotificationRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation; // 26.10.01 추가: 미등록 차량 알림용
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
@@ -22,6 +24,7 @@ import java.util.stream.Collectors;
 public class NotificationService {
 
     private final NotificationRepository notificationRepository;
+    private final JdbcTemplate jdbcTemplate;
     // [FCM 비활성화 26.09.30] private final FcmPushService fcmPushService; // 26.09.22 추가: 인앱 알림 생성 시 모바일 푸시도 함께 발송
 
  // 1. 알림 생성 (발송)
@@ -170,4 +173,26 @@ public class NotificationService {
             createNotification(request);
         }
     }
+
+    // 26.10.01 추가(미등록 차량 알림): 호출한 쪽 트랜잭션과 분리해서 저장
+    // (알림 저장이 실패해도 게이트 기록 저장 등 호출한 쪽 작업은 롤백되지 않음)
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public NotificationResponse createNotificationInNewTx(NotificationCreateRequest request) {
+        return createNotification(request);
+    }
+    
+    // 관리자 계정 ID 전체 (별도 트랜잭션: 조회가 실패해도 호출한 쪽 작업에 영향 없음)
+    @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = true)
+    public List<Long> findAdminAccountIds() {
+        return jdbcTemplate.queryForList(
+                "SELECT account_id FROM accounts WHERE user_type = 'ADMIN'", Long.class);
+    }
+    // 해당 기업 소속 승인된 기업회원 계정 ID 전체
+    @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = true)
+    public List<Long> findCompanyAccountIds(Long companyId) {
+        return jdbcTemplate.queryForList(
+                "SELECT account_id FROM accounts WHERE company_id = ? AND user_type = 'CORPORATE_APPROVED'",
+                Long.class, companyId);
+    }
+    
 }

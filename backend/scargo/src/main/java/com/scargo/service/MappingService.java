@@ -22,6 +22,7 @@ public class MappingService {
     private final TruckRepository truckRepository;
     private final AccountRepository accountRepository;
     private final LoadingRecordRepository loadingRecordRepository;
+    private final DriverAlertService driverAlertService;
 
     // 1. 배정 가능한 컨테이너 목록 조회
     public List<ContainerOptionResponse> getAvailableContainers(Long accountId) {
@@ -79,6 +80,7 @@ public class MappingService {
                 .build();
 
         loadingRecordRepository.save(loadingRecord);
+        driverAlertService.notifyContainerMapped(truck, container);
     }
 
     // 4. 매핑 해제/취소
@@ -95,6 +97,59 @@ public class MappingService {
 
         container.setAssignedVehicleNo(null);
         container.setAssignedAt(null);
+    }
+
+    // 26.10.01 병합: 4-1. 매핑 수정 - 컨테이너에 배정된 차량을 다른 차량으로 변경
+    // (프론트 사업자 매핑 화면의 "수정" 버튼: PUT /api/mappings/{containerNo})
+    @Transactional
+    public void changeMapping(Long accountId, String containerNo, MappingUpdateRequest request) {
+        Long companyId = getCompanyId(accountId);
+
+        Container container = containerRepository.findById(containerNo)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 컨테이너입니다. ID: " + containerNo));
+        Truck newTruck = truckRepository.findById(request.getVehicleNo())
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 차량입니다. 번호: " + request.getVehicleNo()));
+
+        // 소속 업체 보안 검증
+        if (!companyId.equals(getContainerCompanyId(container))) {
+            throw new IllegalArgumentException("소속 업체의 컨테이너가 아닙니다.");
+        }
+        if (!companyId.equals(getTruckCompanyId(newTruck))) {
+            throw new IllegalArgumentException("소속 업체의 차량이 아닙니다.");
+        }
+
+        String oldVehicleNo = container.getAssignedVehicleNo();
+        if (oldVehicleNo == null) {
+            throw new IllegalArgumentException("차량이 배정되지 않은 컨테이너입니다. 먼저 매핑을 생성해주세요.");
+        }
+        if (oldVehicleNo.equals(newTruck.getVehicleNo())) {
+            throw new IllegalArgumentException("이미 해당 차량에 배정된 컨테이너입니다.");
+        }
+        containerRepository.findByAssignedVehicleNo(newTruck.getVehicleNo())
+                .ifPresent(c -> {
+                    throw new IllegalArgumentException("이미 다른 컨테이너를 배정받은 차량입니다.");
+                });
+
+        // 컨테이너 배정 차량 변경
+        container.setAssignedVehicleNo(newTruck.getVehicleNo());
+        container.setAssignedAt(OffsetDateTime.now());
+
+        // 아직 시작 전(PENDING)인 적재기록이 있으면 차량만 바꿔주고, 없으면 새로 만든다
+        LoadingRecord pending = loadingRecordRepository
+                .findFirstByTruck_VehicleNoAndStatusOrderByRecordIdDesc(oldVehicleNo, LoadingRecord.LoadingStatus.PENDING)
+                .filter(r -> r.getContainer() != null && containerNo.equals(r.getContainer().getContainerNo()))
+                .orElse(null);
+        if (pending != null) {
+            pending.update(newTruck, null, null, null);
+        } else {
+            loadingRecordRepository.save(LoadingRecord.builder()
+                    .truck(newTruck)
+                    .container(container)
+                    .location(container.getLoadingLocation())
+                    .build());
+        }
+
+        driverAlertService.notifyContainerMapped(newTruck, container);
     }
 
     // [추가] 5. 현재 매핑된 목록 조회 (소속 업체 기준)

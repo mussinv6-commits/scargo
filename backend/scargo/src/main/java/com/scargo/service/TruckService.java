@@ -11,6 +11,7 @@ import com.scargo.entity.Company;
 import com.scargo.entity.Truck;
 import com.scargo.repository.AccountRepository; // 26.09.22 추가
 import com.scargo.repository.CompanyRepository;
+import com.scargo.repository.ContainerRepository;
 import com.scargo.repository.TruckRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -27,6 +28,8 @@ public class TruckService {
     private final CompanyRepository companyRepository;
     private final AccountRepository accountRepository;     // 26.09.22 추가: 관리자/기사 계정 조회용
     private final NotificationService notificationService; // 26.09.22 추가: 차량 등록 시 관리자 알림 발송용
+    private final DriverAlertService driverAlertService;
+    private final ContainerRepository containerRepository;
 
     // 차량 등록
     @Transactional
@@ -178,6 +181,9 @@ public class TruckService {
         });
 
         truck.setAssignedDriver(driver);
+        driverAlertService.notifyDriverAssigned(truck);
+        containerRepository.findByAssignedVehicleNo(truck.getVehicleNo())
+                .ifPresent(container -> driverAlertService.notifyContainerMapped(truck, container));
         return TruckResponse.from(truck);
     }
 
@@ -231,7 +237,7 @@ public class TruckService {
                 NotificationCreateRequest driverNoti = NotificationCreateRequest.builder()
                         .accountId(truck.getAssignedDriver().getAccountId())
                         .title("차량 진입 심사 결과")
-                        .message("내 차량(" + truck.getVehicleNo() + ")의 진입이 " + resultText + "되었습니다.")
+                        .message(truck.getVehicleNo() + "에 대한 진입이 " + ("APPROVED".equals(entryApproval) ? "허가" : "불허") + " 되었습니다.")
                         .notificationType(NotificationType.NOTICE)
                         .build();
                 notificationService.createNotification(driverNoti);

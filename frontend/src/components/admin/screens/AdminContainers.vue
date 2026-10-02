@@ -73,9 +73,9 @@ const columns = [
     key: 'isHighCube', label: '하이큐브', type: 'badge', align: 'center',
     badge: (v) => (v ? { label: '하이큐브', tone: 'warn' } : { label: '일반', tone: 'muted' }),
   },
-  { key: 'maxGrossKg', label: 'MAX GROSS(kg)', align: 'right', format: fmtNum },
-  { key: 'tareKg', label: 'TARE(kg)', align: 'right', format: fmtNum },
-  { key: 'netKg', label: 'NET(kg)', align: 'right', format: fmtNum },
+  { key: 'maxGrossKg', label: 'MAX GROSS(kg)', align: 'center', format: fmtNum },
+  { key: 'tareKg', label: 'TARE(kg)', align: 'center', format: fmtNum },
+  { key: 'netKg', label: 'NET(kg)', align: 'center', format: fmtNum },
   { key: 'loadingLocationId', label: '적재위치', format: (v) => (v ? (locationById.value[v]?.sector ? `${locationById.value[v].sector} (#${v})` : `#${v}`) : '-') },
   { key: 'createdAt', label: '등록일', type: 'date' },
 ]
@@ -98,13 +98,37 @@ const formFields = [
   },
   { key: 'containerType', label: '컨테이너 타입', required: true, placeholder: '일반/냉동 등' },
   { key: 'isHighCube', label: '하이큐브 여부', type: 'checkbox', checkboxLabel: '하이큐브 컨테이너입니다' },
-  { key: 'maxGrossKg', label: 'MAX GROSS (kg)', type: 'number', step: '0.1', min: 0, required: true },
+  {
+    key: 'maxGrossKg', label: 'MAX GROSS (kg)', type: 'number', step: '0.1', min: 0, required: true,
+    validate: (v) => (Number(v) <= 0 ? '0보다 큰 값을 입력해주세요.' : ''),
+  },
   {
     key: 'tareKg', label: 'TARE (kg)', type: 'number', step: '0.1', min: 0, required: true,
-    validate: (v, f) => (f.maxGrossKg !== '' && Number(v) >= Number(f.maxGrossKg) ? 'TARE 는 MAX GROSS 보다 작아야 합니다.' : ''),
+    validate: (v, f) => {
+      if (Number(v) <= 0) return '0보다 큰 값을 입력해주세요.'
+      if (f.maxGrossKg !== '' && Number(v) >= Number(f.maxGrossKg)) return 'TARE 는 MAX GROSS 보다 작아야 합니다.'
+      return ''
+    },
   },
-  { key: 'netKg', label: 'NET (kg)', type: 'number', step: '0.1', min: 0, required: true },
-  { key: 'cubicCapacityCbm', label: '내부 용적 (CBM)', type: 'number', step: '0.01', min: 0, required: true },
+  {
+    key: 'netKg', label: 'NET (kg)', type: 'number', step: '0.1', min: 0, required: true,
+    hint: 'MAX GROSS는 TARE와 NET을 더한 값보다 크거나 같아야 합니다.',
+    validate: (v, f) => {
+      if (Number(v) <= 0) return '0보다 큰 값을 입력해주세요.'
+      const max = Number(f.maxGrossKg)
+      const tare = Number(f.tareKg)
+      const net = Number(v)
+      if ([max, tare, net].some((n) => Number.isNaN(n))) return ''
+      if (Math.round(max * 10) < Math.round(tare * 10) + Math.round(net * 10)) {
+        return 'MAX GROSS는 TARE와 NET을 더한 값보다 크거나 같아야 합니다.'
+      }
+      return ''
+    },
+  },
+  {
+    key: 'cubicCapacityCbm', label: '내부 용적 (CBM)', type: 'number', step: '0.01', min: 0, required: true,
+    validate: (v) => (Number(v) <= 0 ? '0보다 큰 값을 입력해주세요.' : ''),
+  },
   { key: 'cscApprovalNo', label: 'CSC 승인번호' },
   { key: 'loadingLocationId', label: '적재 위치(선택)', type: 'select', options: () => locationOptions.value, placeholder: '미지정' },
   {
@@ -138,7 +162,13 @@ async function loadRows() {
   loading.value = true
   try {
     const res = await adminApi.get('/api/containers')
-    rows.value = normalizeRows(res.data, { bools: ['isHighCube'], idKey: 'containerNo' })
+    rows.value = normalizeRows(res.data, { bools: ['isHighCube'], idKey: 'containerNo' }).map((row) => ({
+      ...row,
+      reservedCargoInfo:
+        row.reservedCargoInfo && typeof row.reservedCargoInfo === 'object'
+          ? JSON.stringify(row.reservedCargoInfo)
+          : (row.reservedCargoInfo ?? ''),
+    }))
   } catch (err) {
     alert(pickErrorMessage(err, '컨테이너 목록을 불러오지 못했습니다.'))
   } finally {
@@ -150,6 +180,18 @@ async function loadRows() {
 //  - 비어 있는 JSON 칸('')이 그대로 전송되어 DB JSON 컬럼에서 오류
 //  - 하이큐브 체크값이 백엔드 필드명(highCube)과 달라 무시됨
 //  → 빈 값은 null, boolean 은 두 이름 모두 전송, 컨테이너 번호는 대문자로 통일
+function roundNum(v, digits) {
+  const n = toNum(v)
+  if (!Number.isFinite(n)) return null
+  const f = 10 ** digits
+  return Math.round(n * f) / f
+}
+
+function cargoText(v) {
+  if (v === null || v === undefined || v === '') return null
+  return typeof v === 'string' ? v : JSON.stringify(v)
+}
+
 function buildPayload(payload) {
   return withBoolAliases(
     {
@@ -157,12 +199,12 @@ function buildPayload(payload) {
       containerNo: payload.containerNo ? String(payload.containerNo).toUpperCase() : payload.containerNo,
       isoSizeTypeCode: payload.isoSizeTypeCode ? String(payload.isoSizeTypeCode).toUpperCase() : payload.isoSizeTypeCode,
       companyId: toNum(payload.companyId),
-      maxGrossKg: toNum(payload.maxGrossKg),
-      tareKg: toNum(payload.tareKg),
-      netKg: toNum(payload.netKg),
-      cubicCapacityCbm: toNum(payload.cubicCapacityCbm),
+      maxGrossKg: roundNum(payload.maxGrossKg, 1),
+      tareKg: roundNum(payload.tareKg, 1),
+      netKg: roundNum(payload.netKg, 1),
+      cubicCapacityCbm: roundNum(payload.cubicCapacityCbm, 2),
       loadingLocationId: toNum(payload.loadingLocationId),
-      reservedCargoInfo: payload.reservedCargoInfo || null,
+      reservedCargoInfo: cargoText(payload.reservedCargoInfo),
     },
     ['isHighCube']
   )

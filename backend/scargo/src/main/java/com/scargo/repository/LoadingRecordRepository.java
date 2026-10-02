@@ -29,12 +29,22 @@ public interface LoadingRecordRepository extends JpaRepository<LoadingRecord, Lo
     // 특정 차량의 가장 최근 적재 기록 조회
     Optional<LoadingRecord> findFirstByTruck_VehicleNoOrderByRecordIdDesc(String vehicleNo);
 
+    // 특정 차량의 가장 최근 PENDING 상하차 기록 조회
+    Optional<LoadingRecord> findFirstByTruck_VehicleNoAndStatusOrderByRecordIdDesc(
+            String vehicleNo,
+            LoadingStatus status
+    );
+
     // 특정 컨테이너의 가장 최근 적재 기록 조회
     Optional<LoadingRecord> findFirstByContainer_ContainerNoOrderByRecordIdDesc(String containerNo);
 
     // 중복 검증용 (미완료 상태 건 존재 확인)
     boolean existsByContainer_ContainerNoAndStatusNot(String containerNo, LoadingStatus status);
 
-    // 기간별 조회 (createdAt -> loadedAt으로 수정)
-    Page<LoadingRecord> findByLoadedAtBetween(OffsetDateTime start, OffsetDateTime end, Pageable pageable);
+    // 기간별 조회
+    Page<LoadingRecord> findByLoadedAtBetween(
+            OffsetDateTime start,
+            OffsetDateTime end,
+            Pageable pageable
+    );
 }

@@ -8,7 +8,9 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -41,17 +43,31 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
                                      HttpServletResponse response,
                                      FilterChain filterChain) throws ServletException, IOException {
 
-        if (SecurityContextHolder.getContext().getAuthentication() == null) {
+        // 익명 인증(anonymousUser)이 먼저 들어가 있으면 로그인 세션이 있어도 권한 검사를 건너뛰게 된다.
+        // 기사/사업자 알림 조회가 403으로 막히던 원인.
+        Authentication existing = SecurityContextHolder.getContext().getAuthentication();
+        if (existing == null || existing instanceof AnonymousAuthenticationToken) {
             HttpSession session = request.getSession(false); // 세션 없으면 새로 만들지 않음
-            if (session != null) {
-                Object accountIdAttr = session.getAttribute(SESSION_ACCOUNT_ID);
-                if (accountIdAttr instanceof Long accountId) {
-                    accountRepository.findById(accountId).ifPresent(this::authenticate);
-                }
+            Long accountId = session == null ? null : toLong(session.getAttribute(SESSION_ACCOUNT_ID));
+            if (accountId != null) {
+                accountRepository.findById(accountId).ifPresent(this::authenticate);
             }
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    private Long toLong(Object value) {
+        if (value instanceof Long id) return id;
+        if (value instanceof Integer id) return id.longValue();
+        if (value instanceof String text) {
+            try {
+                return Long.parseLong(text.trim());
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        return null;
     }
 
     private void authenticate(Account account) {

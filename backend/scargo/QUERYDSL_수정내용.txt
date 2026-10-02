@@ -1,0 +1,14 @@
+QueryDSL 수정 내용
+
+1. build.gradle에 QueryDSL JPA/Jakarta 의존성과 annotationProcessor 설정 유지
+2. QClass 생성 위치를 build/generated/querydsl로 통일
+3. Eclipse/STS .classpath에서 build/generated/querydsl을 Source Folder로 인식하도록 유지
+4. 두 ZIP 중 QueryDSL annotation processing이 정상적으로 생성했던 Q*.java 파일을 build/generated/querydsl에 포함
+5. QLoadingRecord뿐 아니라 QTruck, QContainer, QLoadingLocation 등 QLoadingRecord가 참조하는 QClass도 함께 포함
+
+Eclipse/STS에서 적용 시:
+- 기존 프로젝트를 닫았다가 다시 Import/Refresh
+- Gradle > Refresh Gradle Project
+- Project > Clean 후 Build
+
+clean을 실행하면 generated QClass는 삭제되며, 이후 Gradle compileJava에서 annotationProcessor가 다시 생성합니다.

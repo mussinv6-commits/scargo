@@ -30,7 +30,7 @@ public class LoadingRecordCreateRequest {
     @NotNull(message = "적재 장소 ID는 필수 입력 항목입니다.")
     private Long locationId; // 적재가 이루어진 장소 ID (LoadingLocation FK)
 
-    @Pattern(regexp = "^(IN_PROGRESS|COMPLETED|CANCELED)$", message = "올바른 작업 상태값이 아닙니다. (IN_PROGRESS, COMPLETED, CANCELED 중 선택)")
+    @Pattern(regexp = "^(PENDING|IN_PROGRESS|COMPLETED|CANCELED)$", message = "올바른 작업 상태값이 아닙니다. (PENDING, IN_PROGRESS, COMPLETED, CANCELED 중 선택)")
     private String status; // 작업 상태 (미입력 시 기본값 처리)
 
     // Enum 변환 편의 메서드 (서비스 레이어에서 활용)

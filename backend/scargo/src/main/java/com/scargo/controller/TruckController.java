@@ -4,7 +4,12 @@ import com.scargo.dto.TruckCreateRequest;
 import com.scargo.dto.TruckOptionResponse;
 import com.scargo.dto.TruckResponse;
 import com.scargo.dto.TruckUpdateRequest;
+import com.scargo.entity.LoadingRecord; // 26.10.01 병합(마무리본): OCR 입출차 워크플로우
+import com.scargo.entity.Truck;
+import com.scargo.repository.LoadingRecordRepository;
+import com.scargo.repository.TruckRepository;
 import com.scargo.service.TruckService;
+import com.scargo.service.TruckWorkflowService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -20,6 +25,9 @@ import java.util.List;
 public class TruckController {
 
     private final TruckService truckService;
+    private final TruckWorkflowService truckWorkflowService;       // 26.10.01 병합(마무리본)
+    private final TruckRepository truckRepository;                 // 26.10.01 병합(마무리본)
+    private final LoadingRecordRepository loadingRecordRepository; // 26.10.01 병합(마무리본)
 
     // 차량 등록
     // 일반 회원도 입차 시 등록 필요할 수 있으므로 별도 역할 제한 X
@@ -135,5 +143,58 @@ public class TruckController {
                 (com.scargo.security.AuthenticatedAccountPrincipal) authentication.getPrincipal();
         TruckResponse response = truckService.getMyAssignedTruck(principal.getId());
         return response != null ? ResponseEntity.ok(response) : ResponseEntity.noContent().build();
+    }
+
+    // 26.10.01 병합(마무리본): OCR 차량번호와 현재 상하차 상태를 확인하여 입차 또는 출차 워크플로우 실행
+    // 예: POST /api/trucks/ocr?vehicleNo=12가3456
+    @PostMapping("/ocr")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<String> receiveOcrEvent(@RequestParam("vehicleNo") String vehicleNo) {
+
+        // OCR 차량번호로 등록 차량 조회
+        Truck truck = truckRepository.findByVehicleNo(vehicleNo)
+                .orElseThrow(() -> new IllegalArgumentException("등록되지 않은 차량입니다: " + vehicleNo));
+
+        String currentStatus = truck.getStatus();
+
+        // 해당 차량의 가장 최근 상하차 기록 조회
+        LoadingRecord loadingRecord = loadingRecordRepository.findFirstByTruck_VehicleNoOrderByRecordIdDesc(vehicleNo)
+                .orElseThrow(() -> new IllegalArgumentException("상하차 기록이 없습니다: " + vehicleNo));
+
+        LoadingRecord.LoadingStatus loadingStatus = loadingRecord.getStatus();
+
+        // OUTSIDE + PENDING 상태이면 첫 번째 OCR 입차 처리
+        if ("OUTSIDE".equalsIgnoreCase(currentStatus) && loadingStatus == LoadingRecord.LoadingStatus.PENDING) {
+            truckWorkflowService.processFirstOcr(vehicleNo, loadingRecord.getRecordId());
+            return ResponseEntity.ok("트럭(" + vehicleNo + ") 진입 OCR 인식: 첫 번째 워크플로우가 시작되었습니다.");
+        }
+
+        // IN_PROGRESS 상태이면 상하차 작업 진행 중이므로 최종 OCR 처리 금지
+        if (loadingStatus == LoadingRecord.LoadingStatus.IN_PROGRESS) {
+            return ResponseEntity.badRequest().body(
+                    "트럭(" + vehicleNo + ")은 현재 상하차 작업이 진행 중이므로 출차 OCR 처리를 할 수 없습니다.");
+        }
+
+        // INSIDE + COMPLETED 상태이면 최종 OCR 출차 처리
+        if ("INSIDE".equalsIgnoreCase(currentStatus) && loadingStatus == LoadingRecord.LoadingStatus.COMPLETED) {
+            truckWorkflowService.processFinalOcr(vehicleNo);
+            return ResponseEntity.ok("트럭(" + vehicleNo + ") 출차 OCR 인식: 최종 과적 검증 처리가 실행되었습니다.");
+        }
+
+        // CANCELED 상태이면 과적 재검사 제한 초과 차량이므로 자동 출차 금지
+        if (loadingStatus == LoadingRecord.LoadingStatus.CANCELED) {
+            return ResponseEntity.badRequest().body(
+                    "트럭(" + vehicleNo + ")은 과적 재검사 제한 초과 차량으로 관리자 수동 출차가 필요합니다.");
+        }
+
+        // IN_TRANSIT 상태이면 야드 내부 이동 중이므로 최종 OCR 처리 금지
+        if ("IN_TRANSIT".equalsIgnoreCase(currentStatus)) {
+            return ResponseEntity.badRequest().body(
+                    "트럭(" + vehicleNo + ")은 현재 IN_TRANSIT 상태이므로 출차 OCR 처리를 할 수 없습니다.");
+        }
+
+        // 정의되지 않은 차량 상태와 상하차 상태 조합 처리
+        return ResponseEntity.badRequest().body(
+                "OCR 처리 불가 상태입니다. 차량 상태=" + currentStatus + ", 상하차 상태=" + loadingStatus);
     }
 }

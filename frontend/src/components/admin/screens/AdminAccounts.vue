@@ -1,6 +1,6 @@
 <template>
   <div>
-    <AdminPageHeader title="회원 관리" description="전체 회원 목록을 조회하고, 승인 대기 중인 기업회원을 승인하거나 거절합니다." />
+    <AdminPageHeader title="회원 관리" description="전체 회원을 조회합니다. 관리자를 제외한 회원은 수정·삭제할 수 있고, 승인 대기 기업회원은 승인하거나 거절합니다." />
 
     <div class="crud-table-wrap">
       <div class="crud-toolbar">
@@ -46,20 +46,31 @@
               <td>{{ a.phoneNum || '-' }}</td>
               <td>{{ formatDate(a.createdAt) }}</td>
               <td class="is-center">
-                <div v-if="a.userType === 'CORPORATE_PENDING'" class="crud-actions">
+                <div v-if="a.userType !== 'ADMIN'" class="crud-actions">
+                  <template v-if="a.userType === 'CORPORATE_PENDING'">
+                    <button
+                      class="btn-admin btn-admin-accent"
+                      :disabled="approvingId === a.accountId || rejectingId === a.accountId"
+                      @click="approve(a)"
+                    >
+                      {{ approvingId === a.accountId ? '처리 중...' : '승인' }}
+                    </button>
+                    <button
+                      class="btn-admin btn-admin-danger"
+                      :disabled="approvingId === a.accountId || rejectingId === a.accountId"
+                      @click="reject(a)"
+                    >
+                      {{ rejectingId === a.accountId ? '처리 중...' : '거절' }}
+                    </button>
+                  </template>
+                  <button class="btn-admin btn-admin-ghost" @click="openEdit(a)">수정</button>
                   <button
-                    class="btn-admin btn-admin-accent"
-                    :disabled="approvingId === a.accountId || rejectingId === a.accountId"
-                    @click="approve(a)"
-                  >
-                    {{ approvingId === a.accountId ? '처리 중...' : '승인' }}
-                  </button>
-                  <button
+                    v-if="a.userType !== 'CORPORATE_PENDING'"
                     class="btn-admin btn-admin-danger"
-                    :disabled="approvingId === a.accountId || rejectingId === a.accountId"
-                    @click="reject(a)"
+                    :disabled="deletingId === a.accountId"
+                    @click="removeAccount(a)"
                   >
-                    {{ rejectingId === a.accountId ? '처리 중...' : '거절' }}
+                    {{ deletingId === a.accountId ? '처리 중...' : '삭제' }}
                   </button>
                 </div>
                 <span v-else style="color: var(--a-text-muted); font-size:12.5px;">-</span>
@@ -69,6 +80,41 @@
         </table>
       </div>
       <AdminPager v-model="page" :page-count="pageCount" />
+    </div>
+
+    <div v-if="editing" class="crud-modal-backdrop" @click.self="closeEdit">
+      <div class="crud-modal" role="dialog" aria-modal="true">
+        <div class="crud-modal-header">
+          <h3>회원 수정</h3>
+          <button type="button" class="crud-modal-close" aria-label="닫기" @click="closeEdit">×</button>
+        </div>
+        <form class="crud-modal-body" @submit.prevent="saveEdit">
+          <div class="crud-field">
+            <label>아이디</label>
+            <input class="crud-input" :value="editing.userId" disabled />
+          </div>
+          <div class="crud-field">
+            <label>이름<span class="req">*</span></label>
+            <input class="crud-input" v-model="editForm.userName" />
+          </div>
+          <div class="crud-field">
+            <label>연락처</label>
+            <input class="crud-input" v-model="editForm.phoneNum" placeholder="010-0000-0000" />
+          </div>
+          <div class="crud-field">
+            <label>비밀번호</label>
+            <input class="crud-input" type="password" v-model="editForm.userPw" placeholder="변경할 때만 입력" autocomplete="new-password" />
+            <p class="crud-hint">비워두면 기존 비밀번호를 유지합니다.</p>
+          </div>
+          <div v-if="editError" class="crud-form-error">{{ editError }}</div>
+          <div class="crud-modal-footer">
+            <button type="button" class="btn-admin btn-admin-ghost" @click="closeEdit">취소</button>
+            <button type="submit" class="btn-admin btn-admin-primary" :disabled="saving">
+              {{ saving ? '처리 중...' : '수정 저장' }}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   </div>
 </template>
@@ -85,6 +131,11 @@ const error = ref('')
 const filter = ref('ALL')
 const approvingId = ref(null)
 const rejectingId = ref(null) // 26.09.21 추가
+const deletingId = ref(null)
+const editing = ref(null)
+const saving = ref(false)
+const editError = ref('')
+const editForm = ref({ userName: '', phoneNum: '', userPw: '' })
 const companyMap = ref({})
 
 function companyName(id) {
@@ -150,6 +201,62 @@ async function approve(account) {
 }
 
 // 26.09.21 추가: 기업회원 가입 거절 (승인 대기 신청을 삭제 처리)
+function openEdit(account) {
+  editing.value = account
+  editError.value = ''
+  editForm.value = {
+    userName: account.userName || '',
+    phoneNum: account.phoneNum || '',
+    userPw: '',
+  }
+}
+
+function closeEdit() {
+  editing.value = null
+  saving.value = false
+  editError.value = ''
+}
+
+async function saveEdit() {
+  const name = editForm.value.userName.trim()
+  if (!name) {
+    editError.value = '이름을 입력해주세요.'
+    return
+  }
+  saving.value = true
+  editError.value = ''
+  try {
+    const res = await adminApi.put(`/api/accounts/${editing.value.accountId}`, {
+      userName: name,
+      phoneNum: editForm.value.phoneNum.trim(),
+      userPw: editForm.value.userPw.trim() || null,
+    })
+    const updated = res.data
+    const row = accounts.value.find((a) => a.accountId === editing.value.accountId)
+    if (row) {
+      row.userName = updated.userName
+      row.phoneNum = updated.phoneNum
+    }
+    closeEdit()
+  } catch (err) {
+    editError.value = pickErrorMessage(err, '회원 수정 중 오류가 발생했습니다.')
+    saving.value = false
+  }
+}
+
+async function removeAccount(account) {
+  if (!confirm(`[${account.userId}] 회원을 삭제하시겠습니까?\n삭제한 계정은 되돌릴 수 없습니다.`)) return
+  deletingId.value = account.accountId
+  try {
+    await adminApi.delete(`/api/accounts/${account.accountId}`)
+    accounts.value = accounts.value.filter((a) => a.accountId !== account.accountId)
+  } catch (err) {
+    alert(pickErrorMessage(err, '회원 삭제 중 오류가 발생했습니다.'))
+  } finally {
+    deletingId.value = null
+  }
+}
+
 async function reject(account) {
   if (!confirm(`[${account.userId}] 계정의 기업회원 가입을 거절하시겠습니까?\n거절하면 해당 가입 신청 건이 삭제됩니다.`)) return
   rejectingId.value = account.accountId

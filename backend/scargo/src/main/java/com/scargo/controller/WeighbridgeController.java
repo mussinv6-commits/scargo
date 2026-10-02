@@ -18,9 +18,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 26.10.01 추가(계중대 정식화): 계중대(검사소) 콘솔용 API
+ * 26.10.01 추가(검사소 정식화): 검사소 콘솔용 API
  *
- *   GET  /api/v1/weighbridge/policy                    판정 기준(축하중/총중량)과 계중대 코드
+ *   GET  /api/v1/weighbridge/policy                    판정 기준(축하중/총중량)과 검사소 코드
  *   GET  /api/v1/weighbridge/queue                     게이트 통과 후 계량 대기 중인 차량
  *   GET  /api/v1/weighbridge/weighings/today           오늘 계량 기록
  *   POST /api/v1/weighbridge/weighings                 계량 저장 (서버가 과적 판정)
@@ -29,11 +29,12 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v1/weighbridge")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('ADMIN', 'CORPORATE_APPROVED')")
+@PreAuthorize("hasAnyRole('ADMIN', 'CORPORATE_APPROVED')") // 26.10.01 병합: 세션 필터가 ROLE_ 접두어로 권한을 줌
 public class WeighbridgeController {
 
     private final WeighbridgeService weighbridgeService;
     private final WeighbridgeRouteService weighbridgeRouteService; // 26.10.02 추가: 지도 경로
+
 
     @GetMapping("/policy")
     public ResponseEntity<Map<String, Object>> getPolicy() {
@@ -51,7 +52,7 @@ public class WeighbridgeController {
         return ResponseEntity.ok(weighbridgeService.getVehicleInfo(vehicleNo));
     }
 
-    // 26.10.02 추가: 지도(OpenStreetMap)에 그릴 경로 - 진입 게이트 → 계중대 → 목적지
+    // 26.10.02 추가: 지도(OpenStreetMap)에 그릴 경로 - 진입 게이트 → 검사소 → 목적지
     @GetMapping("/route")
     public ResponseEntity<WeighbridgeRouteResponse> getRoute(
             @RequestParam("vehicleNo") String vehicleNo,

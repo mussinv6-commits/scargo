@@ -2,7 +2,7 @@
   <div class="topbar">
     <div>
       <div class="brand">정산/매출</div>
-      <div class="sub">이번 달 수익과 세금계산서 상태를 확인하세요</div>
+      <div class="sub">이번 달 완료 운행을 확인하세요</div>
     </div>
   </div>
 
@@ -27,24 +27,12 @@
         <div class="revenue-card">
           <div class="revenue-label">이번 달 총 수익</div>
           <div class="revenue-value">{{ formatWon(summary.total) }}<span class="unit">원</span></div>
-          <div class="revenue-diff" :class="summary.diffRate >= 0 ? 'up' : 'down'">
-            {{ summary.diffRate >= 0 ? '▲' : '▼' }} 전월 대비 {{ Math.abs(summary.diffRate) }}%
-          </div>
+          <div class="revenue-diff">운임 데이터는 백엔드에 없습니다. 완료 운행 건수만 표시합니다.</div>
 
           <div class="revenue-sub-row">
             <div class="sub-item">
               <div class="sub-value">{{ summary.completedCount }}<span class="unit">건</span></div>
               <div class="sub-label">완료 운행</div>
-            </div>
-            <div class="sub-divider"></div>
-            <div class="sub-item">
-              <div class="sub-value">{{ formatWon(summary.avgFare) }}</div>
-              <div class="sub-label">건당 평균 운임</div>
-            </div>
-            <div class="sub-divider"></div>
-            <div class="sub-item">
-              <div class="sub-value">{{ summary.totalDistance }}<span class="unit">km</span></div>
-              <div class="sub-label">총 운행거리</div>
             </div>
           </div>
         </div>
@@ -52,52 +40,22 @@
         <div class="layout-2col">
           <div class="col-main">
             <!-- 세금계산서 현황 -->
-            <div class="section-title">세금계산서 발행 현황</div>
-            <div class="invoice-summary">
-              <div class="invoice-chip"><span class="dot amber"></span> 발행대기 {{ invoiceCounts.waiting }}건</div>
-              <div class="invoice-chip"><span class="dot blue"></span> 요청됨 {{ invoiceCounts.requested }}건</div>
-              <div class="invoice-chip"><span class="dot green"></span> 발행완료 {{ invoiceCounts.done }}건</div>
-            </div>
+            <div class="section-title">완료 운행</div>
 
             <div class="card-grid">
               <div v-if="invoiceList.length === 0" class="empty">이 달에 완료된 운행이 없습니다.</div>
-              <div v-for="row in invoiceList" :key="row.dispatchId" class="invoice-card">
+              <div v-for="row in invoiceList" :key="row.recordId" class="invoice-card">
                 <div class="invoice-top">
-                  <span class="invoice-date">{{ formatDate(row.dropoffTime) }} · #{{ row.dispatchId }}</span>
-                  <span class="badge" :class="invoiceBadgeClass(row.invoiceStatus)">{{ invoiceLabel(row.invoiceStatus) }}</span>
+                  <span class="invoice-date">{{ formatDate(row.loadedAt) }} · {{ row.containerNo }}</span>
+                  <span class="badge done">운송완료</span>
                 </div>
                 <div class="invoice-mid">
-                  <span class="invoice-shipper">{{ row.shipperName || '-' }}</span>
-                  <span class="invoice-amount">{{ formatWon(row.fare) }}원</span>
+                  <span class="invoice-shipper">{{ row.locationLabel }}</span>
                 </div>
-                <button v-if="row.invoiceStatus === 'WAITING'" class="btn-request" @click="requestInvoice(row)">
-                  세금계산서 발행 요청
-                </button>
-                <div v-else-if="row.invoiceStatus === 'REQUESTED'" class="invoice-note">
-                  발행 요청됨 · 영업일 기준 1~2일 소요
-                </div>
-                <div v-else-if="row.invoiceStatus === 'ISSUED'" class="invoice-note done">
-                  {{ formatDate(row.invoiceIssuedAt) }} 발행 완료
-                </div>
+                <div class="invoice-note">정산·세금계산서 API는 백엔드에 아직 없습니다.</div>
               </div>
             </div>
           </div>
-
-          <!-- 주차별 매출 그래프 -->
-          <aside class="side-panel">
-            <template v-if="summary.weeklyRevenue?.length">
-              <div class="section-title">주차별 매출</div>
-              <div class="card chart-card">
-                <div class="bar-row" v-for="week in summary.weeklyRevenue" :key="week.label">
-                  <span class="bar-label">{{ week.label }}</span>
-                  <div class="bar-track">
-                    <div class="bar-fill" :style="{ width: barWidth(week.amount) + '%' }"></div>
-                  </div>
-                  <span class="bar-value">{{ formatWonShort(week.amount) }}</span>
-                </div>
-              </div>
-            </template>
-          </aside>
         </div>
       </template>
     </template>
@@ -107,10 +65,7 @@
 <script setup>
 import { fetchMyVehicleNo } from '@/utils/driverTruck.js'
 import { ref, computed, onMounted, watch } from 'vue'
-import axios from 'axios'
-import { authState } from '@/auth/authState.js'
-import { API_BASE } from '@/utils/apiBase.js'
-import { getCompanyName } from '@/utils/companyDirectory.js'
+import { fetchDriverAssignment } from '@/utils/driverAssignment.js'
 
 const vehicleNo = ref(null)
 const loading = ref(true)
@@ -136,38 +91,25 @@ function shiftMonth(delta) {
 const summary = ref({ total: 0, diffRate: 0, completedCount: 0, avgFare: 0, totalDistance: 0, weeklyRevenue: [] })
 const invoiceList = ref([])
 
-const invoiceCounts = computed(() => ({
-  waiting: invoiceList.value.filter((r) => r.invoiceStatus === 'WAITING').length,
-  requested: invoiceList.value.filter((r) => r.invoiceStatus === 'REQUESTED').length,
-  done: invoiceList.value.filter((r) => r.invoiceStatus === 'ISSUED').length,
-}))
-
-const maxWeekly = computed(() => {
-  const amounts = (summary.value.weeklyRevenue || []).map((w) => Number(w.amount) || 0)
-  return Math.max(1, ...amounts)
-})
-function barWidth(amount) {
-  return (Number(amount) / maxWeekly.value) * 100
-}
-
 async function loadSettlement() {
   if (!vehicleNo.value) return
   loading.value = true
   try {
-    const [summaryResp, listResp] = await Promise.all([
-      axios.get(`${API_BASE}/api/settlements/vehicle/${encodeURIComponent(vehicleNo.value)}/summary`, {
-        params: { year: year.value, month: month.value },
-      }),
-      axios.get(`${API_BASE}/api/settlements/vehicle/${encodeURIComponent(vehicleNo.value)}`, {
-        params: { year: year.value, month: month.value },
-      }),
-    ])
-    summary.value = summaryResp.data
-    const rows = listResp.data
-    for (const row of rows) {
-      row.shipperName = row.shipperCompanyId ? await getCompanyName(row.shipperCompanyId) : null
+    const { history } = await fetchDriverAssignment()
+    const monthRows = history.filter((r) => {
+      if (r.status !== 'COMPLETED' || !r.loadedAt) return false
+      const d = new Date(r.loadedAt)
+      return d.getFullYear() === year.value && d.getMonth() + 1 === month.value
+    })
+    invoiceList.value = monthRows
+    summary.value = {
+      total: 0,
+      diffRate: 0,
+      completedCount: monthRows.length,
+      avgFare: 0,
+      totalDistance: 0,
+      weeklyRevenue: [],
     }
-    invoiceList.value = rows
   } catch (err) {
     console.error(err)
     summary.value = { total: 0, diffRate: 0, completedCount: 0, avgFare: 0, totalDistance: 0, weeklyRevenue: [] }
@@ -176,25 +118,6 @@ async function loadSettlement() {
     loading.value = false
   }
 }
-
-async function requestInvoice(row) {
-  if (!confirm(`#${row.dispatchId} 건의 세금계산서 발행을 요청하시겠습니까?`)) return
-  try {
-    await axios.patch(`${API_BASE}/api/dispatches/${row.dispatchId}/invoice-status`, null, {
-      params: { status: 'REQUESTED' },
-    })
-    row.invoiceStatus = 'REQUESTED'
-  } catch (err) {
-    alert(err.response?.data?.message || '발행 요청에 실패했습니다.')
-  }
-}
-
-function invoiceLabel(status) {
-  return { WAITING: '발행대기', REQUESTED: '요청됨', ISSUED: '발행완료' }[status] || '-'
-}
-function invoiceBadgeClass(status) {
-  return { WAITING: 'waiting', REQUESTED: 'active', ISSUED: 'done' }[status] || ''
-}
 function formatDate(iso) {
   if (!iso) return '-'
   const d = new Date(iso)
@@ -202,10 +125,6 @@ function formatDate(iso) {
 }
 function formatWon(n) {
   return n != null ? Number(n).toLocaleString('ko-KR') : '0'
-}
-function formatWonShort(n) {
-  if (n == null) return '0만'
-  return (Number(n) / 10000).toLocaleString('ko-KR') + '만'
 }
 
 watch([year, month], loadSettlement)

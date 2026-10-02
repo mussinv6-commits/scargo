@@ -1,10 +1,10 @@
 <template>
-  <!-- 26.10.02 추가: 계중대 차량 이동 경로 지도 (OpenStreetMap + Leaflet, 방식 B: 지점끼리 선으로 연결) -->
+  <!-- 26.10.02 추가: 검사소 차량 이동 경로 지도 (OpenStreetMap + Leaflet, 방식 B: 지점끼리 선으로 연결) -->
   <div class="wrm" :class="{ 'is-compact': compact }">
     <div ref="mapEl" class="wrm-map" role="img" :aria-label="ariaLabel"></div>
     <ul v-if="!compact" class="wrm-legend">
       <li><i class="dot is-origin"></i>진입 게이트</li>
-      <li><i class="dot is-wb"></i>계중대</li>
+      <li><i class="dot is-wb"></i>검사소</li>
       <li><i class="dot is-dest"></i>목적지</li>
       <li class="wrm-state" :class="status">{{ stateText }}</li>
     </ul>
@@ -23,7 +23,7 @@ const props = defineProps({
   status: { type: String, default: 'pending' }, // pending | pass | fail
   compact: { type: Boolean, default: false }, // 26.10.02: 미니 플레이어(소형 팝업)용 - 범례 숨기고 부모 높이를 꽉 채움
 })
-const emit = defineEmits(['phase']) // arriving(게이트→계중대 이동 중) | atScale | departing | arrived
+const emit = defineEmits(['phase']) // arriving(게이트→검사소 이동 중) | atScale | departing | arrived
 
 const COLORS = { navy: '#0a2540', orange: '#ff6b00', green: '#0f9d6e', red: '#d63a3a', gray: '#94a3b8' }
 const reduceMotion = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
@@ -42,7 +42,7 @@ const ll = (p) => [Number(p.lat), Number(p.lng)]
 
 const stateText = computed(() => {
   if (props.status === 'pass') return '통과: 목적지로 이동'
-  if (props.status === 'fail') return '과적: 계중대에서 재계량 대기'
+  if (props.status === 'fail') return '과적: 검사소에서 재계량 대기'
   return '계량 대기'
 })
 const missingText = computed(() => {
@@ -50,13 +50,13 @@ const missingText = computed(() => {
   if (!r) return '경로 정보를 불러오는 중입니다.'
   if (!hasCoord(r.origin) && !hasCoord(r.destination))
     return '게이트 좌표가 없어 경로를 그릴 수 없습니다. 검문소 관리에서 위도·경도를 입력해 주세요.'
-  if (!hasCoord(r.destination)) return '이 차량의 운행정보에 목적지 게이트가 없어 계중대까지만 표시합니다.'
+  if (!hasCoord(r.destination)) return '이 차량의 운행정보에 목적지 게이트가 없어 검사소까지만 표시합니다.'
   return ''
 })
 const ariaLabel = computed(() => {
   const r = props.route
   if (!r) return '차량 이동 경로 지도'
-  return `${r.origin?.name ?? '진입 게이트'}에서 계중대를 거쳐 ${r.destination?.name ?? '목적지'}로 가는 경로, ${stateText.value}`
+  return `${r.origin?.name ?? '진입 게이트'}에서 검사소를 거쳐 ${r.destination?.name ?? '목적지'}로 가는 경로, ${stateText.value}`
 })
 
 function dotIcon(color, big = false) {
@@ -101,8 +101,8 @@ function initMap() {
   setTimeout(() => map && map.invalidateSize(), 150)
 }
 
-// mode: 'arrive' = 게이트 인부터 계중대까지 트럭이 달려오는 장면부터 시작
-//       'status' = 계중대에 도착한 상태에서 판정 결과(통과/과적)만 반영
+// mode: 'arrive' = 게이트 인부터 검사소까지 트럭이 달려오는 장면부터 시작
+//       'status' = 검사소에 도착한 상태에서 판정 결과(통과/과적)만 반영
 function draw(mode = 'status') {
   if (!map || !layer) return
   cancelAnimationFrame(animFrame)
@@ -126,7 +126,7 @@ function draw(mode = 'status') {
   const dest = hasCoord(r.destination) ? r.destination : null
   const vias = (r.waypoints || []).filter(hasCoord)
 
-  // 1구간: 진입 게이트 → 계중대. 'arrive' 모드면 회색 점선 위로 트럭이 지나가며 남색으로 칠해짐
+  // 1구간: 진입 게이트 → 검사소. 'arrive' 모드면 회색 점선 위로 트럭이 지나가며 남색으로 칠해짐
   const leg1 = origin && wb ? [ll(origin), ll(wb)] : []
   const animateLeg1 = mode === 'arrive' && leg1.length === 2 && props.status === 'pending'
   if (leg1.length === 2) {
@@ -137,7 +137,7 @@ function draw(mode = 'status') {
         : { color: COLORS.navy, weight: 5, opacity: 0.9 },
     ).addTo(layer)
   }
-  // 2구간: 계중대 → (경유지) → 목적지
+  // 2구간: 검사소 → (경유지) → 목적지
   const leg2 = [wb, ...vias, dest].filter(Boolean).map(ll)
   if (leg2.length >= 2) {
     const style =
@@ -180,7 +180,7 @@ function draw(mode = 'status') {
   if (bounds.length === 1) map.setView(bounds[0], 16)
   else if (bounds.length > 1) map.fitBounds(bounds, { padding: pad, maxZoom: 17 })
 
-  // 트럭: 게이트 인 → 계중대까지 달려옴 → (통과면) 목적지까지 이동 / (과적이면) 계중대에 멈춤
+  // 트럭: 게이트 인 → 검사소까지 달려옴 → (통과면) 목적지까지 이동 / (과적이면) 검사소에 멈춤
   if (animateLeg1) {
     truckMarker = L.marker(leg1[0], { icon: truckIcon(), zIndexOffset: 1000 }).addTo(layer)
     faceTo(leg1[0], leg1[1])

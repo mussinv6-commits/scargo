@@ -7,7 +7,7 @@ import lombok.NoArgsConstructor;
 import java.util.List;
 
 /**
- * 26.10.01 추가(계중대 정식화): 계량 저장 결과.
+ * 26.10.01 추가(검사소 정식화): 계량 저장 결과.
  * record = DB(overload_checks)에 저장된 기록, violations = 어떤 항목이 기준을 넘었는지.
  */
 @Getter

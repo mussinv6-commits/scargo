@@ -35,6 +35,13 @@ public class GateLogCreateRequest {
     @Size(max = 20, message = "매칭 차량 번호는 최대 20자까지 입력 가능합니다.")
     private String actualVehicleNo; // 매칭된 차량 번호판 (trucks FK)
 
+    // 26.10.02 추가: OCR 검사 구분 (ENTRY: 입차 OCR, EXIT: 출차 OCR)
+    @Pattern(
+            regexp = "^(ENTRY|EXIT)$",
+            message = "OCR 구분은 'ENTRY' 또는 'EXIT'만 허용됩니다."
+    )
+    private String scanType;
+
     @DecimalMin(value = "0.00", message = "신뢰도는 0 이상이어야 합니다.")
     @DecimalMax(value = "100.00", message = "신뢰도는 100 이하여야 합니다.")
     @Digits(integer = 3, fraction = 2, message = "신뢰도는 소수점 둘째 자리까지 입력 가능합니다.")

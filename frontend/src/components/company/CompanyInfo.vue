@@ -12,23 +12,21 @@
         <div class="info-row"><span>주소</span><b>{{ company.address }}</b></div>
         <div class="info-row"><span>사업자번호</span><b>{{ company.businessNo || "-" }}</b></div>
       </div>
+      <div v-if="user" class="company-info">
+        <div class="info-row"><span>회원 번호</span><b>{{ user.accountId ?? "-" }}</b></div>
+        <div class="info-row"><span>가입일</span><b>{{ formatDate(user.createdAt) }}</b></div>
+      </div>
       <p v-else-if="loadedCompany" class="empty-text">업체 정보를 불러오지 못했습니다.</p>
 
       <div class="section-title" style="display:flex; align-items:center; justify-content:space-between;">
         <span>소속 차량 ({{ trucks.length }}대)</span>
-        <!-- 26.09.21 추가: 사업자가 바로 차량을 등록할 수 있는 버튼 -->
-        <RouterLink
-          to="/company/trucks/new"
-          class="mapping-submit-btn"
-          style="width:auto; padding:8px 16px; font-size:13px; display:inline-block; text-decoration:none;"
-        >
-          + 차량 등록
-        </RouterLink>
+        <RouterLink to="/company/trucks/new" style="font-size:13px; font-weight:700;">차량 관리 ›</RouterLink>
       </div>
 
       <table class="truck-table" v-if="trucks.length">
         <thead>
           <tr>
+            <th style="width:64px;">번호</th>
             <th>차량번호</th>
             <th>차종</th>
             <th>세미트레일러</th>
@@ -36,7 +34,8 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="t in trucks" :key="t.vehicleNo">
+          <tr v-for="(t, idx) in trucks" :key="t.vehicleNo">
+            <td>{{ idx + 1 }}</td>
             <td>{{ t.vehicleNo }}</td>
             <td>{{ t.truckType || "-" }}</td>
             <td>{{ t.isSemiTrailer ? "예" : "아니오" }}</td>
@@ -56,6 +55,7 @@
       <table class="truck-table" v-if="drivers.length">
         <thead>
           <tr>
+            <th style="width:64px;">번호</th>
             <th>이름</th>
             <th>아이디</th>
             <th>연락처</th>
@@ -63,7 +63,8 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="d in drivers" :key="d.accountId">
+          <tr v-for="(d, idx) in drivers" :key="d.accountId">
+            <td>{{ idx + 1 }}</td>
             <td>{{ d.userName || "-" }}</td>
             <td>{{ d.userId }}</td>
             <td>{{ d.phoneNum || "-" }}</td>
@@ -146,6 +147,9 @@ export default {
     },
     truckOfDriver(accountId) {
       return this.trucks.find((t) => t.assignedAccountId === accountId)?.vehicleNo || "";
+    },
+    formatDate(d) {
+      return d ? new Date(d).toLocaleDateString("ko-KR") : "-";
     },
   },
 };

@@ -18,26 +18,15 @@
             <dt>아이디</dt><dd>{{ profile.userId || '-' }}</dd>
             <dt>이름</dt><dd>{{ profile.userName || '-' }}</dd>
             <dt>연락처</dt><dd>{{ profile.phoneNum || '-' }}</dd>
-            <dt>회원 번호</dt><dd>{{ profile.accountId ?? '-' }}</dd>
-            <dt>가입일</dt><dd>{{ formatDate(profile.createdAt) }}</dd>
           </dl>
         </template>
       </section>
 
       <div class="profile-side">
         <section class="profile-card">
-          <h2 class="profile-side-title">계정 권한</h2>
-          <ul class="profile-note">
-            <li>회원·업체 승인 및 계정 관리</li>
-            <li>차량 진입 허가 심사</li>
-            <li>야드·적재 위치·과적 검사 운영</li>
-          </ul>
-        </section>
-
-        <section class="profile-card">
           <h2 class="profile-side-title">바로가기</h2>
           <div class="shortcut-grid">
-            <RouterLink v-for="m in shortcuts" :key="m.to" :to="m.to">
+            <RouterLink v-for="m in shortcuts" :key="m.to" :to="m.to" :class="m.tone">
               <i :class="['bi', m.icon]"></i> {{ m.label }}
             </RouterLink>
           </div>
@@ -54,19 +43,16 @@ import { authState } from '@/auth/authState.js'
 import { adminApi, pickErrorMessage } from '@/utils/adminApi'
 
 const shortcuts = [
-  { to: '/admin', label: '대시보드', icon: 'bi-speedometer2' },
-  { to: '/admin/accounts', label: '회원 관리', icon: 'bi-people' },
-  { to: '/admin/trucks', label: '차량 관리', icon: 'bi-truck' },
-  { to: '/admin/overload-checks', label: '과적 검사', icon: 'bi-exclamation-triangle' },
+  { to: '/admin', label: '대시보드', icon: 'bi-speedometer2', tone: 'tone-navy' },
+  { to: '/admin/accounts', label: '회원 관리', icon: 'bi-people', tone: 'tone-blue' },
+  { to: '/admin/trucks', label: '차량 관리', icon: 'bi-truck', tone: 'tone-orange' },
+  { to: '/admin/overload-checks', label: '과적 검사', icon: 'bi-exclamation-triangle', tone: 'tone-teal' },
+  { to: '/notice', label: '공지사항', icon: 'bi-megaphone', tone: 'tone-violet' },
 ]
 
 const loading = ref(true)
 const error = ref('')
 const profile = reactive({})
-
-function formatDate(d) {
-  return d ? new Date(d).toLocaleDateString('ko-KR') : '-'
-}
 
 onMounted(async () => {
   const id = authState.user?.accountId
@@ -109,16 +95,16 @@ onMounted(async () => {
   padding: 24px;
 }
 .profile-side-title {
-  font-size: 15px;
+  font-size: 20px;
   font-weight: 700;
   margin: 0 0 12px;
 }
-.profile-note {
-  margin: 0;
-  padding-left: 18px;
-  color: var(--a-text-muted, #64748b);
-  font-size: 13.5px;
-  line-height: 1.7;
+.profile-card .shortcut-grid {
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+}
+.profile-card .shortcut-grid a {
+  font-size: 16px;
+  padding: 12px 14px;
 }
 .profile-head {
   display: flex;
@@ -141,6 +127,17 @@ onMounted(async () => {
   justify-content: center;
 }
 .profile-name { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+.shortcut-grid a.tone-navy,
+.shortcut-grid a.tone-navy:hover { background: #0a2540; color: #fff; border-color: #0a2540; }
+.shortcut-grid a.tone-blue,
+.shortcut-grid a.tone-blue:hover { background: #2563eb; color: #fff; border-color: #2563eb; }
+.shortcut-grid a.tone-orange,
+.shortcut-grid a.tone-orange:hover { background: #ff6b00; color: #fff; border-color: #ff6b00; }
+.shortcut-grid a.tone-teal,
+.shortcut-grid a.tone-teal:hover { background: #0f766e; color: #fff; border-color: #0f766e; }
+.shortcut-grid a.tone-violet,
+.shortcut-grid a.tone-violet:hover { background: #6d28d9; color: #fff; border-color: #6d28d9; }
+.shortcut-grid a:hover { filter: brightness(1.08); }
 .profile-info {
   display: grid;
   grid-template-columns: 110px 1fr;
@@ -155,8 +152,6 @@ onMounted(async () => {
 }
 .profile-info dt { color: var(--a-text-muted, #64748b); font-weight: 600; }
 .profile-info dd { color: var(--a-text, #0a2540); font-weight: 600; word-break: break-all; }
-.profile-info dt:nth-last-of-type(1),
-.profile-info dd:last-of-type { border-bottom: none; }
 @media (max-width: 960px) {
   .profile-grid { grid-template-columns: 1fr; }
 }

@@ -1,7 +1,7 @@
 <template>
   <div class="wb">
     <AdminPageHeader
-      title="계중대 계량"
+      title="검사소 계량"
       description="게이트 OCR을 통과한 차량이 자동으로 대기열에 올라옵니다. 차량을 고르고 축중을 계측하면 서버가 과적을 판정해 과적 검사 기록으로 저장합니다."
     >
       <template #actions>
@@ -123,7 +123,7 @@
             </dl>
           </header>
 
-          <!-- 계중대 영상(WB-01) + DB 연동 축중 판독 카드 -->
+          <!-- 검사소 영상(WB-01) + DB 연동 축중 판독 카드 -->
           <div class="wb-stage">
             <div class="wb-frame">
               <video
@@ -133,7 +133,7 @@
                 muted
                 playsinline
                 preload="auto"
-                aria-label="계중대 WB-01 카메라 영상"
+                aria-label="검사소 WB-01 카메라 영상"
               ></video>
               <div class="wb-card" :class="{ 'is-show': cardShown }" aria-live="polite">
                 <div class="wb-card-row1">
@@ -160,7 +160,7 @@
                 <div v-if="badge" class="wb-card-badge" :class="badge.tone">{{ badge.text }}</div>
               </div>
               <div v-if="phase === 'idle' && !result" class="wb-stage-hint">
-                차량이 계중대에 올라오면 <b>축중 계측</b>을 누르세요
+                차량이 검사소에 올라오면 <b>축중 계측</b>을 누르세요
               </div>
             </div>
           </div>
@@ -210,6 +210,17 @@
                 <strong>{{ kg(enteredTotal) }}kg</strong>
                 <span class="wb-total-pct">총중량 기준 {{ kg(policy.grossLimitKg) }}kg 대비 {{ grossPct }}%</span>
               </div>
+              <!-- 26.10.02 추가: 총중량에 컨테이너 무게가 포함된 구성 -->
+              <p v-if="weightBreakdown" class="wb-breakdown">
+                차량 {{ kg(weightBreakdown.truckTare) }}kg
+                <template v-if="weightBreakdown.hasContainer">
+                  + 컨테이너 자체 {{ kg(weightBreakdown.containerTare) }}kg
+                </template>
+                + 화물 {{ kg(weightBreakdown.cargo) }}kg
+                <span v-if="weightBreakdown.hasContainer" class="wb-breakdown-vgm">
+                  (컨테이너 총중량 VGM {{ kg(weightBreakdown.containerTare + weightBreakdown.cargo) }}kg)
+                </span>
+              </p>
 
               <!-- 26.10.01 변경: 컨테이너는 입력하지 않고 DB(차량 배정 → 최근 적재기록)에서 자동으로 가져옴 -->
               <div class="wb-container-row" :class="{ 'is-empty': !selected.containerNo }">
@@ -243,7 +254,7 @@
             </div>
             <ul v-if="result.violations.length" class="wb-verdict-list">
               <li v-for="(v, i) in result.violations" :key="i">
-                {{ v.type === 'GROSS' ? '총중량' : `${v.axleNo}축 축하중` }}
+                {{ v.type === 'GROSS' ? '총중량' : v.type === 'PAYLOAD' ? '적재중량' : `${v.axleNo}축 축하중` }}
                 {{ kg(v.measuredKg) }}kg (기준 {{ kg(v.limitKg) }}kg, {{ kg(v.measuredKg - v.limitKg) }}kg 초과)
               </li>
             </ul>
@@ -328,24 +339,24 @@
             </tr>
           </tbody>
         </table>
-        <p v-else class="wb-records-empty">오늘 계중대에서 계량한 차량이 아직 없습니다.</p>
+        <p v-else class="wb-records-empty">오늘 검사소에서 계량한 차량이 아직 없습니다.</p>
       </div>
     </section>
 
     <!-- 26.10.02 추가: 이동 경로 미니 플레이어 (유튜브 미니 플레이어처럼 화면 구석에 떠서, 게이트 인부터 이동을 보여줌) -->
     <div
       v-if="selected && miniOpen"
-      class="wb-mini"
+      class="wb-pip"
       :class="{ 'is-big': miniBig, 'is-dragging': dragging }"
       :style="miniPos ? { left: miniPos.x + 'px', top: miniPos.y + 'px', right: 'auto', bottom: 'auto' } : null"
       role="dialog"
       aria-label="차량 이동 경로"
     >
-      <header class="wb-mini-bar" @pointerdown="startDrag">
-        <span class="wb-mini-live" :class="routeStatus"></span>
-        <strong class="wb-mini-plate">{{ selected.vehicleNo }}</strong>
-        <span class="wb-mini-state" :class="routeStatus">{{ miniStateText }}</span>
-        <span class="wb-mini-tools" @pointerdown.stop>
+      <header class="wb-pip-bar" @pointerdown="startDrag">
+        <span class="wb-pip-live" :class="routeStatus"></span>
+        <strong class="wb-pip-plate">{{ selected.vehicleNo }}</strong>
+        <span class="wb-pip-state" :class="routeStatus">{{ miniStateText }}</span>
+        <span class="wb-pip-tools" @pointerdown.stop>
           <button type="button" title="처음부터 다시 보기" aria-label="처음부터 다시 보기" @click="routeMap?.replay()">
             <i class="bi bi-arrow-counterclockwise"></i>
           </button>
@@ -362,7 +373,7 @@
           </button>
         </span>
       </header>
-      <div class="wb-mini-body">
+      <div class="wb-pip-body">
         <WeighbridgeRouteMap
           ref="routeMap"
           compact
@@ -371,15 +382,15 @@
           @phase="(p) => (routePhase = p)"
         />
       </div>
-      <footer class="wb-mini-foot">
+      <footer class="wb-pip-foot">
         <span>{{ routeData?.origin?.name || '진입 게이트' }}</span>
         <i class="bi bi-arrow-right"></i>
-        <span class="is-wb">{{ routeData?.weighbridge?.name || '계중대' }}</span>
+        <span class="is-wb">{{ routeData?.weighbridge?.name || '검사소' }}</span>
         <i class="bi bi-arrow-right"></i>
         <span>{{ routeData?.destination?.name || '목적지' }}</span>
       </footer>
     </div>
-    <button v-else-if="selected" type="button" class="wb-mini-reopen" @click="miniOpen = true">
+    <button v-else-if="selected" type="button" class="wb-pip-reopen" @click="miniOpen = true">
       <i class="bi bi-map"></i> 이동 경로 보기
     </button>
   </div>
@@ -389,10 +400,10 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import AdminPageHeader from '@/components/admin/AdminPageHeader.vue'
 import WeighbridgeRouteMap from '@/components/admin/WeighbridgeRouteMap.vue' // 26.10.02 추가: 이동 경로 지도
-import wbVideo from '@/assets/weighbridge/wb01.webm' // 계중대 WB-01 카메라 영상 (기존 데모 영상 그대로 사용)
+import wbVideo from '@/assets/weighbridge/wb01.webm' // 검사소 WB-01 카메라 영상 (기존 데모 영상 그대로 사용)
 import { adminApi, pickErrorMessage } from '@/utils/adminApi'
 
-// 26.10.01 추가: 계중대(검사소) 정식 화면
+// 26.10.01 추가: 검사소 정식 화면
 // 흐름: gate_api.py(번호판 OCR) → gate_logs 저장 → 이 화면 대기열 → 축중 계측 → 서버 판정 → overload_checks 저장
 
 const POLL_MS = 3000
@@ -437,7 +448,7 @@ const records = ref([])
 async function loadRecords() {
   try {
     const res = await adminApi.get('/api/v1/weighbridge/weighings/today')
-    // 26.10.01: 계중대 콘솔에서 실시간으로 계량한 기록만 표시
+    // 26.10.01: 검사소 콘솔에서 실시간으로 계량한 기록만 표시
     // (게이트 OCR로 넘어온 차량 = gateLogId, 콘솔 직접 계량 = stationCode 가 있음.
     //  과적 검사 관리 화면에서 손으로 넣은 테스트 데이터는 둘 다 없어서 제외됨)
     const list = Array.isArray(res.data) ? res.data : []
@@ -457,6 +468,7 @@ const axles = ref(makeAxles(3))
 const phase = ref('idle') // idle | reading | ready | saving | done
 const liveAxle = ref(-1)
 const displayTotal = ref(0)
+const weightBreakdown = ref(null) // 26.10.02: 차량/컨테이너/화물 무게 구성
 const result = ref(null)
 const consoleError = ref('')
 let animFrame = null
@@ -516,6 +528,7 @@ const badge = computed(() => {
 })
 
 function resetMeasurement(n) {
+  weightBreakdown.value = null
   cancelAnimationFrame(animFrame)
   rewindVideo()
   axleCount.value = n
@@ -547,10 +560,10 @@ const miniBig = ref(false)
 const miniPos = ref(null) // 드래그로 옮기면 {x,y}, 아니면 오른쪽 아래 기본 위치
 const dragging = ref(false)
 const miniStateText = computed(() => {
-  if (routeStatus.value === 'fail') return '과적 · 계중대 대기'
+  if (routeStatus.value === 'fail') return '과적 · 검사소 대기'
   if (routeStatus.value === 'pass') return routePhase.value === 'arrived' ? '목적지 도착' : '통과 · 목적지로 이동 중'
-  if (routePhase.value === 'arriving') return '게이트 인 · 계중대로 이동 중'
-  return '계중대 계량 중'
+  if (routePhase.value === 'arriving') return '게이트 인 · 검사소로 이동 중'
+  return '검사소 계량 중'
 })
 function startDrag(e) {
   if (e.button !== undefined && e.button !== 0) return
@@ -689,26 +702,40 @@ function recomputeTotal() {
 // 축중기 장비가 아직 연결되어 있지 않아, 차량 정보(최대적재량/세미트레일러 여부)를 바탕으로
 // 현실적인 범위의 축중을 만들어내는 계측 시뮬레이터를 쓴다. 장비를 붙일 때는 이 함수의
 // targets 계산 부분만 장비 수신값으로 바꾸면 나머지(애니메이션/판정/저장)는 그대로 동작한다.
+// 26.10.02 변경: 총중량 = 차량 자체중량 + 컨테이너 자체중량 + 화물(컨테이너 안)
 function simulateTargets(n, vehicle, retry) {
   const semi = n >= 4
-  const tare = semi ? 14500 : 9000
+  const truckTare = semi ? 14500 : 9000 // 트랙터+샤시 / 카고트럭 자체중량
+  const cTare = Number(vehicle?.containerTareKg) > 0 ? Number(vehicle.containerTareKg) : 0
+  const cMax = Number(vehicle?.containerMaxGrossKg) > 0 ? Number(vehicle.containerMaxGrossKg) : 0
+  const cNet = cMax > cTare ? cMax - cTare : 0
+  // 26.10.02 변경: 적재중량(컨테이너 자중+화물)은 차량 최대적재량(trucks.max_load_weight) 기준으로 생성
+  //   첫 계량 75~125%(110% 초과 = 적재중량 위반), 재계량은 감량 후 70~95%
   const rated = Number(vehicle?.maxLoadWeight) > 0 ? Number(vehicle.maxLoadWeight) : semi ? 26000 : 12000
-  // 재계량은 감량 후라 정상 범위 위주, 첫 계량은 일부 과적이 나오도록 분포를 넓힌다
-  const loadRatio = retry ? 0.6 + Math.random() * 0.3 : 0.55 + Math.random() * 0.75
-  const gross = tare + rated * loadRatio
+  const loadRatio = retry ? 0.7 + Math.random() * 0.25 : 0.75 + Math.random() * 0.5
+  let cargo = Math.max(0, rated * loadRatio - cTare)
+  if (cNet > 0) cargo = Math.min(cargo, cNet) // 컨테이너에 실을 수 있는 양을 넘지 않음
+  cargo = Math.round(cargo / 10) * 10
+  weightBreakdown.value = { truckTare, containerTare: cTare, cargo, hasContainer: cTare > 0 }
+  const gross = truckTare + cTare + cargo
   const steer = semi ? 6200 + Math.random() * 900 : 5600 + Math.random() * 800
   const rest = Math.max(0, gross - steer)
   const shares = Array.from({ length: n - 1 }, (_, i) => (semi && i >= 2 ? 1.05 : 1) * (0.9 + Math.random() * 0.2))
   const sum = shares.reduce((s, v) => s + v, 0)
   const weights = [steer, ...shares.map((s) => (rest * s) / sum)]
-  return weights.map((w) => {
+  const out = weights.map((w) => {
     const weightKg = Math.round(w / 10) * 10
     const leftKg = Math.round((weightKg * (0.47 + Math.random() * 0.06)) / 10) * 10
     return { weightKg, leftKg, rightKg: weightKg - leftKg }
   })
+  // 반올림 오차를 마지막 축에 맞춰 합계를 정확히 맞춤
+  const diff = gross - out.reduce((s, a) => s + a.weightKg, 0)
+  out[out.length - 1].weightKg += diff
+  out[out.length - 1].rightKg += diff
+  return out
 }
 
-// 영상 타임라인(초) - 기존 계중대 데모 영상의 장면에 맞춘 값
+// 영상 타임라인(초) - 기존 검사소 데모 영상의 장면에 맞춘 값
 // 2.9s 차량이 판독 위치 도착 → 3.3~4.6s 축별 판독 → 4.7~5.3s 총중량 확정 → 5.6s 판정 표시
 const T_APPEAR = 2.9
 const T_AXLE_START = 3.3
@@ -814,7 +841,7 @@ function tickReading() {
   } else {
     axles.value = readingTargets.map((x) => ({ ...x }))
     recomputeTotal()
-    phase.value = 'ready' // 영상은 끝까지 재생되고 마지막 장면(계중대 표시기)에서 멈춤
+    phase.value = 'ready' // 영상은 끝까지 재생되고 마지막 장면(검사소 표시기)에서 멈춤
   }
 }
 
@@ -828,6 +855,11 @@ async function save() {
     vehicleNo: selected.value.vehicleNo,
     containerNo: selected.value.containerNo || null, // 비어 있으면 서버가 DB에서 다시 찾아 채움
     stationCode: policy.stationCode,
+    // 26.10.02 추가: 컨테이너 총중량(VGM) - 컨테이너 자체중량 + 화물
+    // 적재중량 = 컨테이너 자중 + 화물 (최대적재량과 비교하는 값)
+    vgmWeightKg: weightBreakdown.value
+      ? weightBreakdown.value.containerTare + weightBreakdown.value.cargo
+      : null,
     axles: axles.value.map((a) => ({
       weightKg: Math.round(a.weightKg),
       leftKg: Number.isFinite(a.leftKg) ? a.leftKg : null,
@@ -1011,8 +1043,8 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-/* 26.10.01 추가: 계중대 콘솔. 색은 theme.css 토큰(네이비/오렌지)을 따르고,
-   지시계(총중량 표시)만 실제 계중대 표시기처럼 어두운 패널로 강조한다. */
+/* 26.10.01 추가: 검사소 콘솔. 색은 theme.css 토큰(네이비/오렌지)을 따르고,
+   지시계(총중량 표시)만 실제 검사소 표시기처럼 어두운 패널로 강조한다. */
 .wb {
   --wb-ink: var(--color-text, #0a2540);
   --wb-sub: var(--color-subtext, #64748b);
@@ -1105,7 +1137,7 @@ onBeforeUnmount(() => {
   background: currentColor;
 }
 /* 26.10.02 추가: 이동 경로 미니 플레이어 */
-.wb-mini {
+.wb-pip {
   position: fixed;
   right: 24px;
   bottom: 24px;
@@ -1125,15 +1157,15 @@ onBeforeUnmount(() => {
     width 0.2s ease,
     height 0.2s ease;
 }
-.wb-mini.is-big {
+.wb-pip.is-big {
   width: 600px;
   height: 440px;
 }
-.wb-mini.is-dragging {
+.wb-pip.is-dragging {
   transition: none;
   user-select: none;
 }
-.wb-mini-bar {
+.wb-pip-bar {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1142,10 +1174,10 @@ onBeforeUnmount(() => {
   cursor: grab;
   touch-action: none;
 }
-.wb-mini.is-dragging .wb-mini-bar {
+.wb-pip.is-dragging .wb-pip-bar {
   cursor: grabbing;
 }
-.wb-mini-live {
+.wb-pip-live {
   width: 8px;
   height: 8px;
   border-radius: 50%;
@@ -1153,19 +1185,19 @@ onBeforeUnmount(() => {
   flex: none;
   animation: wbPulse 1.6s ease-out infinite;
 }
-.wb-mini-live.pass {
+.wb-pip-live.pass {
   background: #4fd1a5;
 }
-.wb-mini-live.fail {
+.wb-pip-live.fail {
   background: #ff5c5c;
 }
-.wb-mini-plate {
+.wb-pip-plate {
   font-family: 'Barlow Condensed', 'Inter', sans-serif;
   font-size: 17px;
   letter-spacing: 0.3px;
   white-space: nowrap;
 }
-.wb-mini-state {
+.wb-pip-state {
   font-size: 12px;
   color: #9db0c7;
   white-space: nowrap;
@@ -1173,18 +1205,18 @@ onBeforeUnmount(() => {
   text-overflow: ellipsis;
   min-width: 0;
 }
-.wb-mini-state.pass {
+.wb-pip-state.pass {
   color: #4fd1a5;
 }
-.wb-mini-state.fail {
+.wb-pip-state.fail {
   color: #ff8a8a;
 }
-.wb-mini-tools {
+.wb-pip-tools {
   margin-left: auto;
   display: inline-flex;
   gap: 2px;
 }
-.wb-mini-tools button {
+.wb-pip-tools button {
   width: 28px;
   height: 28px;
   border: 0;
@@ -1193,19 +1225,19 @@ onBeforeUnmount(() => {
   color: #c7d3e2;
   cursor: pointer;
 }
-.wb-mini-tools button:hover {
+.wb-pip-tools button:hover {
   background: rgba(255, 255, 255, 0.1);
   color: #fff;
 }
-.wb-mini-tools button:focus-visible {
+.wb-pip-tools button:focus-visible {
   outline: 2px solid var(--wb-accent);
 }
-.wb-mini-body {
+.wb-pip-body {
   flex: 1;
   min-height: 0;
   background: #e5e7eb;
 }
-.wb-mini-foot {
+.wb-pip-foot {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1215,18 +1247,18 @@ onBeforeUnmount(() => {
   white-space: nowrap;
   overflow: hidden;
 }
-.wb-mini-foot span {
+.wb-pip-foot span {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.wb-mini-foot .is-wb {
+.wb-pip-foot .is-wb {
   color: #ffb547;
 }
-.wb-mini-foot i {
+.wb-pip-foot i {
   font-size: 10px;
   opacity: 0.7;
 }
-.wb-mini-reopen {
+.wb-pip-reopen {
   position: fixed;
   right: 24px;
   bottom: 24px;
@@ -1243,8 +1275,8 @@ onBeforeUnmount(() => {
   box-shadow: 0 8px 20px rgba(10, 37, 64, 0.3);
 }
 @media (max-width: 560px) {
-  .wb-mini,
-  .wb-mini.is-big {
+  .wb-pip,
+  .wb-pip.is-big {
     right: 8px;
     bottom: 8px;
     width: calc(100vw - 16px);
@@ -1524,7 +1556,7 @@ onBeforeUnmount(() => {
   font-weight: 600;
 }
 
-/* 계중대 영상 + 판독 카드 (기존 데모의 카드 위치/구성을 그대로 살림) */
+/* 검사소 영상 + 판독 카드 (기존 데모의 카드 위치/구성을 그대로 살림) */
 .wb-stage {
   container-type: inline-size;
   margin: 16px 0 4px;
@@ -1739,6 +1771,15 @@ onBeforeUnmount(() => {
 /* 축별 측정값 */
 .wb-readout {
   margin-top: 14px;
+}
+.wb-breakdown {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  color: var(--wb-sub);
+}
+.wb-breakdown-vgm {
+  color: var(--wb-ink);
+  font-weight: 600;
 }
 .wb-total-row {
   display: flex;

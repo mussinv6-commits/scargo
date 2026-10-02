@@ -6,8 +6,8 @@ import lombok.Getter;
 import java.util.List;
 
 /**
- * 26.10.02 추가: 계중대 화면 지도(OpenStreetMap)에 그릴 차량 이동 경로.
- * 진입 게이트(origin) → 계중대(weighbridge) → [경유지(waypoints)] → 목적지(destination) 순서.
+ * 26.10.02 추가: 검사소 화면 지도(OpenStreetMap)에 그릴 차량 이동 경로.
+ * 진입 게이트(origin) → 검사소(weighbridge) → [경유지(waypoints)] → 목적지(destination) 순서.
  * 좌표가 없는 지점은 null 로 내려가고, 화면은 있는 지점만 이어서 그린다.
  */
 @Getter

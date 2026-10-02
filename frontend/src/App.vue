@@ -46,7 +46,8 @@ const roleMenu = computed(() => {
         ADMIN_MENU.member,
         ADMIN_MENU.vehicle,
         ADMIN_MENU.yard,
-        ADMIN_MENU.etc.filter((m) => m.to.startsWith("/admin")),
+        ADMIN_MENU.etc,
+        ADMIN_MENU.notice,
       ],
     };
   }

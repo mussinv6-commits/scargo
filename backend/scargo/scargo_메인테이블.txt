@@ -1,0 +1,414 @@
+-- ==========================================
+-- scargo DB 통합 스키마 
+-- ==========================================
+
+-- ==========================================
+-- 0. 기존 테이블 삭제 (외래키 제약조건 고려 역순)
+-- ==========================================
+DROP TABLE IF EXISTS gate_logs CASCADE;
+DROP TABLE IF EXISTS overload_checks CASCADE;
+DROP TABLE IF EXISTS loading_records CASCADE;
+DROP TABLE IF EXISTS containers CASCADE;
+DROP TABLE IF EXISTS trucks CASCADE;
+DROP TABLE IF EXISTS loading_locations CASCADE;
+DROP TABLE IF EXISTS yards CASCADE;
+DROP TABLE IF EXISTS attachments CASCADE;
+DROP TABLE IF EXISTS post_comments CASCADE;
+DROP TABLE IF EXISTS posts CASCADE;
+DROP TABLE IF EXISTS accounts CASCADE;
+DROP TABLE IF EXISTS companies CASCADE;
+
+-- ==========================================
+-- 1. companies 테이블 (업체 정보)
+-- ==========================================
+CREATE TABLE companies (
+    company_id BIGSERIAL PRIMARY KEY,                          -- 업체 고유 ID
+    company_name VARCHAR(100) NOT NULL,                        -- 업체명
+    address TEXT NOT NULL,                                     -- 업체 주소
+    business_no VARCHAR(20) UNIQUE,                            -- 사업자 등록번호 (000-00-00000)
+    industry_type VARCHAR(50),                                 -- 업종
+    representative_name VARCHAR(50),                           -- 대표자명
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT uk_company_name_address UNIQUE (company_name, address),
+    CONSTRAINT chk_companies_biz_no_format CHECK (business_no ~ '^[0-9]{3}-[0-9]{2}-[0-9]{5}$')
+);
+
+-- ==========================================
+-- 2. accounts 테이블 (사용자 계정 정보)
+-- ==========================================
+CREATE TABLE accounts (
+    account_id BIGSERIAL PRIMARY KEY,                          -- 계정 고유 ID
+    user_name VARCHAR(30),                                     -- 회원명
+    user_id VARCHAR(50) NOT NULL UNIQUE,                       -- 로그인 아이디
+    user_pw VARCHAR(255) NOT NULL,                             -- 비밀번호
+    user_type VARCHAR(30) NOT NULL DEFAULT 'GENERAL',          -- 사용자 권한/유형
+    company_id BIGINT,                                         -- 소속 업체 ID
+    phone_num VARCHAR(20),                                     -- 휴대폰 번호
+    business_no VARCHAR(20),                                   -- 사업자 등록번호
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_accounts_company FOREIGN KEY (company_id)
+        REFERENCES companies(company_id) ON DELETE SET NULL,
+    CONSTRAINT chk_user_type CHECK (user_type IN ('GENERAL', 'CORPORATE_PENDING', 'CORPORATE_APPROVED', 'ADMIN'))
+);
+
+-- ==========================================
+-- 2-1. posts 테이블 (게시글)
+-- ==========================================
+CREATE TABLE posts (
+    post_id BIGSERIAL PRIMARY KEY,                             -- 게시글 고유 ID
+    account_id BIGINT,                                         -- 작성자 ID
+    title VARCHAR(200) NOT NULL,                               -- 제목
+    content_text TEXT NOT NULL,                                -- 본문 내용
+    category VARCHAR(50) NOT NULL DEFAULT 'FREE',              -- 게시판 카테고리 (NOTICE, FREE, QNA 등)
+    view_count INT NOT NULL DEFAULT 0,                         -- 조회수
+    is_pinned BOOLEAN NOT NULL DEFAULT FALSE,                  -- 상단 고정 여부
+    is_deleted BOOLEAN NOT NULL DEFAULT FALSE,                 -- 삭제 여부 (Soft Delete)
+    deleted_at TIMESTAMP WITH TIME ZONE,                       -- 삭제일시
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, -- 작성일시
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, -- 수정일시
+
+    CONSTRAINT fk_posts_account FOREIGN KEY (account_id)
+        REFERENCES accounts(account_id) ON DELETE SET NULL,
+    CONSTRAINT chk_post_category CHECK (category IN ('NOTICE', 'FREE', 'QNA', 'FAQ'))
+);
+
+-- ==========================================
+-- 2-2. post_comments 테이블 (댓글 & 대댓글)
+-- ==========================================
+CREATE TABLE post_comments (
+    comment_id BIGSERIAL PRIMARY KEY,                          -- 댓글 고유 ID
+    post_id BIGINT NOT NULL,                                   -- 연관된 게시글 ID
+    account_id BIGINT,                                         -- 작성자 ID
+    parent_id BIGINT,                                          -- 부모 댓글 ID
+    content_text TEXT NOT NULL,                                -- 댓글 내용
+    is_deleted BOOLEAN NOT NULL DEFAULT FALSE,                 -- 삭제 여부 (Soft Delete)
+    deleted_at TIMESTAMP WITH TIME ZONE,                       -- 삭제일시
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, -- 작성일시
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, -- 수정일시
+
+    CONSTRAINT fk_comments_post FOREIGN KEY (post_id)
+        REFERENCES posts(post_id) ON DELETE CASCADE,
+    CONSTRAINT fk_comments_account FOREIGN KEY (account_id)
+        REFERENCES accounts(account_id) ON DELETE SET NULL,
+    CONSTRAINT fk_comments_parent FOREIGN KEY (parent_id)
+        REFERENCES post_comments(comment_id) ON DELETE CASCADE
+);
+
+-- ==========================================
+-- 2-3. attachments 테이블 (첨부파일)
+-- ==========================================
+CREATE TABLE attachments (
+    attachment_id BIGSERIAL PRIMARY KEY,                       -- 첨부파일 고유 ID
+    post_id BIGINT NOT NULL,                                   -- 연관된 게시글 ID
+    original_name VARCHAR(255) NOT NULL,                       -- 원본 파일명
+    stored_name VARCHAR(255) NOT NULL,                         -- 저장된 파일명
+    file_path VARCHAR(500) NOT NULL,                           -- 파일 저장 경로/URL
+    file_size BIGINT NOT NULL,                                 -- 파일 크기 (Byte 단위)
+    file_type VARCHAR(100),                                    -- MIME 타입
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_attachments_post FOREIGN KEY (post_id)
+        REFERENCES posts(post_id) ON DELETE CASCADE
+);
+
+-- ==========================================
+-- 3-1. yards 테이블 (상위 야드 관리)
+-- ==========================================
+CREATE TABLE yards (
+    yard_id BIGSERIAL PRIMARY KEY,                             -- 야드 고유 ID
+    yard_name VARCHAR(50) NOT NULL,                            -- 야드 이름
+    yard_type VARCHAR(30) NOT NULL DEFAULT 'GENERAL',          -- 야드 용도/성격
+    latitude NUMERIC(9, 6),                                    -- 위도
+    longitude NUMERIC(9, 6),                                   -- 경도
+    status VARCHAR(20) DEFAULT 'AVAILABLE',                    -- 상태
+    is_available BOOLEAN DEFAULT TRUE,                         -- 사용 가능 여부
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ==========================================
+-- 3-2. loading_locations 테이블 (야드 하위 세부 위치)
+-- ==========================================
+CREATE TABLE loading_locations (
+    location_id BIGSERIAL PRIMARY KEY,                         -- 장소 고유 ID
+    yard_id BIGINT NOT NULL,                                   -- 소속 야드 ID
+    sector VARCHAR(50) NOT NULL,                               -- 섹터/블록명
+    latitude NUMERIC(9, 6),                                    -- 위도
+    longitude NUMERIC(9, 6),                                   -- 경도
+    status VARCHAR(20) DEFAULT 'AVAILABLE',                    -- 상태
+    is_available BOOLEAN DEFAULT TRUE,                         -- 사용 가능 여부
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_locations_yard FOREIGN KEY (yard_id)
+        REFERENCES yards(yard_id) ON DELETE CASCADE
+);
+
+-- ==========================================
+-- 4. trucks 테이블 (물류 화물차 정보 관리)
+-- ==========================================
+CREATE TABLE trucks (
+    vehicle_no VARCHAR(20) PRIMARY KEY,                        -- 차량 번호판 (기본키)
+    company_id BIGINT NOT NULL,                                -- 소속 업체 ID
+    is_semi_trailer BOOLEAN NOT NULL DEFAULT FALSE,            -- 세미트레일러 여부
+    trailer_no VARCHAR(20),                                    -- 트레일러 번호판
+    truck_type VARCHAR(30),                                    -- 차종
+    max_load_weight NUMERIC(8, 2),                            -- 최대 적재 허용 중량
+    planned_route JSONB,                                       -- 이동 경로
+    status VARCHAR(20) DEFAULT 'OUTSIDE',                      -- 차량 상태
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_trucks_company FOREIGN KEY (company_id)
+        REFERENCES companies(company_id),
+    CONSTRAINT chk_truck_status CHECK (status IN ('OUTSIDE', 'INSIDE', 'IN_TRANSIT'))
+);
+
+-- ==========================================
+-- 5. containers 테이블 (컨테이너 정보)
+-- ==========================================
+CREATE TABLE containers (
+    container_no VARCHAR(11) PRIMARY KEY,                      -- 컨테이너 고유번호 (ISO 6346)
+    company_id BIGINT,                                         -- 화물을 예약한 회사 ID
+    iso_size_type_code VARCHAR(4) NOT NULL,                    -- 규격·종류 코드
+    container_type VARCHAR(20) NOT NULL,                       -- 화물 성격 분류
+    is_high_cube BOOLEAN NOT NULL DEFAULT FALSE,               -- 하이큐브 여부
+    max_gross_kg NUMERIC(8, 1) NOT NULL,                       -- 최대 총중량 (kg)
+    tare_kg NUMERIC(8, 1) NOT NULL,                            -- 컨테이너 자체 무게 (kg)
+    net_kg NUMERIC(8, 1) NOT NULL,                             -- 최대 적재중량 (kg)
+    cubic_capacity_cbm NUMERIC(6, 2) NOT NULL,                 -- 내부 용적 (CBM)
+    csc_approval_no VARCHAR(30),                               -- 안전승인판 승인번호
+    reserved_cargo_info JSONB,                                 -- 화물 상세 정보
+    loading_location_id BIGINT,                                -- 적재 장소 ID
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_containers_company FOREIGN KEY (company_id)
+        REFERENCES companies(company_id) ON DELETE SET NULL,
+    CONSTRAINT fk_containers_location FOREIGN KEY (loading_location_id)
+        REFERENCES loading_locations(location_id) ON DELETE SET NULL,
+    CONSTRAINT chk_containers_no_format CHECK (container_no ~ '^[A-Z]{4}[0-9]{7}$'),
+    CONSTRAINT chk_containers_weight CHECK (net_kg = max_gross_kg - tare_kg)
+);
+
+-- ==========================================
+-- 6. loading_records 테이블 (컨테이너 적재 이력)
+-- ==========================================
+CREATE TABLE loading_records (
+    record_id BIGSERIAL PRIMARY KEY,                           -- 적재 기록 고유 ID
+    vehicle_no VARCHAR(20) NOT NULL,                           -- 화물차 번호
+    container_no VARCHAR(11) NOT NULL,                         -- 컨테이너 번호 (VARCHAR(11)로 맞춤)
+    location_id BIGINT NOT NULL,                               -- 적재 장소 ID
+    status VARCHAR(20) NOT NULL DEFAULT 'IN_PROGRESS',         -- 작업 상태 (IN_PROGRESS, COMPLETED, CANCELED 등)
+    loaded_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_records_truck FOREIGN KEY (vehicle_no)
+        REFERENCES trucks(vehicle_no),
+    CONSTRAINT fk_records_container FOREIGN KEY (container_no)
+        REFERENCES containers(container_no),
+    CONSTRAINT fk_records_location FOREIGN KEY (location_id)
+        REFERENCES loading_locations(location_id),
+    CONSTRAINT chk_loading_status CHECK (status IN ('IN_PROGRESS', 'COMPLETED', 'CANCELED'))
+);
+
+-- ==========================================
+-- 7. overload_checks 테이블 (과적/VGM 중량 및 축/윤중 검사 결과)
+-- ==========================================
+CREATE TABLE overload_checks (
+    check_id BIGSERIAL PRIMARY KEY,                            -- 과적 검사 기록 ID
+    vehicle_no VARCHAR(20) NOT NULL,                           -- 화물차 번호
+    container_no VARCHAR(11),                                  -- 컨테이너 번호 (VARCHAR(11)로 맞춤)
+    
+    -- 목적 및 기본 중량 스펙
+    usage_purpose VARCHAR(50),                                 -- 차량 용도/목적 (예: 일반형-카고, 견인 등)
+    empty_vehicle_weight INT,                                  -- 공차중량 (kg)
+    total_weight INT,                                          -- 총중량 (kg)
+    max_payload INT,                                           -- 최대적재량 (kg)
+    vgm_weight INT,                                            -- VGM 총중량 (kg)
+    
+    -- 차축 및 타이어 사양
+    tire_count INT,                                            -- 타이어수
+    vehicle_axle_count INT,                                    -- 차축수
+    axle_count INT,                                            -- 축수
+    
+    -- 축별 중량 (1~8축, kg)
+    axle1_weight INT DEFAULT 0,
+    axle2_weight INT DEFAULT 0,
+    axle3_weight INT DEFAULT 0,
+    axle4_weight INT DEFAULT 0,
+    axle5_weight INT DEFAULT 0,
+    axle6_weight INT DEFAULT 0,
+    axle7_weight INT DEFAULT 0,
+    axle8_weight INT DEFAULT 0,
+    
+    -- 축별 윤중 좌/우 (1~8축, kg)
+    axle1_wheel_left INT DEFAULT 0, axle1_wheel_right INT DEFAULT 0,
+    axle2_wheel_left INT DEFAULT 0, axle2_wheel_right INT DEFAULT 0,
+    axle3_wheel_left INT DEFAULT 0, axle3_wheel_right INT DEFAULT 0,
+    axle4_wheel_left INT DEFAULT 0, axle4_wheel_right INT DEFAULT 0,
+    axle5_wheel_left INT DEFAULT 0, axle5_wheel_right INT DEFAULT 0,
+    axle6_wheel_left INT DEFAULT 0, axle6_wheel_right INT DEFAULT 0,
+    axle7_wheel_left INT DEFAULT 0, axle7_wheel_right INT DEFAULT 0,
+    axle8_wheel_left INT DEFAULT 0, axle8_wheel_right INT DEFAULT 0,
+
+    -- 판정 정보
+    is_violation BOOLEAN NOT NULL,                             -- 규정 위반 여부
+    violation_reason TEXT,                                     -- 위반 사유
+    retry_count INT NOT NULL DEFAULT 0,                        -- 재검증 시도 횟수
+    is_passed BOOLEAN NOT NULL,                                -- 최종 통과 여부
+    checked_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_checks_truck FOREIGN KEY (vehicle_no)
+        REFERENCES trucks(vehicle_no),
+    CONSTRAINT fk_checks_container FOREIGN KEY (container_no)
+        REFERENCES containers(container_no)
+);
+
+-- ==========================================
+-- 8. gate_logs 테이블 (OCR 게이트 통과 이력)
+-- ==========================================
+CREATE TABLE gate_logs (
+    gate_log_id BIGSERIAL PRIMARY KEY,                         -- 게이트 통과 이력 ID
+    gate_name VARCHAR(50) NOT NULL,                            -- 게이트 이름
+    gate_type VARCHAR(10) NOT NULL,                            -- 게이트 구분 ('IN', 'OUT')
+    recognized_plate_no VARCHAR(20),                           -- 전면 번호판 OCR 결과
+    recognized_trailer_no VARCHAR(20),                         -- 후면/트레일러 번호판 OCR 결과
+    actual_vehicle_no VARCHAR(20),                             -- 매칭된 차량 번호판 (trucks FK)
+    plate_confidence NUMERIC(5, 2),                            -- OCR 신뢰도 (0.00 ~ 100.00%)
+    recognition_status VARCHAR(20) NOT NULL DEFAULT 'SUCCESS', -- 처리 상태 ('SUCCESS', 'FAILED')
+    front_image_url TEXT,                                      -- 전면 이미지
+    rear_image_url TEXT,                                       -- 후면 이미지
+    ocr_raw_data JSONB,                                        -- OCR 원본
+    vehicle_type VARCHAR(30) DEFAULT 'UNKNOWN',                -- 차종
+    pass_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_gate_logs_truck FOREIGN KEY (actual_vehicle_no)
+        REFERENCES trucks(vehicle_no) ON DELETE SET NULL,
+    CONSTRAINT chk_gate_type CHECK (gate_type IN ('IN', 'OUT')),
+    CONSTRAINT chk_recognition_status CHECK (recognition_status IN ('SUCCESS', 'FAILED'))
+);
+
+-- ==========================================
+-- 9. 성능 향상을 위한 인덱스 정의
+-- ==========================================
+CREATE INDEX idx_accounts_company_id ON accounts(company_id);
+CREATE INDEX idx_locations_yard_id ON loading_locations(yard_id);
+CREATE INDEX idx_trucks_company_id ON trucks(company_id);
+CREATE INDEX idx_containers_company_id ON containers(company_id);
+CREATE INDEX idx_containers_location_id ON containers(loading_location_id);
+CREATE INDEX idx_loading_records_vehicle ON loading_records(vehicle_no);
+CREATE INDEX idx_loading_records_container ON loading_records(container_no);
+CREATE INDEX idx_loading_records_location ON loading_records(location_id);
+CREATE INDEX idx_loading_records_status ON loading_records(status); -- status 단일 조회용 인덱스
+CREATE INDEX idx_loading_records_container_status ON loading_records(container_no, status); -- 진행중 작업 중복검색 최적화 인덱스
+
+CREATE INDEX idx_overload_checks_vehicle ON overload_checks(vehicle_no);
+CREATE INDEX idx_overload_checks_container ON overload_checks(container_no);
+
+CREATE INDEX idx_gate_logs_actual_vehicle ON gate_logs(actual_vehicle_no);
+CREATE INDEX idx_gate_logs_status ON gate_logs(recognition_status);
+CREATE INDEX idx_gate_logs_vehicle_pass ON gate_logs(actual_vehicle_no, pass_at DESC);
+CREATE INDEX idx_gate_logs_type_pass ON gate_logs(gate_type, pass_at DESC);
+
+CREATE INDEX idx_posts_category_created ON posts(category, created_at DESC) WHERE is_deleted = FALSE;
+CREATE INDEX idx_posts_account_id ON posts(account_id);
+CREATE INDEX idx_posts_search ON posts USING gin (to_tsvector('simple', coalesce(title, '') || ' ' || coalesce(content_text, '')));
+CREATE INDEX idx_comments_post_id ON post_comments(post_id) WHERE is_deleted = FALSE;
+CREATE INDEX idx_attachments_post_id ON attachments(post_id);
+
+-- ==========================================
+-- 10. 더미 데이터 (yards, loading_locations, companies, containers)
+-- ==========================================
+INSERT INTO yards (yard_name, yard_type, latitude, longitude) VALUES
+    ('인천신항 A야드', 'GENERAL', 37.352100, 126.583600),
+    ('인천신항 B야드(냉동)', 'REEFER', 37.353400, 126.586200),
+    ('송도 배후단지 야드', 'GENERAL', 37.389500, 126.643800);
+
+INSERT INTO loading_locations (yard_id, sector, latitude, longitude) VALUES
+    (1, 'A-01', 37.352110, 126.583610),
+    (1, 'A-02', 37.352150, 126.583650),
+    (1, 'A-03', 37.352190, 126.583690),
+    (1, 'A-04', 37.352230, 126.583730),
+    (1, 'A-05', 37.352270, 126.583770),
+    (2, 'B-01', 37.353410, 126.586210),
+    (2, 'B-02', 37.353450, 126.586250),
+    (2, 'B-03', 37.353490, 126.586290),
+    (2, 'B-04', 37.353530, 126.586330),
+    (2, 'B-05', 37.353570, 126.586370),
+    (3, 'C-01', 37.389510, 126.643810),
+    (3, 'C-02', 37.389550, 126.643850),
+    (3, 'C-03', 37.389590, 126.643890),
+    (3, 'C-04', 37.389630, 126.643930),
+    (3, 'C-05', 37.389670, 126.643970);
+
+INSERT INTO companies (company_name, address, business_no, industry_type, representative_name) VALUES
+    ('못먹어도S카고 물류', '인천광역시 중구 항동7가 12', '101-81-10001', '컨테이너 운송업', '최길웅'),
+    ('태수 익스프레스', '인천광역시 연수구 컨테이너로 34', '102-81-10002', '화물 운송업', '태수'),
+    ('한솔 로지스틱스', '인천광역시 남동구 논현로 56', '103-81-10003', '보관업', '한솔'),
+    ('예지 카고 서비스', '인천광역시 서구 청라대로 78', '104-81-10004', '냉동 · 냉장 운송업', '예지'),
+    ('은정 통운', '인천광역시 중구 서해대로 90', '105-81-10005', '육상 화물 운송업', '은정'),
+    ('길웅 해운', '인천광역시 중구 연안부두로 21', '106-81-10006', '해상 운송업', '최길웅'),
+    ('S카고 컨테이너터미널', '인천광역시 연수구 송도과학로 43', '107-81-10007', '항만 하역업', '태수'),
+    ('못먹어도 물류센터', '인천광역시 서구 가정로 65', '108-81-10008', '창고 보관업', '한솔'),
+    ('예지앤태수 로지스틱스', '인천광역시 중구 축항대로 87', '109-81-10009', '국제물류주선업', '예지'),
+    ('은정카고', '인천광역시 남동구 남동대로 109', '110-81-10010', '화물자동차운송업', '은정'),
+    ('한솔익스프레스터미널', '인천광역시 연수구 인천신항대로 132', '111-81-10011', '컨테이너 운송업', '한솔'),
+    ('카고못먹어도 유통', '인천광역시 미추홀구 인주대로 154', '112-81-10012', '종합 유통업', '최길웅'),
+    ('태수앤은정 물류', '인천광역시 서구 청라국제대로 176', '113-81-10013', '3자물류(3PL)', '태수'),
+    ('예지로지스', '인천광역시 중구 신항로 198', '114-81-10014', '항만 하역업', '예지'),
+    ('S카고 종합물류', '인천광역시 연수구 옥련로 220', '115-81-10015', '종합물류업', '한솔');
+
+INSERT INTO containers
+    (container_no, iso_size_type_code, container_type, is_high_cube,
+     max_gross_kg, tare_kg, net_kg, cubic_capacity_cbm, csc_approval_no,
+     reserved_cargo_info, company_id, loading_location_id)
+VALUES
+    ('SUDU9939088', '42G1', '일반', FALSE, 32500.0, 3750.0, 28750.0, 67.7, 'NV/CSC/2018/2186', '{"cargo_name": "건축자재", "weight_kg": 15821.3}', 15, 14),
+    ('APLU2251273', '22G1', '일반', FALSE, 30480.0, 2200.0, 28280.0, 33.2, 'KR/CSC/2024/7851', NULL, NULL, 2),
+    ('HJSU4451408', '22G1', '일반', FALSE, 30480.0, 2200.0, 28280.0, 33.2, 'GL/CSC/2019/4657', '{"cargo_name": "전자부품", "weight_kg": 15696.3}', 7, 11),
+    ('MSCU2318213', '22G1', '일반', FALSE, 30480.0, 2200.0, 28280.0, 33.2, 'GL/CSC/2020/5744', NULL, NULL, 7),
+    ('CMAU5986467', '45G1', '일반', TRUE, 32500.0, 3660.0, 28840.0, 67.6, 'GL/CSC/2020/2688', '{"cargo_name": "냉동식품", "weight_kg": 11192.7}', 9, 10),
+    ('MAEU5917833', '22G1', '일반', FALSE, 30480.0, 2200.0, 28280.0, 33.2, 'GL/CSC/2021/9133', '{"cargo_name": "건축자재", "weight_kg": 13243.2}', 15, 11),
+    ('PONU3791467', '45G1', '일반', TRUE, 32500.0, 3660.0, 28840.0, 67.6, 'PA/CSC/2020/4999', '{"cargo_name": "가전제품", "weight_kg": 13892.6}', 6, 2),
+    ('PONU3019242', '42R1', '냉동', FALSE, 34000.0, 4800.0, 29200.0, 59.3, 'KR/CSC/2019/9387', NULL, NULL, 7),
+    ('SUDU1593677', '22R1', '냉동', FALSE, 30480.0, 3080.0, 27400.0, 28.3, 'NV/CSC/2018/2271', '{"cargo_name": "냉동식품", "weight_kg": 20360.1}', 14, 13),
+    ('SUDU3566449', '45R1', '냉동', TRUE, 34000.0, 4900.0, 29100.0, 66.0, 'LR/CSC/2025/8474', '{"cargo_name": "냉동식품", "weight_kg": 23783.0}', 8, 2),
+    ('MAEU0636160', '45R1', '냉동', TRUE, 34000.0, 4900.0, 29100.0, 66.0, 'LR/CSC/2025/5662', '{"cargo_name": "냉동식품", "weight_kg": 17710.4}', 1, 12),
+    ('PONU3727318', '42G1', '일반', FALSE, 32500.0, 3750.0, 28750.0, 67.7, 'GL/CSC/2019/9088', NULL, NULL, 1),
+    ('CSNU1356233', '45R1', '냉동', TRUE, 34000.0, 4900.0, 29100.0, 66.0, 'PA/CSC/2024/7405', '{"cargo_name": "냉동식품", "weight_kg": 4772.8}', 8, 15),
+    ('YMLU5761290', '45G1', '일반', TRUE, 32500.0, 3660.0, 28840.0, 67.6, 'PA/CSC/2024/5561', '{"cargo_name": "건축자재", "weight_kg": 18019.9}', 7, 12),
+    ('TCLU1582521', '22G1', '일반', FALSE, 30480.0, 2200.0, 28280.0, 33.2, 'PA/CSC/2020/4800', NULL, NULL, 11),
+    ('TGHU8714640', '42R1', '냉동', FALSE, 34000.0, 4800.0, 29200.0, 59.3, 'PA/CSC/2022/5619', NULL, NULL, 1),
+    ('HJSU3871900', '42R1', '냉동', FALSE, 34000.0, 4800.0, 29200.0, 59.3, 'GL/CSC/2023/3056', '{"cargo_name": "냉동식품", "weight_kg": 23904.9}', 11, 12),
+    ('MSCU4788258', '45R1', '냉동', TRUE, 34000.0, 4900.0, 29100.0, 66.0, 'GL/CSC/2024/7521', '{"cargo_name": "냉동식품", "weight_kg": 13593.5}', 7, 7),
+    ('MSCU1998688', '22G1', '일반', FALSE, 30480.0, 2200.0, 28280.0, 33.2, 'PA/CSC/2025/3659', NULL, NULL, 2),
+    ('MSCU1073522', '22G1', '일반', FALSE, 30480.0, 2200.0, 28280.0, 33.2, 'GL/CSC/2020/9791', '{"cargo_name": "식음료", "weight_kg": 3561.0}', 14, 2),
+    ('EGHU6438980', '22R1', '냉동', FALSE, 30480.0, 3080.0, 27400.0, 28.3, 'PA/CSC/2022/6691', '{"cargo_name": "냉동식품", "weight_kg": 5702.5}', 14, 10),
+    ('TGHU4886255', '22R1', '냉동', FALSE, 30480.0, 3080.0, 27400.0, 28.3, 'NV/CSC/2022/2407', NULL, NULL, 3),
+    ('SUDU7763148', '45G1', '일반', TRUE, 32500.0, 3660.0, 28840.0, 67.6, 'NV/CSC/2020/9459', NULL, NULL, 1),
+    ('APLU3793242', '42G1', '일반', FALSE, 32500.0, 3750.0, 28750.0, 67.7, 'GL/CSC/2018/9652', '{"cargo_name": "자동차 부품", "weight_kg": 18316.3}', 5, 5),
+    ('APLU3845120', '42G1', '일반', FALSE, 32500.0, 3750.0, 28750.0, 67.7, 'LR/CSC/2021/9725', '{"cargo_name": "건축자재", "weight_kg": 17001.7}', 10, 9),
+    ('EGHU8452340', '42G1', '일반', FALSE, 32500.0, 3750.0, 28750.0, 67.7, 'NV/CSC/2021/4275', '{"cargo_name": "전자부품", "weight_kg": 24771.3}', 13, 9),
+    ('TRIU4951799', '45G1', '일반', TRUE, 32500.0, 3660.0, 28840.0, 67.6, 'PA/CSC/2023/8327', '{"cargo_name": "건축자재", "weight_kg": 24010.0}', 6, 13),
+    ('MAEU2311713', '22G1', '일반', FALSE, 30480.0, 2200.0, 28280.0, 33.2, 'PA/CSC/2025/4222', NULL, NULL, 6),
+    ('ZIMU9440416', '42R1', '냉동', FALSE, 34000.0, 4800.0, 29200.0, 59.3, 'KR/CSC/2025/6636', '{"cargo_name": "냉동식품", "weight_kg": 21362.3}', 2, 13),
+    ('YMLU8203040', '45R1', '냉동', TRUE, 34000.0, 4900.0, 29100.0, 66.0, 'PA/CSC/2025/3924', '{"cargo_name": "냉동식품", "weight_kg": 10315.4}', 13, 7),
+    ('YMLU4856597', '22R1', '냉동', FALSE, 30480.0, 3080.0, 27400.0, 28.3, 'KR/CSC/2020/3785', NULL, NULL, 3),
+    ('NYKU9488066', '22R1', '냉동', FALSE, 30480.0, 3080.0, 27400.0, 28.3, 'PA/CSC/2025/6741', '{"cargo_name": "냉동식품", "weight_kg": 5881.6}', 1, 3),
+    ('CMAU5521602', '45R1', '냉동', TRUE, 34000.0, 4900.0, 29100.0, 66.0, 'PA/CSC/2024/4191', '{"cargo_name": "냉동식품", "weight_kg": 3615.9}', 4, 14),
+    ('CSNU5255067', '42G1', '일반', FALSE, 32500.0, 3750.0, 28750.0, 67.7, 'GL/CSC/2023/5249', '{"cargo_name": "의류", "weight_kg": 4339.9}', 12, 9),
+    ('OOLU9413105', '22R1', '냉동', FALSE, 30480.0, 3080.0, 27400.0, 28.3, 'GL/CSC/2024/9219', '{"cargo_name": "냉동식품", "weight_kg": 14517.1}', 1, 3),
+    ('PONU8142250', '42G1', '일반', FALSE, 32500.0, 3750.0, 28750.0, 67.7, 'GL/CSC/2018/3454', NULL, NULL, 3),
+    ('ZIMU7604207', '22G1', '일반', FALSE, 30480.0, 2200.0, 28280.0, 33.2, 'GL/CSC/2018/6340', '{"cargo_name": "가전제품", "weight_kg": 13614.7}', 13, 11),
+    ('CMAU9261313', '42R1', '냉동', FALSE, 34000.0, 4800.0, 29200.0, 59.3, 'KR/CSC/2021/4134', NULL, NULL, 5),
+    ('CMAU5323762', '22R1', '냉동', FALSE, 30480.0, 3080.0, 27400.0, 28.3, 'GL/CSC/2018/2038', NULL, NULL, 8),
+    ('APLU6355810', '42R1', '냉동', FALSE, 34000.0, 4800.0, 29200.0, 59.3, 'PA/CSC/2022/8411', '{"cargo_name": "냉동식품", "weight_kg": 13516.8}', 4, 9),
+    ('APLU9191140', '45G1', '일반', TRUE, 32500.0, 3660.0, 28840.0, 67.6, 'GL/CSC/2021/8332', '{"cargo_name": "화학원료(비위험)", "weight_kg": 12726.6}', 2, 3),
+    ('TCLU4491451', '22G1', '일반', FALSE, 30480.0, 2200.0, 28280.0, 33.2, 'PA/CSC/2022/3004', '{"cargo_name": "건축자재", "weight_kg": 6145.5}', 15, 15),
+    ('HLXU4904564', '42G1', '일반', FALSE, 32500.0, 3750.0, 28750.0, 67.7, 'KR/CSC/2024/8983', '{"cargo_name": "냉동식품", "weight_kg": 6552.3}', 7, 3),
+    ('APLU4234254', '45G1', '일반', TRUE, 32500.0, 3660.0, 28840.0, 67.6, 'NV/CSC/2021/6842', NULL, NULL, 6),
+    ('OOLU0204296', '45G1', '일반', TRUE, 32500.0, 3660.0, 28840.0, 67.6, 'GL/CSC/2025/8216', NULL, NULL, 12),
+    ('SUDU5425687', '42R1', '냉동', FALSE, 34000.0, 4800.0, 29200.0, 59.3, 'LR/CSC/2019/2848', '{"cargo_name": "냉동식품", "weight_kg": 24377.3}', 2, 15),
+    ('MAEU2784640', '45G1', '일반', TRUE, 32500.0, 3660.0, 28840.0, 67.6, 'KR/CSC/2020/5430', NULL, NULL, 13),
+    ('WHLU8908572', '45R1', '냉동', TRUE, 34000.0, 4900.0, 29100.0, 66.0, 'LR/CSC/2024/3447', '{"cargo_name": "냉동식품", "weight_kg": 15553.1}', 12, 9),
+    ('SUDU0938075', '45G1', '일반', TRUE, 32500.0, 3660.0, 28840.0, 67.6, 'KR/CSC/2020/7968', NULL, NULL, 15),
+    ('BICU6652589', '22G1', '일반', FALSE, 30480.0, 2200.0, 28280.0, 33.2, 'LR/CSC/2019/4643', NULL, NULL, 2);

@@ -9,7 +9,7 @@ import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 
 /**
- * 26.10.01 추가(계중대 정식화): 게이트 OCR을 통과해 계중대 계량을 기다리는 차량 1대.
+ * 26.10.01 추가(검사소 정식화): 게이트 OCR을 통과해 검사소 계량을 기다리는 차량 1대.
  * gate_logs(게이트 통과 기록) + trucks(등록차량 정보)를 합쳐서 내려준다.
  */
 @Getter

@@ -61,13 +61,7 @@ const columns = [
   { key: 'sector', label: '섹터/블록명' },
   { key: 'status', label: '적재 상태', type: 'badge', align: 'center', badge: (v) => STATUS_BADGE[v] || { label: v || '-', tone: 'muted' } },
   { key: 'isAvailable', label: '배정 가능', type: 'boolean', align: 'center', trueLabel: '가능', falseLabel: '불가' },
-  { key: 'latitude', label: '위도', align: 'right', format: fmtCoord },
-  { key: 'longitude', label: '경도', align: 'right', format: fmtCoord },
 ]
-
-function fmtCoord(v) {
-  return v === null || v === undefined || v === '' ? '-' : Number(v).toFixed(6)
-}
 
 const formFields = [
   { key: 'yardId', label: '소속 야드', type: 'select', required: true, options: () => yardOptions.value, disabled: (row) => !!row },
@@ -77,8 +71,6 @@ const formFields = [
     options: () => Object.entries(STATUS_BADGE).map(([value, b]) => ({ value, label: b.label })),
   },
   { key: 'isAvailable', label: '배정 가능 여부', type: 'checkbox', checkboxLabel: '컨테이너를 배정할 수 있습니다', default: true },
-  { key: 'latitude', label: '위도', type: 'number', step: '0.000001', min: -90, max: 90 },
-  { key: 'longitude', label: '경도', type: 'number', step: '0.000001', min: -180, max: 180 },
 ]
 
 async function loadYardOptions() {
@@ -108,7 +100,7 @@ async function handleCreate(payload) {
   await adminApi.post(
     '/api/loading-locations',
     withBoolAliases(
-      { ...payload, yardId: toNum(payload.yardId), latitude: toNum(payload.latitude), longitude: toNum(payload.longitude) },
+      { ...payload, yardId: toNum(payload.yardId) },
       ['isAvailable']
     )
   )
@@ -123,8 +115,6 @@ async function handleUpdate(id, payload, row) {
       sector: payload.sector,
       status: payload.status,
       isAvailable: payload.isAvailable,
-      latitude: toNum(payload.latitude),
-      longitude: toNum(payload.longitude),
     },
     ['isAvailable']
   )

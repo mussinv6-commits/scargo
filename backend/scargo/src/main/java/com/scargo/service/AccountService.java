@@ -9,6 +9,7 @@ import com.scargo.entity.Company;
 import com.scargo.Enum.NotificationType;
 import com.scargo.repository.AccountRepository;
 import com.scargo.repository.CompanyRepository;
+import com.scargo.repository.TruckRepository; // 26.10.01 병합: 회원 삭제 시 차량 배정 해제
 import com.scargo.dto.LoginRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -25,6 +26,7 @@ public class AccountService {
 
     private final AccountRepository accountRepository;
     private final CompanyRepository companyRepository;
+    private final TruckRepository truckRepository; // 26.10.01 병합: 회원 삭제 시 차량 배정 해제
     private final BCryptPasswordEncoder passwordEncoder;
     private final NotificationService notificationService; // 알람 서비스 주입
 
@@ -190,6 +192,26 @@ public class AccountService {
         if (account.getUserType() != Account.UserType.CORPORATE_PENDING) {
             throw new IllegalArgumentException("승인 대기 중인 기업 계정이 아닙니다.");
         }
+
+        accountRepository.delete(account);
+    }
+
+    // 26.10.01 병합: 관리자 회원 관리 화면의 회원 삭제 (프론트에서 DELETE /api/accounts/{id} 호출하는데 백엔드에 없었음)
+    // - 관리자 계정은 삭제 불가 (관리자 전원이 지워져 로그인 못 하는 상황 방지)
+    // - 전담 차량이 배정된 기사면 배정을 먼저 해제 (trucks.assigned_account_id)
+    // - 게시글/댓글/점검표 작성자는 DB 에서 NULL 처리, 알림은 같이 삭제됨 (FK ON DELETE 설정)
+    @Transactional
+    public void deleteAccount(Long accountId) {
+        Account account = accountRepository.findById(accountId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 계정입니다. ID: " + accountId));
+
+        if (account.getUserType() == Account.UserType.ADMIN) {
+            throw new IllegalArgumentException("관리자 계정은 삭제할 수 없습니다.");
+        }
+
+        truckRepository.findByAssignedDriver_AccountId(accountId)
+                .ifPresent(truck -> truck.setAssignedDriver(null));
+        truckRepository.flush();
 
         accountRepository.delete(account);
     }

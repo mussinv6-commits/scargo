@@ -31,7 +31,7 @@
         <div class="home-card">
           <div class="home-card-icon orange">🚚</div>
           <h3>기사 화면</h3>
-          <p>내 차량 정보, 오늘의 배차, 적재 위치 안내와 입·출차 체크인을 한 곳에서 처리할 수 있습니다.</p>
+          <p>내 차량 정보와 배차·운행 현황을 한 곳에서 확인할 수 있습니다.</p>
         </div>
 
         <div class="home-card">

@@ -22,6 +22,7 @@
       :loading="loading"
       :form-fields="formFields"
       :page-size="10"
+      :creatable="false"
       :row-label="(r) => r.gateName"
       :on-create="handleCreate"
       :on-update="handleUpdate"

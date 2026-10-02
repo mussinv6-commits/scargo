@@ -1,5 +1,6 @@
 <template>
   <aside class="admin-sidebar">
+    <div class="admin-nav-scroll">
     <RouterLink to="/admin" class="admin-nav-item admin-nav-home" :class="{ active: route.path === '/admin' }">
       대시보드
     </RouterLink>
@@ -23,6 +24,12 @@
     <RouterLink v-for="m in groups.etc" :key="m.to" :to="m.to" class="admin-nav-item" :class="{ active: isActive(m.to) }">
       {{ m.label }}
     </RouterLink>
+
+    <div class="admin-nav-group-label">안내</div>
+    <RouterLink v-for="m in groups.notice" :key="m.to" :to="m.to" class="admin-nav-item" :class="{ active: isActive(m.to) }">
+      {{ m.label }}
+    </RouterLink>
+    </div>
 
     <div class="admin-side-foot">
       <p>안전한 물류,<br />스마트한 이동</p>

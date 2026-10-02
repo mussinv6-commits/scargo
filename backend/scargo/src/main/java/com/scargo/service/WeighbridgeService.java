@@ -36,8 +36,8 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * 26.10.01 추가(계중대 정식화)
- * 게이트 OCR 통과 → 계중대 계량 → 과적 판정 → overload_checks 저장 흐름을 담당한다.
+ * 26.10.01 추가(검사소 정식화)
+ * 게이트 OCR 통과 → 검사소 계량 → 과적 판정 → overload_checks 저장 흐름을 담당한다.
  *
  * 판정 기준(기본값, 도로법 시행령 제79조의 운행 제한 기준):
  *   - 축하중 10톤(10,000kg) 초과
@@ -58,6 +58,18 @@ public class WeighbridgeService {
     private final ContainerRepository containerRepository;         // 26.10.01 추가: 컨테이너 자동 조회
     private final LoadingRecordRepository loadingRecordRepository; // 26.10.01 추가
     private final ObjectMapper objectMapper;                       // 26.10.01 추가: trucks.planned_route(JSON) 읽기용
+
+    /** 26.10.02 추가: 게이트 기록의 ocrRawData(JSON)에서 scanType(ENTRY/EXIT) 꺼내기. 없으면 null */
+    private String scanTypeOf(GateLog log) {
+        String raw = log.getOcrRawData();
+        if (raw == null || raw.isBlank()) return null;
+        try {
+            com.fasterxml.jackson.databind.JsonNode n = objectMapper.readTree(raw).path("scanType");
+            return n.isMissingNode() || n.isNull() ? null : n.asText().trim().toUpperCase();
+        } catch (Exception e) {
+            return null;
+        }
+    }
 
     @Value("${scargo.weighbridge.axle-limit-kg:10000}")
     private int axleLimitKg;
@@ -83,7 +95,13 @@ public class WeighbridgeService {
     // 1. 계량 대기열: 게이트를 통과(등록차량 매칭)했지만 아직 계량하지 않은 차량
     public List<WeighbridgeQueueItem> getQueue() {
         OffsetDateTime since = OffsetDateTime.now(KST).minusHours(queueHours);
-        List<GateLog> logs = gateLogRepository.findWeighbridgeQueue(since);
+        // 26.10.02 변경: 계량은 입차(ENTRY) 때 한 번만.
+        //  - 출차(EXIT) OCR 기록은 대기열에 올리지 않음
+        //  - 이번 방문(queueHours 안)에 이미 계량한 차량도 올리지 않음
+        List<GateLog> logs = gateLogRepository.findWeighbridgeQueue(since).stream()
+                .filter(log -> !"EXIT".equals(scanTypeOf(log)))
+                .filter(log -> !overloadCheckRepository.existsByVehicleNoAndCheckedAtGreaterThanEqual(log.getActualVehicleNo(), since))
+                .toList();
         if (logs.isEmpty()) {
             return List.of();
         }
@@ -215,10 +233,18 @@ public class WeighbridgeService {
             if (overloadCheckRepository.existsByGateLogId(gateLog.getGateLogId())) {
                 throw new IllegalStateException("이미 계량을 마친 차량입니다. (" + vehicleNo + ")");
             }
+            // 26.10.02 추가: 출차 OCR 기록이거나, 이번 방문에서 이미 계량한 차량이면 다시 계량하지 않음 (과적이면 재계량으로)
+            if ("EXIT".equals(scanTypeOf(gateLog))) {
+                throw new IllegalStateException("출차 차량은 계량하지 않습니다. (" + vehicleNo + ")");
+            }
+            if (overloadCheckRepository.existsByVehicleNoAndCheckedAtGreaterThanEqual(
+                    vehicleNo, OffsetDateTime.now(KST).minusHours(queueHours))) {
+                throw new IllegalStateException("이번 입차에서 이미 계량한 차량입니다. 과적이면 재계량을 이용하세요. (" + vehicleNo + ")");
+            }
         }
 
         Measurement m = Measurement.of(request.getAxles());
-        List<Violation> violations = judge(m);
+        List<Violation> violations = judge(m, request.getVgmWeightKg(), maxPayloadKg(vehicleNo));
         boolean isViolation = !violations.isEmpty();
 
         // 26.10.01 변경: 컨테이너 번호는 화면 입력이 아니라 DB(차량 배정/적재기록)에서 자동으로 채움
@@ -231,7 +257,8 @@ public class WeighbridgeService {
         OverloadCheckCreateRequest create = OverloadCheckCreateRequest.builder()
                 .vehicleNo(vehicleNo)
                 .containerNo(containerNo)
-                .usagePurpose("계중대 계량")
+                .usagePurpose("검사소 계량")
+                .vgmWeight(request.getVgmWeightKg()) // 26.10.02 추가: 컨테이너 총중량(자체중량+화물)
                 .maxPayload(maxPayloadKg(vehicleNo)) // 26.10.01 추가: 등록차량의 최대 적재중량(trucks.max_load_weight)
                 .totalWeight(m.total)
                 .axleCount(m.weights.length)
@@ -268,12 +295,19 @@ public class WeighbridgeService {
         }
 
         Measurement m = Measurement.of(request.getAxles());
-        List<Violation> violations = judge(m);
+        Integer loadKg = request.getVgmWeightKg() != null ? request.getVgmWeightKg() : check.getVgmWeight();
+        List<Violation> violations = judge(m, loadKg, check.getMaxPayload());
         boolean isViolation = !violations.isEmpty();
 
         check.applyReweigh(m.weights, m.left, m.right, m.total, isViolation,
                 isViolation ? describe(violations) : null);
         overloadCheckRepository.saveAndFlush(check);
+        
+     // 재계량 후에도 여전히 과적이면 알림
+        if (isViolation) {
+            overloadService.notifyOverload(check, true);
+        }
+        
         return toResult(checkId, violations);
     }
 
@@ -284,6 +318,18 @@ public class WeighbridgeService {
         OverloadCheck saved = overloadCheckRepository.findById(checkId)
                 .orElseThrow(() -> new IllegalStateException("저장된 계량 기록을 다시 읽지 못했습니다. id=" + checkId));
         return new WeighingResultResponse(new OverloadCheckResponse(saved), violations, axleLimitKg, grossLimitKg);
+    }
+
+    // 26.10.02 추가: 적재중량(컨테이너 자중+화물)이 최대적재량의 110%를 넘으면 위반
+    private List<Violation> judge(Measurement m, Integer loadKg, Integer maxPayload) {
+        List<Violation> list = judge(m);
+        if (loadKg != null && maxPayload != null && maxPayload > 0) {
+            int limit = (int) Math.round(maxPayload * 1.1);
+            if (loadKg > limit) {
+                list.add(new Violation("PAYLOAD", null, loadKg, limit));
+            }
+        }
+        return list;
     }
 
     private List<Violation> judge(Measurement m) {
@@ -303,6 +349,8 @@ public class WeighbridgeService {
         return violations.stream()
                 .map(v -> "GROSS".equals(v.getType())
                         ? String.format("총중량 %,dkg (기준 %,dkg 초과)", v.getMeasuredKg(), v.getLimitKg())
+                        : "PAYLOAD".equals(v.getType())
+                        ? String.format("적재중량 %,dkg (최대적재량 110%% %,dkg 초과)", v.getMeasuredKg(), v.getLimitKg())
                         : String.format("%d축 %,dkg (축하중 기준 %,dkg 초과)", v.getAxleNo(), v.getMeasuredKg(), v.getLimitKg()))
                 .collect(Collectors.joining(", "));
     }

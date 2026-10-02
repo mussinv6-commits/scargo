@@ -205,9 +205,9 @@ watch(
 )
 
 function alignClass(col) {
-  if (col.align === 'text-center' || col.align === 'center') return 'is-center'
   if (col.align === 'text-end' || col.align === 'right') return 'is-right'
-  return 'is-left'
+  if (col.align === 'text-start' || col.align === 'left') return 'is-left'
+  return 'is-center'
 }
 
 function boolTone(col, value) {

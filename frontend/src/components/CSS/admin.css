@@ -169,7 +169,17 @@
   flex-direction: column;
   gap: 1px;
   height: 100%;
+  min-height: 0;
   overflow: hidden;
+}
+.admin-shell .admin-nav-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }
 .admin-shell.is-collapsed .admin-sidebar { display: none; }
 
@@ -254,13 +264,20 @@
 .admin-shell .admin-nav-home { margin-bottom: 6px; }
 
 .admin-shell .admin-side-foot {
-  margin-top: auto;
+  margin-top: 0;
   padding: 10px 12px 4px;
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
   gap: 8px;
   flex-shrink: 0;
+}
+@media (max-height: 860px) {
+  .admin-shell .admin-sidebar { padding: 8px 12px 6px; }
+  .admin-shell .admin-nav-group-label { padding: 6px 12px 1px; }
+  .admin-shell .admin-nav-item { padding: 5px 12px; }
+  .admin-shell .admin-nav-home { margin-bottom: 2px; }
+  .admin-shell .admin-side-foot { padding: 8px 12px 2px; }
 }
 .admin-shell .admin-side-foot p {
   margin: 0;
@@ -405,7 +422,10 @@
   padding-bottom: 16px;
   border-bottom: 1px solid var(--a-border);
 }
-.admin-shell .admin-page-heading { min-width: 0; }
+.admin-shell .admin-page-heading {
+  min-width: 0;
+  padding-left: 20px;
+}
 .admin-shell .admin-page-header h1 {
   font-family: 'Barlow Condensed', 'Inter', sans-serif;
   font-size: 26px;
@@ -558,8 +578,6 @@ a.kpi-card:hover { border-color: var(--a-primary); }
 
 .crud-table-scroll { overflow-x: auto; }
 .crud-table { width: 100%; border-collapse: collapse; font-size: 13px; white-space: nowrap; }
-/* 26.09.30 수정: 헤더는 왼쪽, 데이터는 #app 상속으로 가운데 → 열이 어긋나 보이던 문제.
-   th/td 모두 같은 정렬 클래스(is-left / is-center / is-right)를 쓰도록 통일 */
 .crud-table thead th {
   font-weight: 700;
   color: var(--a-text-muted, #64748b);
@@ -575,7 +593,11 @@ a.kpi-card:hover { border-color: var(--a-primary); }
   color: var(--a-text, #0a2540);
   vertical-align: middle;
 }
-.crud-table th, .crud-table td { text-align: left; }
+.crud-table th, .crud-table td { text-align: center; }
+.admin-app thead th,
+.admin-shell thead th {
+  text-align: center !important;
+}
 .crud-table .is-left { text-align: left; }
 .crud-table .is-center { text-align: center; }
 .crud-table .is-right { text-align: right; font-variant-numeric: tabular-nums; }
@@ -990,14 +1012,14 @@ a.kpi-card:hover { border-color: var(--a-primary); }
 }
 .ops-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .ops-table th {
-  text-align: left;
+  text-align: center !important;
   color: var(--a-text-muted);
   font-size: 12px;
   font-weight: 700;
   padding: 8px 6px;
   border-bottom: 1px solid var(--a-border);
 }
-.ops-table td { padding: 10px 6px; border-bottom: 1px solid #f1f4f8; }
+.ops-table td { padding: 10px 6px; border-bottom: 1px solid #f1f4f8; text-align: center; }
 .ops-kind { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; white-space: nowrap; }
 .ops-kind img { width: 20px; height: 20px; object-fit: contain; display: block; }
 .ops-flow {
@@ -1088,10 +1110,6 @@ a.kpi-card:hover { border-color: var(--a-primary); }
 .ops-hour-col.peak .ops-hour-bar { background: #1d4ed8; }
 .ops-hour-col small { font-size: 10px; color: var(--a-text-muted); }
 .ops-hour-peak {
-  position: absolute;
-  top: 0;
-  left: 50%;
-  transform: translate(-50%, -4px);
   background: #0a2540;
   color: #fff;
   font-size: 10px;
@@ -1129,6 +1147,9 @@ a.kpi-card:hover { border-color: var(--a-primary); }
     overflow-x: auto;
     padding: 10px 12px;
     gap: 4px;
+  }
+  .admin-shell .admin-nav-scroll {
+    display: contents;
   }
   .admin-shell .admin-brand,
   .admin-shell .admin-nav-group-label { display: none; }

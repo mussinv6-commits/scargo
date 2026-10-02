@@ -37,18 +37,15 @@ gate_watch_service.py(폴더 상시 감시)를 HTTP로 트리거하는 방식으
   감시 폴더에 넣으면 "등록차량 일치 -> 차단기 오픈", 그 외 사진은 "미등록 ->
   차단기 안 열림"을 보여줄 수 있음. trucks에 이미 데이터가 있으면(count>0)
   절대 건드리지 않음(기존 실제 데이터를 보존).
-
 *** gate_watch_service.py(자동 폴링), gate_live_demo.py(--limit/--delay 재생)는
 그대로 남겨둠 - 셋 다 트리거 방식만 다르고 인식 로직(batch_test_images.py)은
 전부 동일하게 재사용함. ***
-
 - 2026-09-30 추가 (스키마 재설계 대응): 사용자가 게이트 마스터 테이블(gates)을
   추가한 schema.sql을 새로 실행하면서 gate_logs.gate_name/gate_type 컬럼이
   사라지고 gate_id(FK)로 바뀜 - scargo 백엔드(GateLog 엔티티/서비스/DTO)도
   이에 맞춰 gate_id 참조 구조로 같이 업데이트함(GateLogCreateRequest가 이제
   gateCode를 받음). 이 파일도 그에 맞춰 payload의 "gateName"/"gateType"을
   "gateId": gate_id 하나로 교체함(위 DEFAULT_GATE_CODE 참고).
-
 실행 전 준비 (필수):
     1. 환경변수 설정 (PowerShell 예시)
        $env:GATE_API_ID = "admin"
@@ -60,16 +57,15 @@ gate_watch_service.py(폴더 상시 감시)를 HTTP로 트리거하는 방식으
        (trucks/companies 테이블이 이미 존재해야 함 - 새로 만들지 않음)
     3. scargo 백엔드(Spring Boot)가 http://localhost:8080 에서 구동 중이어야 함
        (게이트로그 저장은 여전히 이 API를 통해서 함)
-
 실행:
     pip install fastapi uvicorn[standard] pg8000 aiofiles
     (aiofiles는 정적 이미지 서빙(/images) 기능에 필요함. pg8000은 2026-09-30
     변경 - 한국어 Windows에서 psycopg2가 내는 UnicodeDecodeError를 피하기 위해
     순수 파이썬 드라이버로 교체함. psycopg2-binary는 더 이상 필요 없음)
     uvicorn gate_api:app --host 0.0.0.0 --port 8001
-
 사용 (발표 중 버튼/curl로 트리거):
-    curl -X POST http://localhost:8001/scan
+    curl -X POST "http://localhost:8001/scan?scanType=ENTRY"
+    curl -X POST "http://localhost:8001/scan?scanType=EXIT&vehicleNo=006너7233"
     -> 감시 폴더(기본: exe/스크립트 옆의 "게이트_수신함")에서 무작위로 사진 한 장을
        골라 인식하고, 등록차량(trucks) DB와 대조한 뒤, 게이트로그를 저장하고 결과를
        JSON으로 돌려줌. 폴더가 비어 있으면 204(처리할 사진 없음)를 돌려줌.
@@ -88,12 +84,12 @@ import sys
 import time
 from pathlib import Path
 from typing import Optional
-
+from enum import Enum
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
-
 import cv2
 import requests
 import torch
+import datetime as _dt
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -108,11 +104,8 @@ def _exe_dir():
     if getattr(sys, "frozen", False):
         return Path(sys.executable).resolve().parent
     return Path(__file__).resolve().parent
-
-
 APP_DIR = _exe_dir()
 sys.path.insert(0, str(APP_DIR))
-
 from batch_test_images import (  # noqa: E402  (경로 설정 뒤에 import 필요)
     CRNN_CHARS_PATH,
     CRNN_CONF_THRESHOLD,
@@ -128,7 +121,6 @@ from batch_test_images import (  # noqa: E402  (경로 설정 뒤에 import 필�
     pick_best_model,
 )
 from plate_ocr_crnn_attn import CRNNRecognizer, guess_line_count
-
 DEFAULT_WATCH_DIR = APP_DIR / "게이트_수신함"
 DEFAULT_SCARGO_API_BASE = "http://localhost:8080"
 # 2026-09-30 변경: gate_logs가 gate_name/gate_type을 직접 저장하던 구조에서,
@@ -139,11 +131,10 @@ DEFAULT_SCARGO_API_BASE = "http://localhost:8080"
 # 하나를 그대로 씀 - 스키마가 재실행돼도(SERIAL이 바뀌어도) 코드는 고정이라 안전함.
 DEFAULT_GATE_CODE = "Gate-ABC-01"
 # 2026-10-01 추가: 이 서버(gate_api.py)가 사진을 서빙하는 주소 - gate_logs.front_image_url에
-# 절대주소로 남겨서 다른 화면(계중대 등)에서도 <img src>로 바로 쓸 수 있게 함
+# 절대주소로 남겨서 다른 화면(검사소 등)에서도 <img src>로 바로 쓸 수 있게 함
 GATE_PUBLIC_BASE = os.environ.get("GATE_PUBLIC_BASE", "http://localhost:8001")
 DEFAULT_VEHICLE_TYPE = "TRUCK"  # gate_logs.vehicle_type에 쓰는 값 (trucks.truck_type과 매칭 비교에도 씀)
 IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png")
-
 # 2026-09-30: "더미데이터는 없어" 확인 - 실제 테스트 사진 중 존재하는 번호판을
 # 몇 개 등록차량(trucks)으로 미리 넣어둠. 이 번호판이 찍힌 사진(같은 파일명)을
 # 감시 폴더에 넣으면 매칭 성공(차단기 오픈) 케이스를 보여줄 수 있고, 그 외
@@ -157,14 +148,12 @@ DUMMY_VEHICLES = [
     ("경북98사5843", "TRUCK"),
     ("인천99바8989", "TRUCK"),
 ]
-
 logger = logging.getLogger("gate_api")
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
-
 app = FastAPI(title="Gate Recognition API")
 app.add_middleware(
     CORSMiddleware,
@@ -174,7 +163,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 # 2026-09-30: 실시간으로 인식한 "실제 사진"을 Vue 화면에서 바로 보여주기 위해
 # 감시 폴더(게이트_수신함, 그 밑의 processed/failed 포함)를 그대로 정적 파일로
 # 서빙함 - /scan 응답의 imageUrl이 이 경로를 가리킴(예: /images/processed/xxx.jpg).
@@ -182,7 +170,6 @@ DEFAULT_WATCH_DIR.mkdir(parents=True, exist_ok=True)
 (DEFAULT_WATCH_DIR / "processed").mkdir(parents=True, exist_ok=True)
 (DEFAULT_WATCH_DIR / "failed").mkdir(parents=True, exist_ok=True)
 app.mount("/images", StaticFiles(directory=str(DEFAULT_WATCH_DIR)), name="images")
-
 # 아래 전역 상태는 FastAPI startup 이벤트에서 한 번만 초기화됨(요청마다 모델을
 # 새로 로드하면 몇 초씩 걸려 데모에 못 씀).
 _state = {
@@ -192,6 +179,9 @@ _state = {
     "imgsz": None,
     "session": None,
     "db_conn": None,
+    # ENTRY 성공 차량 -> processed 이미지 경로
+    "entry_images": {},
+    "entry_times": {},  # 2026-10-02: 차량별 이번 ENTRY 시각 (이전 방문 과적기록과 섞이지 않게)
 }
 
 
@@ -214,18 +204,44 @@ def login(session, api_base, user_id, user_pw):
     )
     logger.info(f"[로그인 시도] status={resp.status_code}, 응답 내용={resp.text}")
     logger.info(f"[확보된 세션 쿠키 목록] {session.cookies.get_dict()}")
-
     if resp.status_code != 200:
         raise RuntimeError(f"scargo 로그인 실패 (status={resp.status_code}): {resp.text}")
-    
     # requests.Session이 자동으로 쿠키를 저장하지 못한 경우 대비 수동 주입
     if not session.cookies.get_dict():
         set_cookie = resp.headers.get("Set-Cookie")
         if set_cookie:
             session.headers.update({"Cookie": set_cookie})
             logger.warning("[경고] 세션 쿠키가 자동으로 저장되지 않아 헤더에 수동 주입했습니다.")
-
     logger.info(f"scargo 로그인 성공: {user_id}")
+
+
+def _overload_passed(conn, vehicle_no, since=None):
+    """이번 ENTRY 이후(since) 가장 최근 과적 검사 결과가 통과인지 확인 (기록 없음 = 불통과)."""
+    cur = conn.cursor()
+    try:
+        sql = "SELECT is_passed, is_violation FROM overload_checks WHERE REPLACE(vehicle_no, ' ', '') = %s "
+        args = [vehicle_no.replace(" ", "")]
+        if since is not None:
+            sql += "AND checked_at >= %s "
+            args.append(since)
+        sql += "ORDER BY checked_at DESC NULLS LAST, check_id DESC LIMIT 1"
+        cur.execute(sql, tuple(args))
+        row = cur.fetchone()
+        if not row:
+            return False
+        # 과적 여부(is_violation) 기준, 없으면 is_passed 사용
+        if row[1] is not None:
+            return row[1] is False
+        return bool(row[0])
+    except Exception:
+        logger.exception("과적 판정 조회 실패")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return False
+    finally:
+        cur.close()
 
 
 def get_db_connection():
@@ -242,7 +258,6 @@ def get_db_connection():
     파이썬 드라이버 pg8000으로 교체해서 이 클래스의 버그를 원천적으로 피함
     (DBAPI2 호환이라 아래 cur.execute(...) 등 나머지 코드는 그대로 재사용됨)."""
     import pg8000.dbapi as pg8000
-
     return pg8000.connect(
         host=os.environ.get("PGHOST", "localhost"),
         port=int(os.environ.get("PGPORT", "5432")),
@@ -267,7 +282,6 @@ def ensure_dummy_trucks(conn):
             logger.info(f"trucks 테이블에 이미 데이터 {count}건 있음 - 씨드 건너뜀(기존 데이터 보존)")
             conn.commit()
             return
-
         cur.execute("SELECT company_id FROM companies ORDER BY company_id LIMIT 1")
         row = cur.fetchone()
         if row is None:
@@ -275,7 +289,6 @@ def ensure_dummy_trucks(conn):
             conn.commit()
             return
         company_id = row[0]
-
         logger.info(f"trucks 테이블이 비어 있음 - 더미 등록차량 {len(DUMMY_VEHICLES)}건 씨드 (company_id={company_id})")
         cur.executemany(
             "INSERT INTO trucks (vehicle_no, company_id, truck_type) "
@@ -342,26 +355,22 @@ def recognize_one(image_path: Path):
     img = cv2.imread(str(image_path))
     if img is None:
         return None
-
     model = _state["yolo"]
     crnn = _state["crnn"]
     ocr_reader = _state["ocr_reader"]
     imgsz = _state["imgsz"]
-
     result = model.predict(source=img, conf=YOLO_CONF, iou=YOLO_IOU, imgsz=imgsz, verbose=False)[0]
     boxes_xyxy = result.boxes.xyxy.cpu().numpy()
     boxes_conf = result.boxes.conf.cpu().numpy()
     if len(boxes_xyxy) == 0:
         return {"pred": "", "ocr_conf": None, "engine": "", "det_conf": None,
                 "line_count": None, "crnn_raw_text": "", "crnn_raw_conf": None}
-
     best_i = int(boxes_conf.argmax())
     x1, y1, x2, y2 = [float(v) for v in boxes_xyxy[best_i]]
     det_conf = float(boxes_conf[best_i])
     h_img, w_img = img.shape[:2]
     x1, y1 = max(0.0, x1), max(0.0, y1)
     x2, y2 = min(float(w_img), x2), min(float(h_img), y2)
-
     low_conf_box = det_conf < 0.7
     pad_ratio = 0.30 if low_conf_box else 0.18
     pad_bottom_ratio = 0.65 if low_conf_box else pad_ratio
@@ -369,9 +378,7 @@ def recognize_one(image_path: Path):
     crop = padded_crop(img, x1, y1, x2, y2, pad_ratio=pad_ratio, pad_bottom_ratio=pad_bottom_ratio)
     if low_conf_box:
         crop = enhance_low_conf_crop(crop)
-
     line_count = guess_line_count(crop, box_ratio=box_ratio) if crnn is not None else None
-
     text, ocr_conf, engine, crnn_raw_text, crnn_raw_conf = ocr_plate(
         crnn, ocr_reader, crop, CRNN_CONF_THRESHOLD, box_ratio=box_ratio,
         pad_ratio=pad_ratio, pad_bottom_ratio=pad_bottom_ratio,
@@ -387,7 +394,6 @@ def recognize_one(image_path: Path):
             text = ""
     if text and not _is_plausible_plate_text(text):
         text = ""
-
     pred = text.replace(" ", "") if text else ""
     return {"pred": pred, "ocr_conf": ocr_conf, "engine": engine, "det_conf": det_conf,
             "line_count": line_count, "crnn_raw_text": crnn_raw_text or "",
@@ -424,22 +430,71 @@ def _pick_random_stable_file(watch_dir: Path) -> Optional[Path]:
     return None
 
 
+def _dedupe_watch_dir(watch_dir: Path) -> int:
+    """2026-10-02 추가: 게이트_수신함 / processed 에 쌓인 중복 사진 정리.
+    _move_safely 가 이름 충돌 때 붙인 "_1790...(13자리)" 사본은 원본과 같은 사진이라,
+    원본(또는 같은 이름의 다른 사본)이 이미 있으면 사본을 지운다. 사본만 남았으면 원본 이름으로 바꾼다."""
+    removed = 0
+    for folder in (watch_dir, watch_dir / "processed"):
+        if not folder.exists():
+            continue
+        for p in sorted(folder.iterdir(), key=lambda x: len(x.name)):
+            if not (p.is_file() and p.suffix.lower() in IMAGE_SUFFIXES):
+                continue
+            base = re.sub(r"(_\d{13})+$", "", p.stem)
+            if base == p.stem:
+                continue
+            canonical = folder / f"{base}{p.suffix}"
+            try:
+                if canonical.exists():
+                    if canonical.stat().st_size == p.stat().st_size:
+                        p.unlink()
+                        removed += 1
+                else:
+                    p.rename(canonical)
+            except OSError:
+                logger.exception(f"[{p.name}] 중복 사진 정리 실패")
+    if removed:
+        logger.info(f"게이트_수신함 중복 사진 {removed}장 정리")
+    return removed
+
+
+def _find_entry_photo(watch_dir: Path, vehicle_key: str) -> Optional[Path]:
+    """2026-10-02 추가: 차량번호로 된 사진 찾기 (예: 경기92아5439.jpeg, 경기92아5439_1790...jpeg).
+    processed → 게이트_수신함 → failed 순서로, 같은 폴더 안에서는 가장 최근 파일을 고름."""
+    for folder in (watch_dir / "processed", watch_dir, watch_dir / "failed"):
+        if not folder.exists():
+            continue
+        hits = [
+            p for p in folder.iterdir()
+            if p.is_file() and p.suffix.lower() in IMAGE_SUFFIXES
+            and (p.stem == vehicle_key or p.stem.startswith(vehicle_key + "_"))
+        ]
+        if hits:
+            return max(hits, key=lambda p: p.stat().st_mtime)
+    return None
+
+
 def _recycle_processed(watch_dir: Path) -> int:
     """2026-10-01 추가: 감시 폴더가 비면 processed 에 있던 사진을 다시 감시 폴더로 되돌림.
     시연 중에 사진이 다 떨어져 "처리할 사진이 없습니다"가 뜨는 것을 막기 위함.
     - _move_safely 가 붙인 "_1790...(13자리 타임스탬프)" 중복본은 원본 이름으로 되돌리고,
       같은 이름이 이미 있으면 그 중복본은 processed 에 그대로 둔다.
+    - 아직 출차(EXIT) 전인 차량의 입차 사진(entry_images)은 건드리지 않는다.
     - 환경변수 GATE_RECYCLE=0 이면 이 기능을 끈다."""
     if os.environ.get("GATE_RECYCLE", "1") == "0":
         return 0
     processed_dir = watch_dir / "processed"
     if not processed_dir.exists():
         return 0
+    in_use = {str(Path(p).resolve()) for p in _state.get("entry_images", {}).values()}
     moved = 0
     for p in sorted(processed_dir.iterdir()):
         if not (p.is_file() and p.suffix.lower() in IMAGE_SUFFIXES):
             continue
-        stem = re.sub(r"_\d{13}$", "", p.stem)
+        if str(p.resolve()) in in_use:
+            continue
+        stem = re.sub(r"(_\d{13})+$", "", p.stem)
         dest = watch_dir / f"{stem}{p.suffix}"
         if dest.exists():
             continue
@@ -453,18 +508,25 @@ def _recycle_processed(watch_dir: Path) -> int:
     return moved
 
 
+class ScanType(str, Enum):
+    ENTRY = "ENTRY"
+    EXIT = "EXIT"
+
+
 class ScanResult(BaseModel):
     fileName: str
+    scanType: ScanType
+    requestedVehicleNo: Optional[str] = None
     recognizedPlate: Optional[str] = None
     engine: Optional[str] = None
     detConfidence: Optional[float] = None
     ocrConfidence: Optional[float] = None
     lineCount: Optional[int] = None
-    matchResult: str  # "AUTHORIZED" | "DENIED" | "NOT_RECOGNIZED"
+    matchResult: str
     matchedVehicle: Optional[dict] = None
     gateOpen: bool
     gateLogId: Optional[int] = None
-    imageUrl: Optional[str] = None  # 2026-09-30: 실제 스캔된 사진 (/images/processed/... - 프론트에서 그대로 <img src>)
+    imageUrl: Optional[str] = None
 
 
 @app.on_event("startup")
@@ -472,11 +534,9 @@ def startup():
     logger.info("모델 로딩 중...")
     from ultralytics import YOLO
     import easyocr
-
     model_path, imgsz = pick_best_model()
     _state["yolo"] = YOLO(model_path)
     _state["imgsz"] = imgsz
-
     if CRNN_MODEL_PATH.exists() and CRNN_CHARS_PATH.exists():
         crnn = CRNNRecognizer()
         crnn.load(str(CRNN_MODEL_PATH), str(CRNN_CHARS_PATH))
@@ -484,21 +544,18 @@ def startup():
         logger.info(f"CRNN 로드 완료: {CRNN_MODEL_PATH.name}")
     else:
         logger.warning("CRNN 가중치를 못 찾음 - EasyOCR만 사용")
-
     use_gpu = torch.cuda.is_available()
     _state["ocr_reader"] = easyocr.Reader(["ko", "en"], gpu=use_gpu)
     logger.info(f"EasyOCR GPU 사용: {use_gpu}")
-
     user_id, user_pw = get_credentials()
     session = requests.Session()
     login(session, DEFAULT_SCARGO_API_BASE, user_id, user_pw)
     _state["session"] = session
-
     conn = get_db_connection()
     ensure_dummy_trucks(conn)
     _state["db_conn"] = conn
-
     DEFAULT_WATCH_DIR.mkdir(parents=True, exist_ok=True)
+    _dedupe_watch_dir(DEFAULT_WATCH_DIR)  # 2026-10-02 추가: 중복 사진 정리
     logger.info(f"감시 폴더: {DEFAULT_WATCH_DIR}")
     logger.info("준비 완료 - POST /scan 으로 트리거하세요")
 
@@ -509,121 +566,147 @@ def health():
 
 
 @app.post("/scan", response_model=ScanResult)
-def scan():
+def scan(scanType: ScanType = ScanType.ENTRY, vehicleNo: Optional[str] = None):
     watch_dir = DEFAULT_WATCH_DIR
     processed_dir = watch_dir / "processed"
     failed_dir = watch_dir / "failed"
-
-    path = _pick_random_stable_file(watch_dir)
-    if path is None and _recycle_processed(watch_dir) > 0:
+    # ENTRY는 새 사진을 사용하고, EXIT는 ENTRY 때 기억한 정확한 사진 1장만 재사용한다.
+    if scanType == ScanType.EXIT:
+        if not vehicleNo or not vehicleNo.strip():
+            raise HTTPException(status_code=400, detail="EXIT OCR에는 ENTRY 차량번호(vehicleNo)가 필요합니다.")
+        vehicle_key = vehicleNo.replace(" ", "")
+        # 2026-10-02 추가: 최신 과적 검사가 통과(is_passed=true)인 차량만 게이트아웃 허용
+        if not _overload_passed(_state["db_conn"], vehicleNo.strip(), _state["entry_times"].get(vehicle_key)):
+            raise HTTPException(status_code=409, detail="과적 검사 통과 차량만 게이트아웃 할 수 있습니다.")
+        saved_path = _state["entry_images"].get(vehicle_key)
+        path = Path(saved_path) if saved_path else None
+        if path is None or not path.exists():
+            # 2026-10-02 추가: gate_api.py 를 재시작하면 메모리의 ENTRY 사진 기록이 사라짐 →
+            # 게이트_수신함(processed → 수신함 → failed)에서 차량번호로 된 사진을 직접 찾음
+            path = _find_entry_photo(watch_dir, vehicle_key)
+            if path is None:
+                raise HTTPException(status_code=404, detail=f"ENTRY 사진을 게이트_수신함에서 찾을 수 없습니다: {vehicleNo}")
+            logger.info(f"[EXIT] 메모리에 ENTRY 기록이 없어 폴더에서 사진을 찾음: {path}")
+    else:
         path = _pick_random_stable_file(watch_dir)
-    if path is None:
-        raise HTTPException(status_code=204, detail="처리할 사진이 감시 폴더에 없음")
-
+        if path is None and _recycle_processed(watch_dir) > 0:
+            path = _pick_random_stable_file(watch_dir)
+        if path is None:
+            raise HTTPException(status_code=204, detail="처리할 사진이 감시 폴더에 없음")
+    logger.info(f"[{scanType.value} OCR] 처리 시작: {path.name}" + (f" / 요청차량={vehicleNo}" if vehicleNo else ""))
     try:
         result = recognize_one(path)
     except Exception:
         logger.exception(f"[{path.name}] 인식 중 예외 발생")
         _move_safely(path, failed_dir)
         raise HTTPException(status_code=500, detail=f"인식 중 오류: {path.name}")
-
     if result is None:
-        logger.warning(f"[{path.name}] 이미지 파일을 못 읽음")
         _move_safely(path, failed_dir)
         raise HTTPException(status_code=500, detail=f"이미지 파일을 못 읽음: {path.name}")
-
     pred = result["pred"]
     recognition_status = "SUCCESS" if pred else "FAILED"
-
-    matched_vehicle = None
-    if pred:
-        matched_vehicle = lookup_vehicle(_state["db_conn"], pred, DEFAULT_VEHICLE_TYPE)
-
+    matched_vehicle = lookup_vehicle(_state["db_conn"], pred, DEFAULT_VEHICLE_TYPE) if pred else None
     if not pred:
         match_result = "NOT_RECOGNIZED"
+    elif (
+        scanType == ScanType.EXIT
+        and vehicleNo
+        and pred.replace(" ", "") != vehicleNo.replace(" ", "")
+    ):
+        match_result = "VEHICLE_MISMATCH"
     elif matched_vehicle is not None:
         match_result = "AUTHORIZED"
     else:
         match_result = "DENIED"
     gate_open = match_result == "AUTHORIZED"
-
-    # 2026-10-01 변경: 게이트로그를 저장하기 "전에" 사진을 processed로 옮겨서, 저장되는 기록에
-    # 실제 사진 주소(frontImageUrl)를 같이 남김 - 계중대 계량 화면 등 다른 화면에서도 게이트에서
-    # 찍힌 사진을 다시 볼 수 있게 하기 위함. (파일명이 충돌하면 _move_safely가 타임스탬프를
-    # 붙이므로 반드시 이동 후 실제 파일명(final_path.name) 기준으로 URL을 만듦)
-    final_path = _move_safely(path, processed_dir)
-    image_url = f"/images/processed/{final_path.name}"
-
+    if scanType == ScanType.ENTRY:
+        final_path = _move_safely(path, processed_dir)
+        if match_result == "AUTHORIZED" and pred:
+            vehicle_key = pred.replace(" ", "")
+            _state["entry_images"][vehicle_key] = str(final_path)
+            _state["entry_times"][vehicle_key] = _dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(seconds=5)
+            logger.info(f"[ENTRY 사진 기억] vehicleNo={vehicle_key}, file={final_path.name}")
+    else:
+        # EXIT는 ENTRY 때 기억한 processed 사진을 그대로 재사용한다.
+        final_path = path
+    # 2026-10-02 변경: EXIT 사진이 processed 가 아닌 곳(수신함 등)에 있을 수도 있어 실제 위치 기준으로 주소를 만듦
+    try:
+        image_url = "/images/" + final_path.resolve().relative_to(watch_dir.resolve()).as_posix()
+    except ValueError:
+        image_url = f"/images/processed/{final_path.name}"
     plate_confidence = round(result["ocr_conf"] * 100, 2) if result["ocr_conf"] is not None else None
-    # 등록 차량은 planned_route.destination_gate를 사용하고, 미등록 차량은 기존 ABC야드 출입구를 사용
     gate_code = DEFAULT_GATE_CODE
     if matched_vehicle is not None:
         planned_route = matched_vehicle.get("plannedRoute")
-        # pg8000 반환 형태에 따라 JSON 문자열이면 dict로 변환
         if isinstance(planned_route, str):
             try:
                 planned_route = json.loads(planned_route)
             except json.JSONDecodeError:
                 planned_route = None
         if isinstance(planned_route, dict):
-            destination_gate = planned_route.get("destination_gate")
-            if destination_gate:
-                # "Gate-DEFG-01 (DEFG야드 출입구)" -> "Gate-DEFG-01"
-                gate_code = destination_gate.split(" ", 1)[0].strip()
-
+            route_key = "origin_gate" if scanType == ScanType.ENTRY else "destination_gate"
+            route_gate = planned_route.get(route_key)
+            if route_gate:
+                gate_code = route_gate.split(" ", 1)[0].strip()
     gate_id = lookup_gate_id(_state["db_conn"], gate_code)
     if gate_id is None:
-        logger.error(f"게이트 ID 조회 실패: gateCode={gate_code}")
         raise HTTPException(status_code=500, detail=f"활성 게이트를 찾을 수 없음: {gate_code}")
-
     payload = {
         "gateId": gate_id,
+        "scanType": scanType.value,
         "recognizedPlateNo": pred or None,
-        # 2026-09-30: trucks 테이블과 매칭된 경우에만 채움 - GateLog.java에
-        # 이미 있는 실제 컬럼(actual_vehicle_no, "매칭된 차량 번호판 (trucks FK)"
-        # 주석)에 그대로 넣음. 스키마/DTO 변경 전혀 없음.
         "actualVehicleNo": matched_vehicle["vehicleNo"] if matched_vehicle else None,
         "plateConfidence": plate_confidence,
         "recognitionStatus": recognition_status,
         "vehicleType": DEFAULT_VEHICLE_TYPE,
-        "frontImageUrl": f"{GATE_PUBLIC_BASE}{image_url}",  # 2026-10-01 추가
+        "frontImageUrl": f"{GATE_PUBLIC_BASE}{image_url}",
         "ocrRawData": json.dumps({
+            "scanType": scanType.value,
+            "requestedVehicleNo": vehicleNo,
             "engine": result["engine"],
             "detConfidence": result["det_conf"],
             "lineCount": result["line_count"],
             "crnnRawText": result["crnn_raw_text"],
             "crnnRawConfidence": result["crnn_raw_conf"],
-            # 2026-09-30: 등록차량 매칭 결과 - gate_logs에 matchResult/gateOpen
-            # 전용 컬럼은 없어서(actualVehicleNo만 있음) 프론트에서 바로 쓸 수
-            # 있게 자유형식 JSON 칸에도 같이 실어보냄(위 모듈 docstring 참고).
             "matchResult": match_result,
             "matchedVehicle": matched_vehicle,
             "gateOpen": gate_open,
         }, ensure_ascii=False),
     }
-
     gate_log_id = None
     try:
-        logger.info(f"  -> [게이트로그 전송 시도] 현재 사용 중인 쿠키: {_state['session'].cookies.get_dict()}")
-        logger.info(f"  -> [게이트로그 전송] gateCode={gate_code}, gateId={gate_id}")
-        
+        logger.info(f" -> [게이트로그 전송] scanType={scanType.value}, gateCode={gate_code}, gateId={gate_id}")
         resp = _state["session"].post(
-            f"{DEFAULT_SCARGO_API_BASE}/api/v1/gate-logs", json=payload, timeout=5,
+            f"{DEFAULT_SCARGO_API_BASE}/api/v1/gate-logs",
+            json=payload,
+            timeout=5,
         )
         if resp.status_code == 201:
             gate_log_id = resp.json().get("gateLogId")
-            logger.info(f"  -> DB 저장 완료 (gate_log_id={gate_log_id})")
+            logger.info(f" -> DB 저장 완료 (gate_log_id={gate_log_id})")
         else:
             logger.error(f"게이트로그 저장 실패 (status={resp.status_code}): {resp.text}")
-            logger.error(f"     (거부된 쿠키 상태: {_state['session'].cookies.get_dict()})")
     except requests.exceptions.RequestException:
         logger.exception("게이트로그 저장 중 네트워크 오류")
-
-
-    logger.info(f"[{path.name}] 인식={pred or '(판독불가)'} 매칭={match_result} 차단기={'오픈' if gate_open else '닫힘'}")
-
+    logger.info(
+        f"[{scanType.value}] [{path.name}] 인식={pred or '(판독불가)'} "
+        f"매칭={match_result} 차단기={'오픈' if gate_open else '닫힘'}"
+    )
+    # 정상 EXIT 완료 후 연결 정보만 삭제한다. processed 이미지 파일은 보존한다.
+    if (
+        scanType == ScanType.EXIT
+        and match_result == "AUTHORIZED"
+        and vehicleNo
+        and gate_log_id is not None
+    ):
+        vehicle_key = vehicleNo.replace(" ", "")
+        _state["entry_times"].pop(vehicle_key, None)
+        if _state["entry_images"].pop(vehicle_key, None):
+            logger.info(f"[EXIT 완료] ENTRY 사진 연결 해제: {vehicle_key}")
     return ScanResult(
         fileName=path.name,
+        scanType=scanType,
+        requestedVehicleNo=vehicleNo,
         recognizedPlate=pred or None,
         engine=result["engine"] or None,
         detConfidence=result["det_conf"],

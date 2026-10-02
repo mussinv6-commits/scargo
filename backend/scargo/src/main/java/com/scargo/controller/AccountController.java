@@ -87,6 +87,14 @@ public class AccountController {
         return ResponseEntity.ok().build();
     }
 
+    // 26.10.01 병합: 관리자의 회원 삭제 API (DELETE /api/accounts/{id}) - 관리자 회원 관리 화면에서 사용
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Void> deleteAccount(@PathVariable("id") Long id) {
+        accountService.deleteAccount(id);
+        return ResponseEntity.noContent().build();
+    }
+
     // 26.09.22 추가: 관리자의 기업계정 거절 API (PATCH /api/accounts/{id}/reject)
     @PatchMapping("/{id}/reject")
     @PreAuthorize("hasRole('ADMIN')")

@@ -10,15 +10,17 @@
     <table v-else-if="drivers.length" class="truck-table">
       <thead>
         <tr>
+          <th style="width:64px;">번호</th>
           <th>이름</th>
           <th>아이디</th>
           <th>연락처</th>
           <th>배정 차량</th>
-          <th style="min-width: 260px;">배정 관리</th>
+          <th style="min-width: 280px;">배정 관리</th>
         </tr>
       </thead>
       <tbody>
-        <tr v-for="d in drivers" :key="d.accountId">
+        <tr v-for="(d, idx) in drivers" :key="d.accountId">
+          <td>{{ idx + 1 }}</td>
           <td>{{ d.userName }}</td>
           <td>{{ d.userId }}</td>
           <td>{{ d.phoneNum || '-' }}</td>
@@ -27,26 +29,24 @@
             <span v-else class="empty-text" style="padding:0;">미배정</span>
           </td>
           <td>
-            <div v-if="assignedTruckOf(d)" style="display:flex; gap:6px; align-items:center;">
+            <div v-if="assignedTruckOf(d)" class="driver-actions">
               <button
-                class="mapping-submit-btn"
-                style="width:auto; padding:6px 12px; font-size:12.5px; background:#c81e2c;"
+                class="mapping-submit-btn driver-action-btn danger"
                 :disabled="processingAccountId === d.accountId"
                 @click="unassign(d)"
               >
                 {{ processingAccountId === d.accountId ? '처리 중...' : '배정 해제' }}
               </button>
             </div>
-            <div v-else style="display:flex; gap:6px; align-items:center;">
-              <select class="mapping-select" style="width:auto;" v-model="selectedTruckByDriver[d.accountId]">
+            <div v-else class="driver-actions">
+              <select class="mapping-select" v-model="selectedTruckByDriver[d.accountId]">
                 <option value="" disabled>차량 선택</option>
                 <option v-for="t in availableTrucksFor(d)" :key="t.vehicleNo" :value="t.vehicleNo">
                   {{ t.vehicleNo }} ({{ t.truckType || '차종미상' }})
                 </option>
               </select>
               <button
-                class="mapping-submit-btn"
-                style="width:auto; padding:6px 12px; font-size:12.5px;"
+                class="mapping-submit-btn driver-action-btn"
                 :disabled="!selectedTruckByDriver[d.accountId] || processingAccountId === d.accountId"
                 @click="assign(d)"
               >
@@ -138,3 +138,26 @@ async function unassign(driver) {
 
 onMounted(loadData)
 </script>
+
+<style scoped>
+.driver-actions {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+}
+.driver-actions .mapping-select {
+  width: 180px;
+  height: 36px;
+  padding: 0 10px;
+}
+.driver-action-btn {
+  width: 88px;
+  height: 36px;
+  margin: 0;
+  padding: 0 10px;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.driver-action-btn.danger { background: #c81e2c; }
+</style>

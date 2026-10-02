@@ -2,6 +2,7 @@ package com.scargo;
 
 import java.util.List;
 
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -28,6 +29,16 @@ public class SecurityConfig {
 
     // 26.09.21 추가: 세션의 accountId를 Spring Security 인증 정보로 변환
     private final SessionAuthenticationFilter sessionAuthenticationFilter;
+
+    // @Component 필터가 서블릿 필터로 한 번 더 등록되면 시큐리티 체인 밖에서 돌고,
+    // 체인 시작 시 SecurityContext가 비워져 로그인 사용자가 익명으로 남는다.
+    @Bean
+    public FilterRegistrationBean<SessionAuthenticationFilter> sessionAuthenticationFilterRegistration(
+            SessionAuthenticationFilter filter) {
+        FilterRegistrationBean<SessionAuthenticationFilter> registration = new FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
+    }
 
     // 회원가입 및 비밀번호 암호화
     @Bean
@@ -117,11 +128,10 @@ public class SecurityConfig {
                 .anyRequest().authenticated()
             )
 
+            // 로그아웃 설정
             // 26.10.01 추가: 로그인 안 됨(세션 만료 포함)은 401, 로그인은 됐지만 권한 부족은 403 으로 구분
-            //  - 기존엔 둘 다 403 이라 "백엔드 재시작으로 세션이 끊긴 것"과 "권한이 없는 것"을 화면에서 구분할 수 없었음
             .exceptionHandling(ex -> ex.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
 
-            // 로그아웃 설정
             .logout(logout -> logout
                 .logoutUrl("/api/accounts/logout")
                 .logoutSuccessHandler((request, response, authentication) -> {
