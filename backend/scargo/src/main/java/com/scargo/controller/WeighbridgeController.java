@@ -4,6 +4,8 @@ import com.scargo.dto.OverloadCheckResponse;
 import com.scargo.dto.WeighbridgeQueueItem;
 import com.scargo.dto.WeighingRequest;
 import com.scargo.dto.WeighingResultResponse;
+import com.scargo.dto.WeighbridgeRouteResponse;
+import com.scargo.service.WeighbridgeRouteService;
 import com.scargo.service.WeighbridgeService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -31,7 +33,7 @@ import java.util.Map;
 public class WeighbridgeController {
 
     private final WeighbridgeService weighbridgeService;
-
+    private final WeighbridgeRouteService weighbridgeRouteService; // 26.10.02 추가: 지도 경로
 
     @GetMapping("/policy")
     public ResponseEntity<Map<String, Object>> getPolicy() {
@@ -47,6 +49,14 @@ public class WeighbridgeController {
     @GetMapping("/vehicles/{vehicleNo}")
     public ResponseEntity<WeighbridgeQueueItem> getVehicleInfo(@PathVariable("vehicleNo") String vehicleNo) {
         return ResponseEntity.ok(weighbridgeService.getVehicleInfo(vehicleNo));
+    }
+
+    // 26.10.02 추가: 지도(OpenStreetMap)에 그릴 경로 - 진입 게이트 → 계중대 → 목적지
+    @GetMapping("/route")
+    public ResponseEntity<WeighbridgeRouteResponse> getRoute(
+            @RequestParam("vehicleNo") String vehicleNo,
+            @RequestParam(value = "gateLogId", required = false) Long gateLogId) {
+        return ResponseEntity.ok(weighbridgeRouteService.getRoute(vehicleNo, gateLogId));
     }
 
     @GetMapping("/weighings/today")

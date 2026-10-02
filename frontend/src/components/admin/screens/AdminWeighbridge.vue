@@ -331,12 +331,64 @@
         <p v-else class="wb-records-empty">오늘 계중대에서 계량한 차량이 아직 없습니다.</p>
       </div>
     </section>
+
+    <!-- 26.10.02 추가: 이동 경로 미니 플레이어 (유튜브 미니 플레이어처럼 화면 구석에 떠서, 게이트 인부터 이동을 보여줌) -->
+    <div
+      v-if="selected && miniOpen"
+      class="wb-mini"
+      :class="{ 'is-big': miniBig, 'is-dragging': dragging }"
+      :style="miniPos ? { left: miniPos.x + 'px', top: miniPos.y + 'px', right: 'auto', bottom: 'auto' } : null"
+      role="dialog"
+      aria-label="차량 이동 경로"
+    >
+      <header class="wb-mini-bar" @pointerdown="startDrag">
+        <span class="wb-mini-live" :class="routeStatus"></span>
+        <strong class="wb-mini-plate">{{ selected.vehicleNo }}</strong>
+        <span class="wb-mini-state" :class="routeStatus">{{ miniStateText }}</span>
+        <span class="wb-mini-tools" @pointerdown.stop>
+          <button type="button" title="처음부터 다시 보기" aria-label="처음부터 다시 보기" @click="routeMap?.replay()">
+            <i class="bi bi-arrow-counterclockwise"></i>
+          </button>
+          <button
+            type="button"
+            :title="miniBig ? '작게 보기' : '크게 보기'"
+            :aria-label="miniBig ? '작게 보기' : '크게 보기'"
+            @click="miniBig = !miniBig"
+          >
+            <i :class="miniBig ? 'bi bi-fullscreen-exit' : 'bi bi-arrows-angle-expand'"></i>
+          </button>
+          <button type="button" title="닫기" aria-label="닫기" @click="miniOpen = false">
+            <i class="bi bi-x-lg"></i>
+          </button>
+        </span>
+      </header>
+      <div class="wb-mini-body">
+        <WeighbridgeRouteMap
+          ref="routeMap"
+          compact
+          :route="routeData"
+          :status="routeStatus"
+          @phase="(p) => (routePhase = p)"
+        />
+      </div>
+      <footer class="wb-mini-foot">
+        <span>{{ routeData?.origin?.name || '진입 게이트' }}</span>
+        <i class="bi bi-arrow-right"></i>
+        <span class="is-wb">{{ routeData?.weighbridge?.name || '계중대' }}</span>
+        <i class="bi bi-arrow-right"></i>
+        <span>{{ routeData?.destination?.name || '목적지' }}</span>
+      </footer>
+    </div>
+    <button v-else-if="selected" type="button" class="wb-mini-reopen" @click="miniOpen = true">
+      <i class="bi bi-map"></i> 이동 경로 보기
+    </button>
   </div>
 </template>
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import AdminPageHeader from '@/components/admin/AdminPageHeader.vue'
+import WeighbridgeRouteMap from '@/components/admin/WeighbridgeRouteMap.vue' // 26.10.02 추가: 이동 경로 지도
 import wbVideo from '@/assets/weighbridge/wb01.webm' // 계중대 WB-01 카메라 영상 (기존 데모 영상 그대로 사용)
 import { adminApi, pickErrorMessage } from '@/utils/adminApi'
 
@@ -480,6 +532,64 @@ function selectQueueItem(item) {
   reweighTarget.value = null
   selected.value = item
   resetMeasurement(item.suggestedAxleCount || 3)
+  loadRoute(item.vehicleNo, item.gateLogId)
+}
+
+// ---- 26.10.02 추가: 이동 경로 지도 ----
+const routeData = ref(null)
+const routeStatus = computed(() => (result.value ? (result.value.record.isPassed ? 'pass' : 'fail') : 'pending'))
+
+// ---- 26.10.02 추가: 미니 플레이어 ----
+const routeMap = ref(null)
+const routePhase = ref('')
+const miniOpen = ref(true)
+const miniBig = ref(false)
+const miniPos = ref(null) // 드래그로 옮기면 {x,y}, 아니면 오른쪽 아래 기본 위치
+const dragging = ref(false)
+const miniStateText = computed(() => {
+  if (routeStatus.value === 'fail') return '과적 · 계중대 대기'
+  if (routeStatus.value === 'pass') return routePhase.value === 'arrived' ? '목적지 도착' : '통과 · 목적지로 이동 중'
+  if (routePhase.value === 'arriving') return '게이트 인 · 계중대로 이동 중'
+  return '계중대 계량 중'
+})
+function startDrag(e) {
+  if (e.button !== undefined && e.button !== 0) return
+  const box = e.currentTarget.parentElement.getBoundingClientRect()
+  const dx = e.clientX - box.left
+  const dy = e.clientY - box.top
+  dragging.value = true
+  const move = (ev) => {
+    const w = box.width
+    const h = box.height
+    miniPos.value = {
+      x: Math.min(Math.max(8, ev.clientX - dx), window.innerWidth - w - 8),
+      y: Math.min(Math.max(8, ev.clientY - dy), window.innerHeight - h - 8),
+    }
+  }
+  const up = () => {
+    dragging.value = false
+    window.removeEventListener('pointermove', move)
+    window.removeEventListener('pointerup', up)
+  }
+  window.addEventListener('pointermove', move)
+  window.addEventListener('pointerup', up)
+}
+let routeReq = 0
+async function loadRoute(vehicleNo, gateLogId) {
+  const my = ++routeReq
+  routeData.value = null
+  routePhase.value = ''
+  miniOpen.value = true
+  if (!vehicleNo) return
+  try {
+    const res = await adminApi.get('/api/v1/weighbridge/route', {
+      params: { vehicleNo, gateLogId: gateLogId ?? undefined },
+    })
+    if (my === routeReq) routeData.value = res.data
+  } catch {
+    if (my === routeReq)
+      routeData.value = { origin: null, weighbridge: null, destination: null, waypoints: [], otherGates: [] }
+  }
 }
 
 // 26.10.01 추가: 차량번호로 등록차량 정보 + 실린 컨테이너를 DB에서 가져와 화면에 채움
@@ -533,6 +643,7 @@ function selectManual() {
   manualPlate.value = ''
   resetMeasurement(3)
   fillVehicleInfo(base)
+  loadRoute(base.vehicleNo, null)
 }
 
 function startReweigh(record) {
@@ -543,12 +654,15 @@ function startReweigh(record) {
   selected.value = { ...base, containerNo: record.containerNo || null }
   resetMeasurement(Math.min(6, Math.max(2, record.axleCount || 3)))
   fillVehicleInfo(base)
+  loadRoute(base.vehicleNo, base.gateLogId)
   window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' })
 }
 
 function clearSelection() {
   cancelAnimationFrame(animFrame)
   rewindVideo()
+  routeReq++
+  routeData.value = null
   selected.value = null
   reweighTarget.value = null
   phase.value = 'idle'
@@ -990,6 +1104,154 @@ onBeforeUnmount(() => {
   border-radius: 50%;
   background: currentColor;
 }
+/* 26.10.02 추가: 이동 경로 미니 플레이어 */
+.wb-mini {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 1050;
+  width: 380px;
+  max-width: calc(100vw - 32px);
+  height: 300px;
+  display: flex;
+  flex-direction: column;
+  background: #0d1420;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow:
+    0 18px 40px rgba(10, 37, 64, 0.35),
+    0 2px 6px rgba(0, 0, 0, 0.2);
+  transition:
+    width 0.2s ease,
+    height 0.2s ease;
+}
+.wb-mini.is-big {
+  width: 600px;
+  height: 440px;
+}
+.wb-mini.is-dragging {
+  transition: none;
+  user-select: none;
+}
+.wb-mini-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px 8px 12px;
+  color: #e7edf5;
+  cursor: grab;
+  touch-action: none;
+}
+.wb-mini.is-dragging .wb-mini-bar {
+  cursor: grabbing;
+}
+.wb-mini-live {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--wb-accent);
+  flex: none;
+  animation: wbPulse 1.6s ease-out infinite;
+}
+.wb-mini-live.pass {
+  background: #4fd1a5;
+}
+.wb-mini-live.fail {
+  background: #ff5c5c;
+}
+.wb-mini-plate {
+  font-family: 'Barlow Condensed', 'Inter', sans-serif;
+  font-size: 17px;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+.wb-mini-state {
+  font-size: 12px;
+  color: #9db0c7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.wb-mini-state.pass {
+  color: #4fd1a5;
+}
+.wb-mini-state.fail {
+  color: #ff8a8a;
+}
+.wb-mini-tools {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 2px;
+}
+.wb-mini-tools button {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #c7d3e2;
+  cursor: pointer;
+}
+.wb-mini-tools button:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+.wb-mini-tools button:focus-visible {
+  outline: 2px solid var(--wb-accent);
+}
+.wb-mini-body {
+  flex: 1;
+  min-height: 0;
+  background: #e5e7eb;
+}
+.wb-mini-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  font-size: 11.5px;
+  color: #9db0c7;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.wb-mini-foot span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wb-mini-foot .is-wb {
+  color: #ffb547;
+}
+.wb-mini-foot i {
+  font-size: 10px;
+  opacity: 0.7;
+}
+.wb-mini-reopen {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 1050;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--wb-ink);
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 8px 20px rgba(10, 37, 64, 0.3);
+}
+@media (max-width: 560px) {
+  .wb-mini,
+  .wb-mini.is-big {
+    right: 8px;
+    bottom: 8px;
+    width: calc(100vw - 16px);
+    height: 260px;
+  }
+}
+
 /* 자동 계량 스위치 */
 .wb-auto {
   display: grid;
