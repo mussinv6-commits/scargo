@@ -15,6 +15,9 @@ export function toDateInput(d) {
   return `${x.getFullYear()}-${pad(x.getMonth() + 1)}-${pad(x.getDate())}`
 }
 
+/** 사이트 개설일. 조회 날짜는 이 날부터 오늘까지만 고를 수 있다. */
+const SITE_OPEN = startOfDay(new Date('2026-10-01T00:00:00'))
+
 export const viewDate = ref(startOfDay(new Date()))
 
 export const isViewToday = computed(() => {
@@ -29,10 +32,13 @@ export const viewDateInput = computed({
     if (!v) return
     const picked = startOfDay(new Date(`${v}T00:00:00`))
     const today = startOfDay(new Date())
-    viewDate.value = picked > today ? today : picked
+    if (picked > today) viewDate.value = today
+    else if (picked < SITE_OPEN) viewDate.value = SITE_OPEN
+    else viewDate.value = picked
   },
 })
 
+export const minDateInput = computed(() => toDateInput(SITE_OPEN))
 export const maxDateInput = computed(() => toDateInput(new Date()))
 
 export const viewDateLabel = computed(() => {
@@ -49,3 +55,22 @@ export const viewDateRelativeLabel = computed(() => {
   if (diff <= 0) return '오늘'
   return `${diff}일전`
 })
+
+export function isSameViewDay(value) {
+  if (!value) return false
+  const x = new Date(value)
+  if (Number.isNaN(x.getTime())) return false
+  const t = viewDate.value
+  return x.getFullYear() === t.getFullYear() && x.getMonth() === t.getMonth() && x.getDate() === t.getDate()
+}
+
+/** 오늘은 전체 목록, 과거 날짜를 고르면 그 날짜에 해당하는 행만 */
+export function rowsForViewDate(list, field) {
+  const rows = list || []
+  if (isViewToday.value) return rows
+  return rows.filter((row) => isSameViewDay(row?.[field]))
+}
+
+export function resetViewDateToday() {
+  viewDate.value = startOfDay(new Date())
+}

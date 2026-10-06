@@ -6,6 +6,7 @@ import TransportStatus from "@/components/driver/screens/TransportStatus.vue";
 import DispatchList from "@/components/driver/screens/DispatchList.vue";
 import Settlement from "@/components/driver/screens/Settlement.vue";
 import MyPage from "@/components/driver/screens/MyPage.vue";
+import DriverInfo from "@/components/driver/screens/DriverInfo.vue";
 
 export default [
   {
@@ -18,6 +19,9 @@ export default [
       { path: "dispatch-list", name: "driver-app-dispatch-list", component: DispatchList },
       { path: "settlement", name: "driver-app-settlement", component: Settlement },
       { path: "my-page", name: "driver-app-my-page", component: MyPage },
+      { path: "faq", name: "driver-app-faq", component: DriverInfo, meta: { title: "자주 묻는 질문" } },
+      { path: "support", name: "driver-app-support", component: DriverInfo, meta: { title: "고객센터 문의" } },
+      { path: "terms", name: "driver-app-terms", component: DriverInfo, meta: { title: "약관 및 정책" } },
     ],
   },
 ];

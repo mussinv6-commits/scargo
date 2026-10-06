@@ -51,8 +51,9 @@
 <script setup>
 import AdminPageHeader from '@/components/admin/AdminPageHeader.vue'
 import AdminPager from '@/components/admin/AdminPager.vue'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { adminApi, pickErrorMessage } from '@/utils/adminApi'
+import { isViewToday, viewDate } from '@/components/admin/adminViewDate.js'
 
 const PAGE_SIZE = 10
 const records = ref([])
@@ -73,10 +74,28 @@ function formatDate(d) {
   return d ? new Date(d).toLocaleString('ko-KR') : '-'
 }
 
+function dayBounds() {
+  const pad = (n) => String(n).padStart(2, '0')
+  const stamp = (x) => {
+    const off = -x.getTimezoneOffset()
+    const sign = off >= 0 ? '+' : '-'
+    const abs = Math.abs(off)
+    return `${x.getFullYear()}-${pad(x.getMonth() + 1)}-${pad(x.getDate())}T${pad(x.getHours())}:${pad(x.getMinutes())}:${pad(x.getSeconds())}${sign}${pad(Math.floor(abs / 60))}:${pad(abs % 60)}`
+  }
+  const start = new Date(viewDate.value)
+  start.setHours(0, 0, 0, 0)
+  const end = new Date(viewDate.value)
+  end.setHours(23, 59, 59, 0)
+  return { start: stamp(start), end: stamp(end) }
+}
+
 async function loadRecords(p = 0) {
   loading.value = true
   try {
-    const res = await adminApi.get('/api/loading-records', { params: { page: p, size: PAGE_SIZE } })
+    const past = !isViewToday.value
+    const res = await adminApi.get(past ? '/api/loading-records/period' : '/api/loading-records', {
+      params: past ? { ...dayBounds(), page: p, size: PAGE_SIZE } : { page: p, size: PAGE_SIZE },
+    })
     records.value = res.data.content
     totalPages.value = res.data.totalPages
     totalElements.value = res.data.totalElements
@@ -103,5 +122,6 @@ async function remove(record) {
   }
 }
 
+watch(viewDate, () => loadRecords(0))
 onMounted(() => loadRecords(0))
 </script>

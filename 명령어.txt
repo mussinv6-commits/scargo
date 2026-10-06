@@ -17,7 +17,7 @@ scargo 프로젝트 실행 명령어 정리
 
 2단계. 게이트 OCR 서버 (gate_api.py) - 포트 8001
     conda activate yolo
-    cd C:\Users\user\Desktop\SCargo_1001 _am11\python
+    cd  C:\Users\user\Desktop\최종파일\python
     set GATE_API_ID=admin
     set GATE_API_PW=admin1234
     uvicorn gate_api:app --host 0.0.0.0 --port 8001

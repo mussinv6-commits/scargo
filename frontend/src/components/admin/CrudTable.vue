@@ -131,7 +131,8 @@
                 :disabled="isFieldDisabled(field)"
                 :step="field.step"
                 :min="field.min"
-                @input="clearFieldError(field.key)"
+                @keydown="onNumberKeydown(field, $event)"
+                @input="onNumberInput(field, $event)"
               />
               <p v-if="fieldErrors[field.key]" class="crud-field-error">{{ fieldErrors[field.key] }}</p>
               <p v-else-if="field.hint" class="crud-hint">{{ field.hint }}</p>

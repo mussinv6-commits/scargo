@@ -12,7 +12,7 @@
       title="컨테이너"
       id-key="containerNo"
       :columns="columns"
-      :rows="rows"
+      :rows="visibleRows"
       :loading="loading"
       :form-fields="formFields"
       :page-size="10"
@@ -37,10 +37,12 @@ import { onMounted, ref, computed } from 'vue'
 import CrudTable from '@/components/admin/CrudTable.vue'
 import AdminPageHeader from '@/components/admin/AdminPageHeader.vue'
 import ContainerMapModal from '@/components/admin/ContainerMapModal.vue'
+import { rowsForViewDate } from '@/components/admin/adminViewDate.js'
 import { adminApi, pickErrorMessage } from '@/utils/adminApi'
 import { normalizeRows, withBoolAliases, toNum, seg, updateWithFallback , deleteError } from '@/utils/apiHelpers'
 
 const rows = ref([])
+const visibleRows = computed(() => rowsForViewDate(rows.value, 'createdAt'))
 const locations = ref([])
 const loading = ref(true)
 const companyOptions = ref([])
@@ -66,6 +68,7 @@ const locationOptions = computed(() =>
 
 const columns = [
   { key: 'containerNo', label: '컨테이너번호' },
+  { key: 'companyId', label: '예약 업체명', format: (v) => companyNameOf(v) },
   { key: 'isoSizeTypeCode', label: 'ISO코드', align: 'center' },
   { key: 'containerType', label: '타입' },
   // 26.09.30 수정: 하이큐브 여부가 항상 '아니오'로 보이던 문제(응답 키 highCube) + 표시 문구 개선
@@ -82,6 +85,12 @@ const columns = [
 
 function fmtNum(v) {
   return v === null || v === undefined || v === '' ? '-' : Number(v).toLocaleString('ko-KR')
+}
+
+function companyNameOf(companyId) {
+  if (companyId === null || companyId === undefined || companyId === '') return '-'
+  const found = companyOptions.value.find((c) => String(c.value) === String(companyId))
+  return found?.label || '-'
 }
 
 const formFields = [

@@ -13,7 +13,6 @@
         <div class="info-row"><span>사업자번호</span><b>{{ company.businessNo || "-" }}</b></div>
       </div>
       <div v-if="user" class="company-info">
-        <div class="info-row"><span>회원 번호</span><b>{{ user.accountId ?? "-" }}</b></div>
         <div class="info-row"><span>가입일</span><b>{{ formatDate(user.createdAt) }}</b></div>
       </div>
       <p v-else-if="loadedCompany" class="empty-text">업체 정보를 불러오지 못했습니다.</p>

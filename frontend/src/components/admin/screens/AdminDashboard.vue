@@ -38,7 +38,7 @@
 
       <section class="ops-panel">
         <div class="ops-panel-head">
-          <h2><img :src="dashIcons.section.안전관리현황" alt="" /> 검사소 검사</h2>
+          <h2><img :src="dashIcons.section.안전관리현황" alt="" /> 검사소 계량</h2>
           <RouterLink to="/admin/overload-checks">상세 보기 &gt;</RouterLink>
         </div>
         <div class="ops-safety">

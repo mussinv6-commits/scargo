@@ -1,11 +1,11 @@
 <template>
   <div class="gate-page">
+    <!-- 26.10.06: 다른 관리자 화면(검사소 계량 등)과 같은 제목 컴포넌트 사용 -->
+    <AdminPageHeader
+      title="게이트 OCR 검사"
+      description="CargoScan AI(YOLO11 탐지 + CRNN 문자 인식)가 화물차 번호판을 OCR로 판독해서 게이트 통과 여부를 자동으로 검사합니다."
+    />
     <div class="gate-header">
-      <h1>🔍 게이트 OCR 검사</h1>
-      <p>
-        CargoScan AI(YOLO11 탐지 + CRNN 문자 인식)가 화물차 번호판을 OCR로
-        판독해서 게이트 통과 여부를 자동으로 검사합니다.
-      </p>
       <div class="gate-live-scan-cta">
         <button class="gate-live-scan-btn" :disabled="liveScanBusy" @click="runLiveScan('ENTRY')">
           {{ liveScanBusy && scanPhase === 'ENTRY' ? 'ENTRY OCR 검사 중...' : '🔍 게이트인 (ENTRY OCR 검사)' }}
@@ -23,7 +23,7 @@
             >
               {{ liveScanBusy && scanPhase === 'EXIT' && entryVehicleNo === v ? 'EXIT 검사 중...' : '🚪 게이트아웃' }}
             </button>
-            <button class="gate-yard-del" title="목록에서 제거" @click="removeYard(v)">✕</button>
+            <button class="gate-yard-del" title="목록에서 제거" @click="removeYard(v, true)">✕</button>
           </div>
         </div>
       </div>
@@ -109,7 +109,7 @@
             >
               검사소 계량 화면 열기
             </RouterLink>
-            <p v-else class="gate-explain warn">
+            <p v-if="state !== 'pass'" class="gate-explain warn">
               {{ liveDenyExplain }}
             </p>
           </div>
@@ -119,11 +119,7 @@
     <!-- 실시간 백엔드 연동 (gate_live_demo.py -> scargo 백엔드 -> 이 화면) -->
     <div class="gate-live-section">
       <h2>🔴 실시간 게이트 OCR 검사 기록</h2>
-      <p class="gate-live-sub">
-        <code>gate_live_demo.py</code> / <code>gate_watch_service.py</code> / 위
-        "게이트인" 버튼(<code>gate_api.py</code>) 중 무엇으로 인식하든, scargo
-        백엔드(PostgreSQL)에 저장된 기록을 3초마다 불러옵니다. (목업이 아니라 실데이터 연동)
-      </p>
+      <p class="gate-live-sub">3초마다 갱신됩니다.</p>
       <div v-if="liveError" class="gate-live-empty">
         백엔드 연결 대기 중... scargo 서버가 <code>localhost:8080</code>에서
         실행 중인지 확인해 주세요.
@@ -169,6 +165,7 @@
 <script setup>
 import { ref, computed, onBeforeUnmount, onMounted } from 'vue'
 import axios from 'axios'
+import AdminPageHeader from '@/components/admin/AdminPageHeader.vue'
 import { API_BASE } from '@/utils/apiBase.js'
 import { GATE_SCAN_API_BASE } from '@/utils/gateApiBase.js'
 const selected = ref(null)
@@ -200,10 +197,20 @@ function loadEntryAt() {
   }
 }
 const yardEntryAt = ref(loadEntryAt())
+// 26.10.06 추가: ✕로 목록에서 지운 차량 (그 입차 기록이 다시 목록에 올라오지 않게)
+function loadHidden() {
+  try {
+    return JSON.parse(localStorage.getItem('gateYardHidden') || '{}') || {}
+  } catch {
+    return {}
+  }
+}
+const yardHidden = ref(loadHidden())
 const yardStatus = ref({}) // { 차량번호: { loading: 'PENDING'|..., overload: 'pass'|'fail'|'none'|'unknown' } }
 function saveYard() {
   localStorage.setItem('gateYardVehicles', JSON.stringify(yardVehicles.value))
   localStorage.setItem('gateYardEntryAt', JSON.stringify(yardEntryAt.value))
+  localStorage.setItem('gateYardHidden', JSON.stringify(yardHidden.value))
 }
 function addYard(vno) {
   if (!vno) return
@@ -212,7 +219,8 @@ function addYard(vno) {
   saveYard()
   refreshYardStatus()
 }
-function removeYard(vno) {
+function removeYard(vno, byUser = false) {
+  if (byUser && yardEntryAt.value[vno]) yardHidden.value = { ...yardHidden.value, [vno]: yardEntryAt.value[vno] }
   yardVehicles.value = yardVehicles.value.filter((v) => v !== vno)
   const next = { ...yardStatus.value }
   delete next[vno]
@@ -288,7 +296,47 @@ async function fetchOverload(vno) {
   }
 }
 let yardPollId = null
+// 26.10.06 추가: 구내 차량 목록을 브라우저 저장값이 아니라 DB 게이트 기록 기준으로 맞춤
+//  - 차량별 가장 최근 게이트 기록이 ENTRY 면 구내 차량(목록에 추가), EXIT 면 출차 완료(목록에서 제거)
+//  - 서버를 다시 켜거나 다른 PC/브라우저에서 열어도 같은 목록이 보임
+async function syncYardFromLogs() {
+  let logs = []
+  try {
+    const res = await axios.get(`${API_BASE}/api/v1/gate-logs`, {
+      params: { page: 0, size: 200, sort: 'passAt,desc' },
+      withCredentials: true,
+    })
+    logs = res.data?.content ?? []
+  } catch {
+    return
+  }
+  const latest = new Map()
+  for (const log of logs) {
+    const vno = String(log.actualVehicleNo || '').replace(/\s/g, '')
+    if (!vno || latest.has(vno)) continue
+    if (log.scanType !== 'ENTRY' && log.scanType !== 'EXIT') continue
+    latest.set(vno, log)
+  }
+  let list = [...yardVehicles.value]
+  const at = { ...yardEntryAt.value }
+  latest.forEach((log, vno) => {
+    if (log.scanType === 'EXIT') {
+      list = list.filter((v) => v !== vno)
+      delete at[vno]
+      return
+    }
+    const entryAt = new Date(new Date(log.passAt).getTime() - 5000).toISOString()
+    if (yardHidden.value[vno] && new Date(yardHidden.value[vno]) >= new Date(entryAt) - 60000) return
+    if (!list.includes(vno)) list.push(vno)
+    if (!at[vno] || new Date(at[vno]) < new Date(entryAt)) at[vno] = entryAt
+  })
+  yardVehicles.value = list
+  yardEntryAt.value = at
+  saveYard()
+}
+
 async function refreshYardStatus() {
+  await syncYardFromLogs()
   if (!yardVehicles.value.length) return
   let loadingMap = {}
   try {
@@ -432,16 +480,12 @@ onBeforeUnmount(() => {
 </script>
 <style scoped>
 .gate-page {
-  max-width: 980px;
-  margin: 0 auto;
-  padding: 32px 20px 64px;
+  /* 26.10.02: 검사소 계량 화면처럼 화면 폭을 꽉 채움 */
+  width: 100%;
+  margin: 0;
+  padding: 0 0 48px;
+  box-sizing: border-box;
   color: var(--color-text);
-}
-.gate-header h1 {
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: 28px;
-  font-weight: 700;
-  margin-bottom: 8px;
 }
 .gate-header p {
   color: var(--color-subtext);
@@ -451,7 +495,7 @@ onBeforeUnmount(() => {
 }
 /* ---- 실시간 게이트인 버튼 ---- */
 .gate-live-scan-cta {
-  margin-top: 14px;
+  margin-top: 0;
   padding: 14px 16px;
   border-radius: 12px;
   background: rgba(16, 129, 185, 0.06);
@@ -502,7 +546,7 @@ onBeforeUnmount(() => {
 }
 .gate-yard-state {
   flex: 1;
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--color-subtext);
 }
 .gate-yard-exit {
@@ -518,7 +562,7 @@ onBeforeUnmount(() => {
 .gate-live-scan-error {
   width: 100%;
   margin: 0;
-  font-size: 12.5px;
+  font-size: 13px;
   color: #b91c1c;
 }
 .gate-layout {
@@ -661,7 +705,7 @@ onBeforeUnmount(() => {
   border: 1px solid rgba(10, 37, 64, 0.15);
   background: #fff;
   color: var(--color-primary);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 700;
   cursor: pointer;
 }
@@ -675,7 +719,7 @@ onBeforeUnmount(() => {
   justify-content: center;
   text-align: center;
   color: var(--color-subtext);
-  font-size: 13.5px;
+  font-size: 14px;
   line-height: 1.7;
 }
 .gate-photo-wrap {
@@ -686,6 +730,9 @@ onBeforeUnmount(() => {
 }
 .gate-photo {
   width: 100%;
+  max-height: 460px; /* 26.10.02: 화면이 넓어져도 사진이 너무 커지지 않게 */
+  object-fit: contain;
+  background: #0b1626;
   display: block;
 }
 .scan-line {
@@ -708,7 +755,7 @@ onBeforeUnmount(() => {
 }
 .plate-box {
   display: inline-block;
-  font-family: 'Barlow Condensed', sans-serif;
+  font-family: 'Barlow Condensed', 'Inter', sans-serif;
   font-size: 26px;
   font-weight: 700;
   letter-spacing: 1px;
@@ -725,7 +772,7 @@ onBeforeUnmount(() => {
 .gate-explain {
   margin: 10px auto 0;
   max-width: 480px;
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.6;
 }
 .gate-explain.ok { color: #059669; }
@@ -745,7 +792,7 @@ onBeforeUnmount(() => {
 .gate-live-tag {
   display: inline-block;
   margin-top: 8px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   padding: 3px 10px;
   border-radius: 999px;
@@ -767,14 +814,13 @@ onBeforeUnmount(() => {
   margin-top: 40px;
 }
 .gate-live-section h2 {
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: 20px;
+  font-size: 16px;
   font-weight: 700;
   margin-bottom: 4px;
 }
 .gate-live-sub {
   color: var(--color-subtext);
-  font-size: 12.5px;
+  font-size: 13px;
   margin: 0 0 14px;
 }
 .gate-live-sub code {
@@ -803,11 +849,11 @@ onBeforeUnmount(() => {
   border: 1px solid rgba(10, 37, 64, 0.1);
   border-radius: 10px;
   overflow: hidden;
-  font-size: 13px;
+  font-size: 14px;
 }
 .gate-live-table thead th {
   text-align: center;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--color-subtext);
   padding: 10px 12px;
@@ -823,7 +869,7 @@ onBeforeUnmount(() => {
   border-bottom: none;
 }
 .gate-live-table .mono {
-  font-family: 'Barlow Condensed', sans-serif;
+  font-family: 'Barlow Condensed', 'Inter', sans-serif;
   font-weight: 700;
   letter-spacing: 0.5px;
 }
@@ -832,7 +878,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   min-width: 48px;
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 800;
   padding: 3px 8px;
   border-radius: 999px;
@@ -844,7 +890,7 @@ onBeforeUnmount(() => {
 .pill {
   display: inline-flex;
   align-items: center;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   padding: 3px 10px;
   border-radius: 999px;

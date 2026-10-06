@@ -9,7 +9,7 @@
       title="과적 검사"
       id-key="checkId"
       :columns="columns"
-      :rows="rows"
+      :rows="visibleRows"
       :loading="loading"
       :form-fields="formFields"
       :page-size="10"
@@ -22,7 +22,8 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { rowsForViewDate } from '@/components/admin/adminViewDate.js'
 import CrudTable from '@/components/admin/CrudTable.vue'
 import AdminPageHeader from '@/components/admin/AdminPageHeader.vue'
 import { adminApi, pickErrorMessage } from '@/utils/adminApi'
@@ -30,6 +31,7 @@ import { normalizeRows, withBoolAliases, toNum, updateWithFallback , deleteError
 import { VEHICLE_NO_PATTERN, VEHICLE_NO_MESSAGE } from '@/utils/validators'
 
 const rows = ref([])
+const visibleRows = computed(() => rowsForViewDate(rows.value, 'checkedAt'))
 const loading = ref(true)
 
 function fmtNum(v) {
@@ -41,7 +43,6 @@ const columns = [
   { key: 'vehicleNo', label: '차량번호' },
   { key: 'containerNo', label: '컨테이너번호' },
   { key: 'totalWeight', label: '총중량(kg)', align: 'center', format: fmtNum },
-  { key: 'vgmWeight', label: '적재중량(kg)', align: 'center', format: fmtNum }, // 26.10.02 추가: 컨테이너 자중+화물 (최대적재량과 비교)
   { key: 'maxPayload', label: '최대적재량(kg)', align: 'center', format: fmtNum },
   // 26.09.30 수정: 위반여부 색이 반대로(위반=초록) 나오던 문제 → invert 로 [정상: 초록 / 위반: 빨강]
   { key: 'isViolation', label: '위반여부', type: 'boolean', align: 'center', invert: true, trueLabel: '위반', falseLabel: '정상' },

@@ -1,11 +1,11 @@
 <template>
   <div id="notice-list">
-    <div class="notice-list-head">
+    <div v-if="!isAdmin" class="notice-list-head">
       <h2 class="notice-list-title">공지사항</h2>
       <p class="notice-list-sub">항만 운영과 관련된 안내를 확인하세요.</p>
     </div>
 
-    <div class="notice-toolbar">
+    <div v-if="!isAdmin" class="notice-toolbar">
       <select v-model="searchType" class="form-select form-select-sm" style="width:110px;">
         <option value="title">제목</option>
         <option value="content">내용</option>
@@ -27,9 +27,13 @@
       <button type="button" class="btn btn-primary btn-sm px-3" @click="searchBtn">검색</button>
     </div>
 
-    <div v-if="isAdmin" class="notice-write-row">
-      <router-link to="/notice/write" class="btn btn-outline-primary btn-sm notice-write-btn">글쓰기</router-link>
-    </div>
+    <PostEditor
+      v-if="isAdmin"
+      category="NOTICE"
+      label="공지사항"
+      :list-route="{ name: 'notice' }"
+      :detail-route="detailRoute"
+    />
 
     <table class="table notice-table">
       <thead>
@@ -83,10 +87,12 @@
 
 <script>
 import { postsApi, NOTICE_CATEGORY, noticeTypeLabel, noticeTypeClass, isAdminUser, withAuthors, fmtDate, parseNoticeLevel } from '@/utils/postsApi.js'
+import PostEditor from '@/components/notice/PostEditor.vue'
 
 const PAGE_SIZE = 5
 
 export default {
+  components: { PostEditor },
   data() {
     return {
       noticeList: [],
@@ -183,6 +189,9 @@ export default {
     },
     noticeDetail(postId) {
       this.$router.push({ name: 'noticeDetail', params: { id: postId } })
+    },
+    detailRoute(id) {
+      return { name: 'noticeDetail', params: { id } }
     },
     formatDate(date) {
       return fmtDate(date)

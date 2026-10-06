@@ -23,7 +23,7 @@ export const ADMIN_MENU = {
     { to: '/admin/gates', label: '검문소 관리', icon: 'bi-shield-check', img: dashIcons.sidebar.검문소관리 },
   ],
   notice: [
-    { to: '/notice', label: '공지사항', icon: 'bi-megaphone', img: dashIcons.sidebar.적재기록조회 },
+    { to: '/admin/notices', label: '공지사항', icon: 'bi-megaphone', img: dashIcons.sidebar.적재기록조회 },
   ],
 }
 

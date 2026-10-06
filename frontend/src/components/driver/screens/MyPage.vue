@@ -19,7 +19,6 @@
           <span class="mini-badge">{{ userTypeLabel }}</span>
           <span class="mini-badge">ID {{ user?.userId }}</span>
         </div>
-        <div class="info-row"><span>회원 번호</span><b>{{ user?.accountId ?? '-' }}</b></div>
         <div class="info-row"><span>가입일</span><b>{{ memberSince }}</b></div>
       </div>
       <button class="edit-btn" @click="editProfile">수정</button>
@@ -84,7 +83,7 @@
         </label>
         <label class="field">
           <span>최대 적재 중량 (kg)</span>
-          <input class="input" v-model="reg.maxLoadWeight" type="number" min="0" step="1" placeholder="예: 25000" />
+          <input class="input" v-model="reg.maxLoadWeight" type="number" min="0" step="1" placeholder="예: 25000" @keydown="blockNegativeWeight" @input="clampWeight" />
         </label>
         <label class="check-row">
           <input type="checkbox" v-model="reg.isSemiTrailer" /> 세미트레일러(트랙터+트레일러) 차량입니다
@@ -154,16 +153,7 @@
       </div>
     </div>
 
-    <!-- 기타 -->
-    <div class="section-title" style="margin-top: 22px;">기타</div>
-    <div class="card menu-card">
-      <button class="menu-row" @click="alertPlaceholder('자주 묻는 질문')">자주 묻는 질문 <span class="chev">›</span></button>
-      <button class="menu-row" @click="alertPlaceholder('고객센터 문의')">고객센터 문의 <span class="chev">›</span></button>
-      <button class="menu-row" @click="alertPlaceholder('약관 및 정책')">약관 및 정책 <span class="chev">›</span></button>
-    </div>
-
     <button class="logout-btn" @click="logout">로그아웃</button>
-    <div class="version">앱 버전 1.0.0</div>
     </aside>
     </div>
   </main>
@@ -229,6 +219,18 @@ async function fetchMyTruck() {
 // ---- 26.09.30 추가: 차량 등록 신청 (POST /api/trucks) ----
 // 등록 후 기사 배정은 사업자(기사 관리 메뉴), 진입 허가는 관리자가 처리한다.
 const reg = reactive({ vehicleNo: '', truckType: '', maxLoadWeight: '', isSemiTrailer: false, trailerNo: '' })
+function blockNegativeWeight(event) {
+  if (event.key === '-' || event.key === 'Subtract') {
+    event.preventDefault()
+    return
+  }
+  if (event.key !== 'ArrowDown') return
+  const current = event.target.value === '' ? 0 : Number(event.target.value)
+  if (Number.isNaN(current) || current <= 0) event.preventDefault()
+}
+function clampWeight() {
+  if (reg.maxLoadWeight !== '' && Number(reg.maxLoadWeight) < 0) reg.maxLoadWeight = '0'
+}
 const regMsg = ref('')
 const registering = ref(false)
 const pendingKey = () => `scargo_pendingTruck_${user.value?.userId}`
@@ -326,12 +328,8 @@ watch(
   { deep: true }
 )
 
-// ---- 기타 ----
 function editProfile() {
   alert('회원정보 수정 API는 아직 백엔드에 없습니다. (준비 중)')
-}
-function alertPlaceholder(label) {
-  alert(`${label} 화면은 준비 중입니다.`)
 }
 function logout() {
   if (!confirm('로그아웃 하시겠습니까?')) return
@@ -441,12 +439,5 @@ onMounted(async () => {
 .switch input:checked + .slider { background: var(--amber-soft); border-color: var(--amber); }
 .switch input:checked + .slider::before { transform: translateX(18px); background: var(--amber); }
 
-/* 기타 메뉴 */
-.menu-card { padding: 4px 16px; }
-.menu-row { width: 100%; display: flex; align-items: center; justify-content: space-between; padding: 14px 0; background: none; border: none; color: var(--text); font-size: 14.5px; font-weight: 500; cursor: pointer; text-align: left; }
-.menu-row + .menu-row { border-top: 1px solid var(--border); }
-.menu-row .chev { color: var(--text-muted); }
-
 .logout-btn { width: 100%; margin-top: 22px; padding: 14px; border-radius: var(--radius); border: 1px solid var(--border); background: transparent; color: var(--red); font-size: 14.5px; font-weight: 600; cursor: pointer; }
-.version { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 14px; }
 </style>

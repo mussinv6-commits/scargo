@@ -6,7 +6,7 @@
       title="업체"
       id-key="companyId"
       :columns="columns"
-      :rows="rows"
+      :rows="visibleRows"
       :loading="loading"
       :form-fields="formFields"
       :page-size="10"
@@ -19,7 +19,8 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { rowsForViewDate } from '@/components/admin/adminViewDate.js'
 import CrudTable from '@/components/admin/CrudTable.vue'
 import AdminPageHeader from '@/components/admin/AdminPageHeader.vue'
 import { adminApi, pickErrorMessage } from '@/utils/adminApi'
@@ -28,6 +29,7 @@ import { BUSINESS_NO_PATTERN, BUSINESS_NO_MESSAGE, normalizeBusinessNo } from '@
 
 const rows = ref([])
 const loading = ref(true)
+const visibleRows = computed(() => rowsForViewDate(rows.value, 'createdAt'))
 
 const columns = [
   { key: 'companyId', label: 'ID', width: '60px', align: 'center' },

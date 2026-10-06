@@ -28,6 +28,35 @@
   text-align: center;
 }
 
+.content-body.is-html {
+  white-space: normal;
+  text-align: left;
+}
+
+.content-body.is-html :deep(img) {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 12px auto;
+}
+
+.content-body.is-html :deep(table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0;
+}
+
+.content-body.is-html :deep(th),
+.content-body.is-html :deep(td) {
+  border: 1px solid #d5deea;
+  padding: 8px 10px;
+  vertical-align: top;
+}
+
+.content-body.is-html :deep(th) {
+  background: #f4f7fb;
+}
+
 .cursor-pointer { cursor: pointer; }
 .cursor-pointer:hover {
   text-decoration: underline;

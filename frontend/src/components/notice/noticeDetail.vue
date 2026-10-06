@@ -14,7 +14,8 @@
         </div>
       </div>
 
-      <div class="content-body py-4 mb-4">{{ notice.contentText }}</div>
+      <div v-if="isHtml" class="content-body is-html py-4 mb-4" v-html="safeHtml"></div>
+      <div v-else class="content-body py-4 mb-4">{{ notice.contentText }}</div>
 
       <div v-if="attachments.length" class="attachment-box border-top border-bottom py-3 mb-4">
         <h6 class="fw-bold mb-3">첨부파일</h6>
@@ -67,6 +68,19 @@ export default {
   },
   computed: {
     canEdit() { return canManagePost(this.notice) },
+    isHtml() { return /<\/?[a-z][\s\S]*>/i.test(this.notice.contentText || '') },
+    safeHtml() {
+      const doc = new DOMParser().parseFromString(this.notice.contentText || '', 'text/html')
+      doc.querySelectorAll('script,style,iframe,object').forEach((node) => node.remove())
+      doc.querySelectorAll('*').forEach((el) => {
+        [...el.attributes].forEach((attr) => {
+          if (attr.name.startsWith('on') || attr.name === 'srcdoc') el.removeAttribute(attr.name)
+          if (attr.name === 'href' && /^\s*javascript:/i.test(attr.value)) el.removeAttribute(attr.name)
+          if (attr.name === 'src' && !/^(https?:|data:image\/(png|jpe?g|gif|webp);base64,)/i.test(attr.value.trim())) el.removeAttribute(attr.name)
+        })
+      })
+      return doc.body.innerHTML
+    },
   },
   watch: {
     '$route.params.id'(id) {

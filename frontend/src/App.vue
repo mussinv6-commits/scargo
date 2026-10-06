@@ -7,8 +7,8 @@ import NotificationBell from "@/components/common/NotificationBell.vue";
 import { authState, clearLogin } from "@/auth/authState.js";
 import { API_BASE } from "@/utils/apiBase.js";
 import { ADMIN_MENU } from "@/components/admin/adminMenu.js";
-import { COMPANY_MENU, COMPANY_EXTRA_MENU } from "@/components/company/companyMenu.js";
-import safeCargoLogo from "@/assets/safecargo_logo_4x.png";
+import { COMPANY_MENU } from "@/components/company/companyMenu.js";
+import safeCargoLogo from "@/assets/scargo_logo_4x.png";
 
 const router = useRouter();
 const route = useRoute();
@@ -56,7 +56,7 @@ const roleMenu = computed(() => {
       label: "사업자",
       icon: "bi-building",
       base: "/company",
-      groups: [[...COMPANY_MENU, ...COMPANY_EXTRA_MENU]],
+      groups: [COMPANY_MENU],
     };
   }
   if (isDriver.value) {
@@ -69,6 +69,9 @@ const roleMenu = computed(() => {
         { to: "/driver/app/dispatch-list", label: "배차목록" },
         { to: "/driver/app/settlement", label: "정산/매출" },
         { to: "/driver/app/my-page", label: "MY/차량" },
+        { to: "/driver/app/faq", label: "자주 묻는 질문" },
+        { to: "/driver/app/support", label: "고객센터 문의" },
+        { to: "/driver/app/terms", label: "약관 및 정책" },
       ]],
     };
   }
@@ -100,6 +103,7 @@ const hideChrome = computed(() => isDriverApp.value || isAdminApp.value || isCom
 function isSection(prefix) {
   return route.path === prefix || route.path.startsWith(prefix + "/");
 }
+const isNoticeSection = computed(() => isSection("/notice") || isSection("/admin/notices"));
 
 function handleLogout() {
   axios
@@ -119,10 +123,10 @@ function scrollToTop() {
 
 <template>
   <div id="app">
-    <nav v-if="!isAdminApp && !isCompanyApp" class="navbar navbar-expand-lg navbar-dark bg-brand sticky-top site-nav">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-brand sticky-top site-nav">
       <div class="container-fluid nav-grid">
         <RouterLink to="/" class="navbar-brand brand-logo">
-          <img :src="safeCargoLogo" alt="SafeCargo" />
+          <img :src="safeCargoLogo" alt="S Cargo" />
         </RouterLink>
 
         <button
@@ -142,7 +146,7 @@ function scrollToTop() {
               <RouterLink to="/" class="nav-link" :class="{ 'is-active': route.path === '/' }">홈</RouterLink>
             </li>
             <li class="nav-item">
-              <RouterLink to="/notice" class="nav-link" :class="{ 'is-active': isSection('/notice') }">공지사항</RouterLink>
+              <RouterLink :to="isAdmin ? '/admin/notices' : '/notice'" class="nav-link" :class="{ 'is-active': isNoticeSection }">공지사항</RouterLink>
             </li>
             <!-- 26.10.01: 게이트 OCR 검사는 관리자 메뉴(/admin/gate-ocr)로 이동 -->
 
@@ -155,7 +159,7 @@ function scrollToTop() {
                 :aria-expanded="roleOpen"
                 @click.prevent="roleOpen = !roleOpen"
               >
-                {{ roleMenu.label }} 메뉴
+                {{ roleMenu.label }}{{ isDriver ? '' : ' 메뉴' }}
               </a>
               <ul class="dropdown-menu" :class="{ show: roleOpen }">
                 <template v-for="(group, gi) in roleMenu.groups" :key="gi">

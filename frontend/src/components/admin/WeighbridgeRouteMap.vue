@@ -302,7 +302,7 @@ onBeforeUnmount(() => {
 .wrm.is-compact .wrm-note {
   margin: 0;
   padding: 6px 10px;
-  font-size: 11.5px;
+  font-size: 12px;
   background: #fff;
 }
 .wrm-map {
@@ -320,7 +320,7 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
   align-items: center;
   gap: 6px 16px;
-  font-size: 12.5px;
+  font-size: 13px;
   color: #64748b;
 }
 .wrm-legend li {
@@ -356,7 +356,7 @@ onBeforeUnmount(() => {
 }
 .wrm-note {
   margin: 6px 0 0;
-  font-size: 12.5px;
+  font-size: 13px;
   color: #64748b;
 }
 :deep(.wrm-pin) {

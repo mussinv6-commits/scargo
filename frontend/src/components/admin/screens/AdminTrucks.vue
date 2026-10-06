@@ -6,7 +6,7 @@
       title="차량"
       id-key="vehicleNo"
       :columns="columns"
-      :rows="rows"
+      :rows="visibleRows"
       :loading="loading"
       :form-fields="formFields"
       :page-size="5"
@@ -95,8 +95,10 @@ import AdminPager from '@/components/admin/AdminPager.vue'
 import { adminApi, pickErrorMessage } from '@/utils/adminApi'
 import { normalizeRows, withBoolAliases, toNum, seg, updateWithFallback , deleteError } from '@/utils/apiHelpers'
 import { VEHICLE_NO_PATTERN, VEHICLE_NO_MESSAGE, normalizeVehicleNo } from '@/utils/validators'
+import { rowsForViewDate } from '@/components/admin/adminViewDate.js'
 
 const rows = ref([])
+const visibleRows = computed(() => rowsForViewDate(rows.value, 'createdAt'))
 const loading = ref(true)
 const companyOptions = ref([])
 const approvalFilter = ref('ALL')
@@ -198,10 +200,11 @@ const APPROVAL_LABEL = { PENDING: '심사대기', APPROVED: '허가', REJECTED: 
 
 const APPROVAL_PAGE_SIZE = 5
 const approvalPage = ref(1)
-const pendingCount = computed(() => rows.value.filter((t) => !t.entryApproval || t.entryApproval === 'PENDING').length)
+const pendingCount = computed(() => visibleRows.value.filter((t) => !t.entryApproval || t.entryApproval === 'PENDING').length)
 const approvalRows = computed(() => {
-  if (approvalFilter.value === 'ALL') return rows.value
-  return rows.value.filter((t) => (t.entryApproval || 'PENDING') === approvalFilter.value)
+  const base = visibleRows.value
+  if (approvalFilter.value === 'ALL') return base
+  return base.filter((t) => (t.entryApproval || 'PENDING') === approvalFilter.value)
 })
 const approvalPageCount = computed(() => Math.max(1, Math.ceil(approvalRows.value.length / APPROVAL_PAGE_SIZE) || 1))
 const pagedApprovalRows = computed(() => {

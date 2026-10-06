@@ -7,7 +7,3 @@ export const COMPANY_MENU = [
   { to: '/company/drivers', label: '기사 관리', icon: 'bi-person-badge' },
   { to: '/company/info', label: '업체 정보', icon: 'bi-building' },
 ]
-
-export const COMPANY_EXTRA_MENU = [
-  { to: '/notice', label: '공지사항', icon: 'bi-megaphone' },
-]

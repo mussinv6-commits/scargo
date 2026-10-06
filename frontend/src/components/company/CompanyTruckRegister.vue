@@ -28,7 +28,7 @@
 
       <div class="mapping-field">
         <label>최대 적재 중량 (kg)</label>
-        <input v-model="form.maxLoadWeight" type="number" min="0" step="0.01" class="mapping-input" placeholder="예: 25000" />
+        <input v-model="form.maxLoadWeight" type="number" min="0" step="0.01" class="mapping-input" placeholder="예: 25000" @keydown="blockNegative" @input="clampWeight" />
       </div>
 
       <button type="submit" class="mapping-submit-btn" :disabled="submitting">
@@ -61,6 +61,19 @@ const form = reactive({
   trailerNo: '',
   maxLoadWeight: '',
 })
+
+function blockNegative(event) {
+  if (event.key === '-' || event.key === 'Subtract') {
+    event.preventDefault()
+    return
+  }
+  if (event.key !== 'ArrowDown') return
+  const current = event.target.value === '' ? 0 : Number(event.target.value)
+  if (Number.isNaN(current) || current <= 0) event.preventDefault()
+}
+function clampWeight() {
+  if (form.maxLoadWeight !== '' && Number(form.maxLoadWeight) < 0) form.maxLoadWeight = '0'
+}
 
 function resetForm() {
   form.vehicleNo = ''

@@ -177,10 +177,12 @@
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
+  scrollbar-width: none;
   display: flex;
   flex-direction: column;
   gap: 1px;
 }
+.admin-shell .admin-nav-scroll::-webkit-scrollbar { display: none; }
 .admin-shell.is-collapsed .admin-sidebar { display: none; }
 
 .admin-shell .admin-brand {
@@ -237,21 +239,30 @@
   font-weight: 700;
   letter-spacing: 0.4px;
   color: rgba(255, 255, 255, 0.45);
-  padding: 10px 12px 4px;
+  padding: 8px 12px 2px;
 }
 
 .admin-shell .admin-nav-item {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 12px;
+  padding: 6px 12px;
   border-radius: 8px;
   text-decoration: none;
   color: rgba(255, 255, 255, 0.78);
   font-size: 13.5px;
   font-weight: 600;
 }
-.admin-shell .admin-nav-item i { font-size: 15px; width: 18px; text-align: center; }
+.admin-shell .admin-nav-item i {
+  font-size: 15px;
+  width: 18px;
+  height: 16px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
 .admin-shell .admin-nav-icon {
   width: 18px;
   height: 18px;
@@ -791,6 +802,12 @@ a.kpi-card:hover { border-color: var(--a-primary); }
 .ops-clock-wrap:hover .ops-clock {
   border-color: #c9d6e8;
   color: var(--a-text);
+}
+.ops-clock-wrap.is-locked .ops-clock,
+.ops-clock-wrap.is-locked:hover .ops-clock {
+  cursor: default;
+  border-color: var(--a-border);
+  color: var(--a-text-muted);
 }
 .ops-clock-native {
   position: absolute;

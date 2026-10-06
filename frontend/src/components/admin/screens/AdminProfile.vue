@@ -47,7 +47,7 @@ const shortcuts = [
   { to: '/admin/accounts', label: '회원 관리', icon: 'bi-people', tone: 'tone-blue' },
   { to: '/admin/trucks', label: '차량 관리', icon: 'bi-truck', tone: 'tone-orange' },
   { to: '/admin/overload-checks', label: '과적 검사', icon: 'bi-exclamation-triangle', tone: 'tone-teal' },
-  { to: '/notice', label: '공지사항', icon: 'bi-megaphone', tone: 'tone-violet' },
+  { to: '/admin/notices', label: '공지사항', icon: 'bi-megaphone', tone: 'tone-violet' },
 ]
 
 const loading = ref(true)
@@ -77,22 +77,50 @@ onMounted(async () => {
 .profile-page {
   text-align: left;
 }
+.profile-page :deep(.admin-page-header) {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e3e8ef;
+}
+.profile-page :deep(.admin-page-heading) { padding-left: 0; }
+.profile-page :deep(.admin-page-header h1) {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.2;
+  margin: 0 0 4px;
+  color: #0a2540;
+}
+.profile-page :deep(.admin-page-header p) {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: #64748b;
+  margin: 0;
+}
 .profile-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
+  grid-template-columns: 1fr 1fr;
   gap: 16px;
-  align-items: start;
+  align-items: stretch;
 }
 .profile-side {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-height: 100%;
+}
+.profile-side > .profile-card {
+  flex: 1;
 }
 .profile-card {
   background: var(--a-surface, #fff);
   border: 1px solid var(--a-border, #e3e8ef);
   border-radius: var(--a-radius, 12px);
   padding: 24px;
+  height: 100%;
+  box-sizing: border-box;
 }
 .profile-side-title {
   font-size: 20px;

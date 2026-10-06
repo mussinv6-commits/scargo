@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div class="notice-slide-pin">
     <div class="notice-slide">
       <div class="notice-content">
         <span class="notice-type">{{ currentNotice.type }}</span>

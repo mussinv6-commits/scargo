@@ -42,6 +42,28 @@
   text-align: left;
 }
 
+/* MY/차량은 본문만 스크롤하지 않고, 사이드바와 페이지가 함께 움직인다. */
+.driver-app-shell.is-my-page {
+  overflow: visible;
+  height: auto;
+  align-items: stretch;
+}
+.driver-app-shell.is-my-page .driver-main {
+  overflow: visible;
+  min-height: 0;
+  max-height: none;
+}
+@media (min-width: 901px) {
+  .driver-app-shell.is-my-page .driver-sidebar {
+    position: sticky;
+    top: var(--nav-h, 60px);
+    align-self: flex-start;
+    height: calc(100vh - var(--nav-h, 60px));
+    max-height: calc(100vh - var(--nav-h, 60px));
+    overflow-y: auto;
+  }
+}
+
 .driver-app-shell thead th {
   text-align: center !important;
 }

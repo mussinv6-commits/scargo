@@ -31,3 +31,8 @@ python/runs/
 python/build/
 python/dist/
 python/crash_log.txt
+
+# ===== 백엔드 IDE 산출물 =====
+backend/scargo/.apt_generated/
+backend/scargo/.apt_generated_tests/
+python/__pycache__/

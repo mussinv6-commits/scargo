@@ -1,5 +1,4 @@
 package com.scargo.service;
-
 import com.scargo.dto.OverloadCheckCreateRequest;
 import com.scargo.dto.OverloadCheckResponse;
 import com.scargo.dto.WeighbridgeQueueItem;
@@ -22,7 +21,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
@@ -34,7 +32,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-
 /**
  * 26.10.01 추가(검사소 정식화)
  * 게이트 OCR 통과 → 검사소 계량 → 과적 판정 → overload_checks 저장 흐름을 담당한다.
@@ -48,9 +45,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class WeighbridgeService {
-
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
-
     private final GateLogRepository gateLogRepository;
     private final OverloadCheckRepository overloadCheckRepository;
     private final TruckRepository truckRepository;
@@ -58,7 +53,6 @@ public class WeighbridgeService {
     private final ContainerRepository containerRepository;         // 26.10.01 추가: 컨테이너 자동 조회
     private final LoadingRecordRepository loadingRecordRepository; // 26.10.01 추가
     private final ObjectMapper objectMapper;                       // 26.10.01 추가: trucks.planned_route(JSON) 읽기용
-
     /** 26.10.02 추가: 게이트 기록의 ocrRawData(JSON)에서 scanType(ENTRY/EXIT) 꺼내기. 없으면 null */
     private String scanTypeOf(GateLog log) {
         String raw = log.getOcrRawData();
@@ -70,19 +64,14 @@ public class WeighbridgeService {
             return null;
         }
     }
-
     @Value("${scargo.weighbridge.axle-limit-kg:10000}")
     private int axleLimitKg;
-
     @Value("${scargo.weighbridge.gross-limit-kg:40000}")
     private int grossLimitKg;
-
     @Value("${scargo.weighbridge.station-code:WB-01}")
     private String defaultStationCode;
-
     @Value("${scargo.weighbridge.queue-hours:12}")
     private int queueHours;
-
     public Map<String, Object> getPolicy() {
         return Map.of(
                 "stationCode", defaultStationCode,
@@ -91,7 +80,6 @@ public class WeighbridgeService {
                 "queueHours", queueHours
         );
     }
-
     // 1. 계량 대기열: 게이트를 통과(등록차량 매칭)했지만 아직 계량하지 않은 차량
     public List<WeighbridgeQueueItem> getQueue() {
         OffsetDateTime since = OffsetDateTime.now(KST).minusHours(queueHours);
@@ -100,7 +88,6 @@ public class WeighbridgeService {
         //  - 이번 방문(queueHours 안)에 이미 계량한 차량도 올리지 않음
         List<GateLog> logs = gateLogRepository.findWeighbridgeQueue(since).stream()
                 .filter(log -> !"EXIT".equals(scanTypeOf(log)))
-                .filter(log -> !overloadCheckRepository.existsByVehicleNoAndCheckedAtGreaterThanEqual(log.getActualVehicleNo(), since))
                 .toList();
         if (logs.isEmpty()) {
             return List.of();
@@ -116,7 +103,6 @@ public class WeighbridgeService {
                 })
                 .toList();
     }
-
     // 1-1. 26.10.01 추가: 차량번호로 등록차량 + 실린 컨테이너 정보 조회 (직접 계량 / 재계량 화면용)
     public WeighbridgeQueueItem getVehicleInfo(String vehicleNo) {
         String no = vehicleNo.trim().replace(" ", "");
@@ -124,7 +110,6 @@ public class WeighbridgeService {
         ContainerHit hit = resolveContainer(no);
         return new WeighbridgeQueueItem(null, no, truck, hit.container, hit.source);
     }
-
     /**
      * 26.10.01 추가: 이 차량에 실린 컨테이너를 DB에서 찾는다.
      *  1순위: 컨테이너-차량 배정(매핑) - containers.assigned_vehicle_no
@@ -148,7 +133,6 @@ public class WeighbridgeService {
                 .map(c -> new ContainerHit(c, "LOADING_RECORD"))
                 .orElse(ContainerHit.NONE);
     }
-
     /**
      * 26.10.01 추가: trucks.planned_route JSON 의 {"container": {"container_no": ..., "tare_kg": ..., "net_kg": ...}} 에서
      * 컨테이너를 꺼낸다. containers 테이블에 같은 번호가 있으면 그 정보를 쓰고,
@@ -187,7 +171,6 @@ public class WeighbridgeService {
             return null; // JSON 형식이 다르면 컨테이너 없음으로 처리
         }
     }
-
     private static String text(JsonNode n, String... keys) {
         for (String k : keys) {
             JsonNode v = n.path(k);
@@ -197,7 +180,6 @@ public class WeighbridgeService {
         }
         return null;
     }
-
     private static BigDecimal num(JsonNode n, String... keys) {
         for (String k : keys) {
             JsonNode v = n.path(k);
@@ -210,23 +192,19 @@ public class WeighbridgeService {
         }
         return null;
     }
-
     private record ContainerHit(Container container, String source) {
         static final ContainerHit NONE = new ContainerHit(null, null);
     }
-
     // 2. 오늘 계량 기록 (최신순)
     public List<OverloadCheckResponse> getTodayRecords() {
         OffsetDateTime startOfDay = LocalDate.now(KST).atStartOfDay(KST).toOffsetDateTime();
         return overloadCheckRepository.findTop50ByCheckedAtGreaterThanEqualOrderByCheckIdDesc(startOfDay)
                 .stream().map(OverloadCheckResponse::new).toList();
     }
-
     // 3. 계량 저장: 축중만 받아서 서버가 판정 후 overload_checks 에 저장
     @Transactional
     public WeighingResultResponse weigh(WeighingRequest request) {
         String vehicleNo = request.getVehicleNo().trim().replace(" ", "");
-
         if (request.getGateLogId() != null) {
             GateLog gateLog = gateLogRepository.findById(request.getGateLogId())
                     .orElseThrow(() -> new IllegalArgumentException("게이트 통과 기록을 찾을 수 없습니다. id=" + request.getGateLogId()));
@@ -237,23 +215,16 @@ public class WeighbridgeService {
             if ("EXIT".equals(scanTypeOf(gateLog))) {
                 throw new IllegalStateException("출차 차량은 계량하지 않습니다. (" + vehicleNo + ")");
             }
-            if (overloadCheckRepository.existsByVehicleNoAndCheckedAtGreaterThanEqual(
-                    vehicleNo, OffsetDateTime.now(KST).minusHours(queueHours))) {
-                throw new IllegalStateException("이번 입차에서 이미 계량한 차량입니다. 과적이면 재계량을 이용하세요. (" + vehicleNo + ")");
-            }
         }
-
         Measurement m = Measurement.of(request.getAxles());
         List<Violation> violations = judge(m, request.getVgmWeightKg(), maxPayloadKg(vehicleNo));
         boolean isViolation = !violations.isEmpty();
-
         // 26.10.01 변경: 컨테이너 번호는 화면 입력이 아니라 DB(차량 배정/적재기록)에서 자동으로 채움
         String containerNo = blankToNull(request.getContainerNo());
         if (containerNo == null) {
             Container c = resolveContainer(vehicleNo).container;
             containerNo = c != null ? c.getContainerNo() : null;
         }
-
         OverloadCheckCreateRequest create = OverloadCheckCreateRequest.builder()
                 .vehicleNo(vehicleNo)
                 .containerNo(containerNo)
@@ -280,11 +251,9 @@ public class WeighbridgeService {
                 .gateLogId(request.getGateLogId())
                 .stationCode(stationOrDefault(request.getStationCode()))
                 .build();
-
         Long checkId = overloadService.createCheck(create).getCheckId();
         return toResult(checkId, violations);
     }
-
     // 4. 감량 후 재계량: 같은 기록을 새 측정값으로 갱신하고 재검증 횟수 +1
     @Transactional
     public WeighingResultResponse reweigh(Long checkId, WeighingRequest request) {
@@ -293,33 +262,26 @@ public class WeighbridgeService {
         if (Boolean.TRUE.equals(check.getIsPassed())) {
             throw new IllegalStateException("이미 통과한 차량은 재계량할 필요가 없습니다.");
         }
-
         Measurement m = Measurement.of(request.getAxles());
         Integer loadKg = request.getVgmWeightKg() != null ? request.getVgmWeightKg() : check.getVgmWeight();
         List<Violation> violations = judge(m, loadKg, check.getMaxPayload());
         boolean isViolation = !violations.isEmpty();
-
         check.applyReweigh(m.weights, m.left, m.right, m.total, isViolation,
                 isViolation ? describe(violations) : null);
         overloadCheckRepository.saveAndFlush(check);
-        
      // 재계량 후에도 여전히 과적이면 알림
         if (isViolation) {
             overloadService.notifyOverload(check, true);
         }
-        
         return toResult(checkId, violations);
     }
-
     // ---- 내부 도우미 ----
-
     private WeighingResultResponse toResult(Long checkId, List<Violation> violations) {
         overloadCheckRepository.stampCheckedAtIfMissing(checkId);
         OverloadCheck saved = overloadCheckRepository.findById(checkId)
                 .orElseThrow(() -> new IllegalStateException("저장된 계량 기록을 다시 읽지 못했습니다. id=" + checkId));
         return new WeighingResultResponse(new OverloadCheckResponse(saved), violations, axleLimitKg, grossLimitKg);
     }
-
     // 26.10.02 추가: 적재중량(컨테이너 자중+화물)이 최대적재량의 110%를 넘으면 위반
     private List<Violation> judge(Measurement m, Integer loadKg, Integer maxPayload) {
         List<Violation> list = judge(m);
@@ -331,7 +293,6 @@ public class WeighbridgeService {
         }
         return list;
     }
-
     private List<Violation> judge(Measurement m) {
         List<Violation> list = new ArrayList<>();
         for (int i = 0; i < m.weights.length; i++) {
@@ -344,7 +305,6 @@ public class WeighbridgeService {
         }
         return list;
     }
-
     private static String describe(List<Violation> violations) {
         return violations.stream()
                 .map(v -> "GROSS".equals(v.getType())
@@ -354,7 +314,6 @@ public class WeighbridgeService {
                         : String.format("%d축 %,dkg (축하중 기준 %,dkg 초과)", v.getAxleNo(), v.getMeasuredKg(), v.getLimitKg()))
                 .collect(Collectors.joining(", "));
     }
-
     // 26.10.01 추가: 등록차량(trucks)의 최대 적재중량(kg)을 정수로 - 미등록/미입력이면 null
     private Integer maxPayloadKg(String vehicleNo) {
         return truckRepository.findById(vehicleNo)
@@ -362,36 +321,30 @@ public class WeighbridgeService {
                 .map(WeighbridgeService::toKg)
                 .orElse(null);
     }
-
     /** trucks.max_load_weight 는 톤 단위(예: 26.00)로 들어있음 → kg 로 변환. 1,000 이상이면 이미 kg 로 보고 그대로 */
     public static Integer toKg(BigDecimal w) {
         if (w == null) return null;
         BigDecimal kg = w.compareTo(BigDecimal.valueOf(1000)) < 0 ? w.multiply(BigDecimal.valueOf(1000)) : w;
         return kg.setScale(0, RoundingMode.HALF_UP).intValue();
     }
-
     private String stationOrDefault(String code) {
         return code == null || code.isBlank() ? defaultStationCode : code.trim();
     }
-
     private static String blankToNull(String s) {
         return s == null || s.isBlank() ? null : s.trim().toUpperCase();
     }
-
     /** 요청의 축 목록을 배열로 정리 (좌/우 윤중이 없으면 축중을 반씩 나눠 채움) */
     private static final class Measurement {
         final Integer[] weights;
         final Integer[] left;
         final Integer[] right;
         final int total;
-
         private Measurement(Integer[] weights, Integer[] left, Integer[] right, int total) {
             this.weights = weights;
             this.left = left;
             this.right = right;
             this.total = total;
         }
-
         static Measurement of(List<WeighingRequest.Axle> axles) {
             int n = axles.size();
             Integer[] w = new Integer[n];
@@ -412,7 +365,6 @@ public class WeighbridgeService {
             }
             return new Measurement(w, l, r, total);
         }
-
         Integer w(int i) { return i < weights.length ? weights[i] : 0; }
         Integer l(int i) { return i < left.length ? left[i] : 0; }
         Integer r(int i) { return i < right.length ? right[i] : 0; }

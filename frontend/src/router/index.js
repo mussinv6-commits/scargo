@@ -4,6 +4,7 @@ import { authState } from '@/auth/authState.js';
 // vite.config.js 에 @를 설정해야 @/ 경로를 사용할 수 있다
 import member from '@/router/member/member.js';
 import notice from '@/router/notice/notice.js';
+import bbs from '@/router/bbs/bbs.js';
 import company from '@/router/company/company.js';
 import driverApp from '@/router/driver/driverApp.js';
 import admin from '@/router/admin/admin.js';
@@ -15,6 +16,7 @@ const router = createRouter({
     routes: [
         ...member,
         ...notice,
+        ...bbs,
         ...company,
         ...driverApp,
         ...admin,
@@ -32,6 +34,13 @@ const router = createRouter({
 // 라우트 진입 전 권한 체크 (관리자/메인메뉴: 관리자·사업자·화물차 기사 3분류 공용 가드)
 router.beforeEach((to, from, next) => {
     const user = authState.user; // reactive 객체에서 바로 꺼내 씀
+
+    if (user?.userType === 'ADMIN') {
+        if (to.name === 'notice') return next({ name: 'admin-notices' });
+        if (to.name === 'noticeWrite') return next({ name: 'admin-notice-write' });
+        if (to.name === 'noticeUpdate') return next({ name: 'admin-notice-update', params: to.params });
+        if (to.name === 'noticeDetail') return next({ name: 'admin-notice-detail', params: to.params });
+    }
 
     // 관리자 화면: ADMIN 계정만
     if (to.matched.some((r) => r.meta.requiresAdmin)) {

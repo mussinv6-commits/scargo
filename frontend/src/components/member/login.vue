@@ -4,17 +4,17 @@
     <!-- 왼쪽 서비스 소개 영역 -->
     <div class="login-intro">
 
-      <!-- SafeCargo 로고 -->
+      <!-- S Cargo 로고 -->
       <div class="brand">
 
         <div class="brand-icon">
-          <img :src="safeCargoLogo" alt="SafeCargo 로고" />
+          <img :src="safeCargoLogo" alt="S Cargo 로고" />
         </div>
 
         <div class="brand-info">
 
           <!-- <div class="brand-name">
-            SafeCargo
+            S Cargo
           </div> -->
 
           <!-- <div class="brand-subtitle">
@@ -173,7 +173,7 @@ const { cookies } = useCookies();
 
 import axios from "axios";
 import { setLogin } from "@/auth/authState.js";   // 추가
-import safeCargoLogo from "@/assets/safecargo_logo_4x.png";
+import safeCargoLogo from "@/assets/scargo_logo_4x.png";
 
 export default {
   data() {

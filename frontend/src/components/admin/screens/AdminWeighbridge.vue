@@ -296,7 +296,7 @@
     <!-- ───────── 오늘 계량 기록 ───────── -->
     <section class="wb-records">
       <header>
-        <h2>오늘 계량 기록</h2>
+        <h2>오늘 계량 기록 · 재계량 대기</h2>
         <span class="wb-records-sum">
           {{ records.length }}건 / 통과 {{ records.filter((r) => r.isPassed).length }} / 과적
           {{ records.filter((r) => !r.isPassed).length }}
@@ -330,7 +330,7 @@
                   {{ r.isPassed ? '통과' : '과적' }}{{ r.retryCount ? ` (재계량 ${r.retryCount})` : '' }}
                 </span>
               </td>
-              <td class="reason">{{ r.violationReason || '-' }}</td>
+              <td class="reason" :title="r.violationReason || ''">{{ r.violationReason || '-' }}</td>
               <td>
                 <button v-if="!r.isPassed" type="button" class="wb-mini" :disabled="busy" @click="startReweigh(r)">
                   재계량
@@ -452,7 +452,35 @@ async function loadRecords() {
     // (게이트 OCR로 넘어온 차량 = gateLogId, 콘솔 직접 계량 = stationCode 가 있음.
     //  과적 검사 관리 화면에서 손으로 넣은 테스트 데이터는 둘 다 없어서 제외됨)
     const list = Array.isArray(res.data) ? res.data : []
-    records.value = list.filter((r) => r.gateLogId != null || r.stationCode)
+    // 26.10.06 추가: 오늘 기록만 보여서, 지난날 과적(미통과) 차량은 서버를 다시 켜면 재계량할 방법이 없던 문제
+    // → 아직 통과 못 한 과적 기록은 날짜와 상관없이 함께 표시 (재계량 버튼 유지)
+    let pending = []
+    try {
+      const f = await adminApi.get('/api/overload-checks/failed', { params: { page: 0, size: 100, sort: 'checkId,desc' } })
+      const raw = Array.isArray(f.data?.content) ? f.data.content : []
+      // 같은 차량은 가장 최근 과적 기록 1건만, 오늘 그 뒤에 다시 계량한 기록이 있으면 제외
+      const newest = new Map()
+      for (const r of list) {
+        const k = String(r.vehicleNo || '').replace(/\s/g, '')
+        newest.set(k, Math.max(newest.get(k) ?? 0, Number(r.checkId)))
+      }
+      const seen = new Set()
+      pending = raw
+        .sort((x, y) => Number(y.checkId) - Number(x.checkId))
+        .filter((r) => {
+          const k = String(r.vehicleNo || '').replace(/\s/g, '')
+          if (seen.has(k)) return false
+          seen.add(k)
+          return (newest.get(k) ?? 0) <= Number(r.checkId)
+        })
+    } catch {
+      /* 실패해도 오늘 기록은 표시 */
+    }
+    const byId = new Map()
+    for (const r of [...list, ...pending]) {
+      if ((r.gateLogId != null || r.stationCode) && !byId.has(r.checkId)) byId.set(r.checkId, r)
+    }
+    records.value = [...byId.values()].sort((x, y) => Number(y.checkId) - Number(x.checkId))
   } catch {
     /* 기록 표는 보조 정보 - 실패해도 계량은 가능 */
   }
@@ -690,6 +718,8 @@ function nextVehicle() {
 }
 
 function onManualEdit() {
+  weightBreakdown.value = null
+  axles.value.forEach((a) => { a.leftKg = null; a.rightKg = null })
   result.value = null
   phase.value = 'ready'
   recomputeTotal()
@@ -896,7 +926,10 @@ function axlePct(v) {
 }
 function hhmm(iso) {
   if (!iso) return '-'
-  return new Date(iso).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })
+  const d = new Date(iso)
+  const t = d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })
+  // 26.10.06: 지난날 재계량 대기 기록은 날짜도 함께 표시
+  return d.toDateString() === new Date().toDateString() ? t : `${d.getMonth() + 1}/${d.getDate()} ${t}`
 }
 function hhmmss(iso) {
   const d = iso ? new Date(iso) : new Date()
@@ -1063,7 +1096,7 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--wb-sub);
 }
 .wb-policy span {
@@ -1073,7 +1106,7 @@ onBeforeUnmount(() => {
   background: #fff;
 }
 .wb-policy .wb-station {
-  font-family: 'Barlow Condensed', sans-serif;
+  font-family: 'Barlow Condensed', 'Inter', sans-serif;
   font-size: 15px;
   font-weight: 700;
   color: #fff;
@@ -1114,7 +1147,7 @@ onBeforeUnmount(() => {
   margin: 0;
 }
 .wb-count {
-  font-family: 'Barlow Condensed', sans-serif;
+  font-family: 'Barlow Condensed', 'Inter', sans-serif;
   font-size: 18px;
   font-weight: 700;
   color: var(--wb-accent);
@@ -1242,7 +1275,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 6px;
   padding: 7px 12px;
-  font-size: 11.5px;
+  font-size: 12px;
   color: #9db0c7;
   white-space: nowrap;
   overflow: hidden;
@@ -1344,7 +1377,7 @@ onBeforeUnmount(() => {
 }
 .wb-auto-status {
   margin: 0;
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.5;
   color: var(--wb-sub);
 }
@@ -1354,7 +1387,7 @@ onBeforeUnmount(() => {
 
 .wb-queue-note {
   margin: 0;
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.5;
 }
 .wb-queue-note.is-error {
@@ -1400,7 +1433,7 @@ onBeforeUnmount(() => {
   outline-offset: 2px;
 }
 .wb-queue-meta {
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--wb-sub);
 }
 .wb-queue-time {
@@ -1464,7 +1497,7 @@ onBeforeUnmount(() => {
 }
 .wb-manual label {
   display: block;
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--wb-sub);
   margin-bottom: 6px;
 }
@@ -1546,7 +1579,7 @@ onBeforeUnmount(() => {
   gap: 2px;
 }
 .wb-vehicle-facts dt {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--wb-sub);
   font-weight: 500;
 }
@@ -1774,7 +1807,7 @@ onBeforeUnmount(() => {
 }
 .wb-breakdown {
   margin: 2px 0 0;
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--wb-sub);
 }
 .wb-breakdown-vgm {
@@ -1792,7 +1825,7 @@ onBeforeUnmount(() => {
   color: var(--wb-sub);
 }
 .wb-total-row strong {
-  font-family: 'Barlow Condensed', sans-serif;
+  font-family: 'Barlow Condensed', 'Inter', sans-serif;
   font-size: 24px;
   color: var(--wb-ink);
   font-variant-numeric: tabular-nums;
@@ -1904,7 +1937,7 @@ onBeforeUnmount(() => {
   text-align: right;
   font-variant-numeric: tabular-nums;
   color: var(--wb-sub);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 .wb-container-row {
@@ -1975,7 +2008,7 @@ onBeforeUnmount(() => {
   gap: 6px 14px;
 }
 .wb-verdict-main strong {
-  font-family: 'Barlow Condensed', sans-serif;
+  font-family: 'Barlow Condensed', 'Inter', sans-serif;
   font-size: 30px;
   line-height: 1;
 }
@@ -1992,13 +2025,13 @@ onBeforeUnmount(() => {
 .wb-verdict-list {
   margin: 10px 0 0;
   padding-left: 18px;
-  font-size: 13.5px;
+  font-size: 14px;
   color: var(--wb-ink);
   line-height: 1.7;
 }
 .wb-verdict-hint {
   margin: 8px 0 0;
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--wb-sub);
 }
 .wb-preview {
@@ -2068,7 +2101,7 @@ onBeforeUnmount(() => {
   margin: 0;
 }
 .wb-records-sum {
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--wb-sub);
 }
 .wb-table-wrap {
@@ -2077,11 +2110,21 @@ onBeforeUnmount(() => {
 .wb-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
-  min-width: 720px;
+  font-size: 14px;
+  min-width: 900px;
+  table-layout: fixed;
 }
+/* 26.10.02: 과적 검사 목록과 같은 모양 - 가운데 정렬, 한 줄 고정 높이 */
+.wb-table th:nth-child(1) { width: 60px; }
+.wb-table th:nth-child(2) { width: 100px; }
+.wb-table th:nth-child(3) { width: 140px; }
+.wb-table th:nth-child(4) { width: 110px; }
+.wb-table th:nth-child(5) { width: 60px; }
+.wb-table th:nth-child(6) { width: 120px; }
+.wb-table th:nth-child(7) { width: 130px; }
+.wb-table th:nth-child(9) { width: 90px; }
 .wb-table th {
-  text-align: left;
+  text-align: center;
   font-weight: 600;
   font-size: 12px;
   color: var(--wb-sub);
@@ -2090,23 +2133,25 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 .wb-table td {
-  padding: 9px 10px;
+  height: 60px;
+  padding: 0 10px;
   border-bottom: 1px solid #eef2f6;
   vertical-align: middle;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .wb-table .num {
-  text-align: right;
+  text-align: center;
   font-variant-numeric: tabular-nums;
 }
 .wb-table .plate-cell {
-  font-family: 'Barlow Condensed', sans-serif;
-  font-weight: 700;
-  font-size: 15px;
-  white-space: nowrap;
+  font-weight: 500;
 }
 .wb-table .reason {
   color: var(--wb-sub);
-  max-width: 280px;
+  text-align: left;
 }
 .wb-tag {
   display: inline-block;
@@ -2140,7 +2185,6 @@ onBeforeUnmount(() => {
   cursor: default;
 }
 .wb-table .seq {
-  width: 48px;
   color: var(--wb-sub);
   font-variant-numeric: tabular-nums;
 }

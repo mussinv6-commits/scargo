@@ -18,7 +18,7 @@
       title="검문소"
       id-key="gateId"
       :columns="columns"
-      :rows="rows"
+      :rows="visibleRows"
       :loading="loading"
       :form-fields="formFields"
       :page-size="10"
@@ -29,12 +29,13 @@
       :on-delete="handleDelete"
     />
 
-    <GateMapModal :is-open="isMapModalOpen" :gates="rows" @close="isMapModalOpen = false" />
+    <GateMapModal :is-open="isMapModalOpen" :gates="visibleRows" @close="isMapModalOpen = false" />
   </div>
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { rowsForViewDate } from '@/components/admin/adminViewDate.js'
 import CrudTable from '@/components/admin/CrudTable.vue'
 import AdminPageHeader from '@/components/admin/AdminPageHeader.vue'
 import GateMapModal from '@/components/admin/GateMapModal.vue'
@@ -42,6 +43,7 @@ import { adminApi, pickErrorMessage } from '@/utils/adminApi'
 import { normalizeRows, withBoolAliases, toNum, updateWithFallback , deleteError } from '@/utils/apiHelpers'
 
 const rows = ref([])
+const visibleRows = computed(() => rowsForViewDate(rows.value, 'createdAt'))
 const loading = ref(true)
 const isMapModalOpen = ref(false)
 const apiMissing = ref(false)

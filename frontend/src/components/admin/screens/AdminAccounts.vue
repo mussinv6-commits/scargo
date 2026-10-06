@@ -123,6 +123,7 @@
 import AdminPageHeader from '@/components/admin/AdminPageHeader.vue'
 import AdminPager from '@/components/admin/AdminPager.vue'
 import { computed, onMounted, ref, watch } from 'vue'
+import { rowsForViewDate, viewDate } from '@/components/admin/adminViewDate.js'
 import { adminApi, pickErrorMessage } from '@/utils/adminApi'
 
 const accounts = ref([])
@@ -150,8 +151,8 @@ const PAGE_SIZE = 10
 const page = ref(1)
 
 const filteredAccounts = computed(() => {
-  if (filter.value === 'ALL') return accounts.value
-  return accounts.value.filter((a) => a.userType === filter.value)
+  const byType = filter.value === 'ALL' ? accounts.value : accounts.value.filter((a) => a.userType === filter.value)
+  return rowsForViewDate(byType, 'createdAt')
 })
 const pageCount = computed(() => Math.max(1, Math.ceil(filteredAccounts.value.length / PAGE_SIZE) || 1))
 const pagedAccounts = computed(() => {
@@ -159,6 +160,7 @@ const pagedAccounts = computed(() => {
   return filteredAccounts.value.slice(start, start + PAGE_SIZE)
 })
 watch(filter, () => { page.value = 1 })
+watch(viewDate, () => { page.value = 1 })
 watch(pageCount, (n) => { if (page.value > n) page.value = n })
 
 function typeLabel(t) {

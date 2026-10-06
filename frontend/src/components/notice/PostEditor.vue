@@ -21,9 +21,9 @@
         <select id="pe-level" v-model="noticeLevel" class="form-select">
           <option value="GENERAL">일반</option>
           <option value="IMPORTANT">중요</option>
-          <option value="URGENT">긴급</option>
+          <option value="URGENT">필독</option>
         </select>
-        <p class="form-text mb-0">중요·긴급 공지는 홈 화면에서 모달로 안내됩니다.</p>
+        <p class="form-text mb-0">중요·필독 공지는 홈 화면에서 모달로 안내됩니다.</p>
       </div>
 
       <div class="mb-3">
