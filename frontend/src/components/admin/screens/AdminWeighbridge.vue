@@ -9,6 +9,7 @@
           <span class="wb-station">{{ policy.stationCode }}</span>
           <span>축하중 {{ kg(policy.axleLimitKg) }}kg 이하</span>
           <span>총중량 {{ kg(policy.grossLimitKg) }}kg 이하</span>
+          <span>적재중량 최대적재량 110% 이하</span>
         </div>
       </template>
     </AdminPageHeader>
@@ -126,6 +127,7 @@
           <!-- 검사소 영상(WB-01) + DB 연동 축중 판독 카드 -->
           <div class="wb-stage">
             <div class="wb-frame">
+              <!-- 26.10.06 변경: 계측 중에는 WB-01 영상 + DB 판독 카드, 과적 판정(저장)이 끝나면 이동 경로 지도로 전환 -->
               <video
                 ref="videoEl"
                 class="wb-video"
@@ -135,7 +137,16 @@
                 preload="auto"
                 aria-label="검사소 WB-01 카메라 영상"
               ></video>
-              <div class="wb-card" :class="{ 'is-show': cardShown }" aria-live="polite">
+              <div v-if="result" class="wb-map-bg">
+                <WeighbridgeRouteMap
+                  ref="routeMap"
+                  compact
+                  :route="routeData"
+                  :status="routeStatus"
+                  @phase="(p) => (routePhase = p)"
+                />
+              </div>
+              <div class="wb-card" :class="{ 'is-show': cardShown && !result }" aria-live="polite">
                 <div class="wb-card-row1">
                   <span class="wb-card-dot"></span>DB 연동 축중 판독 · {{ policy.stationCode }}
                 </div>
@@ -147,6 +158,13 @@
                   <span v-for="(a, i) in axles" :key="i" :class="{ 'is-over': (a.weightKg || 0) > policy.axleLimitKg }">
                     {{ i + 1 }}축 <b>{{ tons(a.weightKg) }}</b
                     >t
+                  </span>
+                </div>
+                <div class="wb-card-rule">축당 기준 {{ tons(policy.axleLimitKg) }}t 초과 시 과적</div>
+                <div v-if="payloadLimitKg && payloadKg != null && phase !== 'reading'" class="wb-card-total">
+                  <span class="wb-card-label">적재중량</span>
+                  <span class="wb-card-value is-sub" :class="{ 'is-over': payloadKg > payloadLimitKg }">
+                    {{ tons(payloadKg) }}<small>t / 기준 {{ tons(payloadLimitKg) }}t (최대적재량 110%)</small>
                   </span>
                 </div>
                 <div class="wb-card-total">
@@ -163,6 +181,30 @@
                 차량이 검사소에 올라오면 <b>축중 계측</b>을 누르세요
               </div>
             </div>
+          </div>
+
+          <p v-if="consoleError" class="wb-error" role="alert">{{ consoleError }}</p>
+
+          <!-- 조작 버튼 (26.10.06: 축 위로 이동 - 누르면서 바로 위 지도 경로가 보이도록) -->
+          <div class="wb-actions is-top">
+            <button type="button" class="wb-btn" :disabled="busy || !!result" @click="userAction(readFromScale)">
+              {{ phase === 'reading' ? '계측 중...' : '축중 계측' }}
+            </button>
+            <button
+              v-if="!result"
+              type="button"
+              class="wb-btn is-primary"
+              :disabled="!canSave"
+              @click="userAction(save)"
+            >
+              {{ phase === 'saving' ? '저장 중...' : reweighTarget ? '재계량 판정 후 저장' : '판정 후 저장' }}
+            </button>
+            <button v-else type="button" class="wb-btn is-primary" @click="userAction(nextVehicle)">
+              {{ queue.length ? '다음 차량' : '계량 마침' }}
+            </button>
+            <button type="button" class="wb-btn is-ghost" :disabled="busy" @click="userAction(clearSelection)">
+              취소
+            </button>
           </div>
 
           <!-- 축별 측정값 -->
@@ -266,29 +308,6 @@
             저장하면 과적으로 판정됩니다: {{ previewViolations.join(', ') }}
           </p>
 
-          <p v-if="consoleError" class="wb-error" role="alert">{{ consoleError }}</p>
-
-          <!-- 조작 버튼 -->
-          <div class="wb-actions">
-            <button type="button" class="wb-btn" :disabled="busy || !!result" @click="userAction(readFromScale)">
-              {{ phase === 'reading' ? '계측 중...' : '축중 계측' }}
-            </button>
-            <button
-              v-if="!result"
-              type="button"
-              class="wb-btn is-primary"
-              :disabled="!canSave"
-              @click="userAction(save)"
-            >
-              {{ phase === 'saving' ? '저장 중...' : reweighTarget ? '재계량 판정 후 저장' : '판정 후 저장' }}
-            </button>
-            <button v-else type="button" class="wb-btn is-primary" @click="userAction(nextVehicle)">
-              {{ queue.length ? '다음 차량' : '계량 마침' }}
-            </button>
-            <button type="button" class="wb-btn is-ghost" :disabled="busy" @click="userAction(clearSelection)">
-              취소
-            </button>
-          </div>
         </template>
       </section>
     </div>
@@ -345,7 +364,7 @@
 
     <!-- 26.10.02 추가: 이동 경로 미니 플레이어 (유튜브 미니 플레이어처럼 화면 구석에 떠서, 게이트 인부터 이동을 보여줌) -->
     <div
-      v-if="selected && miniOpen"
+      v-if="false && selected && miniOpen"
       class="wb-pip"
       :class="{ 'is-big': miniBig, 'is-dragging': dragging }"
       :style="miniPos ? { left: miniPos.x + 'px', top: miniPos.y + 'px', right: 'auto', bottom: 'auto' } : null"
@@ -375,7 +394,6 @@
       </header>
       <div class="wb-pip-body">
         <WeighbridgeRouteMap
-          ref="routeMap"
           compact
           :route="routeData"
           :status="routeStatus"
@@ -390,7 +408,7 @@
         <span>{{ routeData?.destination?.name || '목적지' }}</span>
       </footer>
     </div>
-    <button v-else-if="selected" type="button" class="wb-pip-reopen" @click="miniOpen = true">
+    <button v-else-if="false && selected" type="button" class="wb-pip-reopen" @click="miniOpen = true">
       <i class="bi bi-map"></i> 이동 경로 보기
     </button>
   </div>
@@ -530,7 +548,15 @@ const previewViolations = computed(() => {
     if ((a.weightKg || 0) > policy.axleLimitKg) list.push(`${i + 1}축 ${kg(a.weightKg)}kg`)
   })
   if (enteredTotal.value > policy.grossLimitKg) list.push(`총중량 ${kg(enteredTotal.value)}kg`)
+  // 26.10.07 추가: 서버와 같은 기준 - 적재중량(컨테이너 자중 + 화물) > 최대적재량 × 1.1 이면 과적
+  if (payloadLimitKg.value && payloadKg.value > payloadLimitKg.value) list.push(`적재중량 ${kg(payloadKg.value)}kg`)
   return list
+})
+// 26.10.07 추가: 카드에 축하중 · 총중량 · 적재중량 세 기준을 모두 표시
+const payloadKg = computed(() => (weightBreakdown.value ? weightBreakdown.value.containerTare + weightBreakdown.value.cargo : null))
+const payloadLimitKg = computed(() => {
+  const max = Number(selected.value?.maxLoadWeight)
+  return max > 0 ? Math.round(max * 1.1) : null
 })
 
 const grossPct = computed(() => Math.round((enteredTotal.value / policy.grossLimitKg) * 100))
@@ -820,7 +846,7 @@ function readFromScale() {
   axles.value = makeAxles(axleCount.value)
   displayTotal.value = 0
 
-  if (reduceMotion || !videoEl.value) {
+  if (reduceMotion) {
     axles.value = readingTargets.map((t) => ({ ...t }))
     recomputeTotal()
     videoT.value = T_BADGE
@@ -831,15 +857,17 @@ function readFromScale() {
 
   phase.value = 'reading'
   const v = videoEl.value
-  try {
-    v.currentTime = 0
-  } catch {
-    /* noop */
+  if (v) {
+    try {
+      v.currentTime = 0
+    } catch {
+      /* noop */
+    }
+    v.play().catch(() => {
+      /* 재생이 막혀도 아래 시계로 같은 순서대로 진행 */
+    })
   }
   clockStart = performance.now()
-  v.play().catch(() => {
-    /* 재생이 막혀도 아래 시계로 같은 순서대로 진행 */
-  })
   animFrame = requestAnimationFrame(tickReading)
 }
 
@@ -1175,9 +1203,11 @@ onBeforeUnmount(() => {
   right: 24px;
   bottom: 24px;
   z-index: 1050;
-  width: 380px;
+  /* 26.10.06: 경로 미니 창 크기 확대 (380×300 → 760×560, 면적 약 3.7배) - 화면보다 크면 자동으로 줄어듦 */
+  width: 760px;
   max-width: calc(100vw - 32px);
-  height: 300px;
+  height: 560px;
+  max-height: calc(100vh - 120px);
   display: flex;
   flex-direction: column;
   background: #0d1420;
@@ -1602,6 +1632,25 @@ onBeforeUnmount(() => {
   aspect-ratio: 16 / 9;
   background: #000;
 }
+.wb-map-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0; /* 지도(Leaflet) 레이어가 판독 카드를 덮지 않도록 지도만 따로 쌓음 */
+  background: #e8edf3;
+  animation: wb-map-in 0.5s ease; /* 판정 후 영상 → 지도로 부드럽게 전환 */
+}
+@keyframes wb-map-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.wb-frame .wb-card,
+.wb-frame .wb-stage-hint {
+  z-index: 2; /* 지도 위에 축중 판독 카드 · 안내 문구 표시 */
+}
+.wb-map-bg > * {
+  width: 100%;
+  height: 100%;
+}
 .wb-video {
   position: absolute;
   inset: 0;
@@ -1714,6 +1763,14 @@ onBeforeUnmount(() => {
 }
 .wb-card-axles .is-over b {
   color: #ff5c5c;
+}
+.wb-card-rule {
+  margin-top: 0.6cqw;
+  color: #8a97ab;
+  font-size: clamp(10px, 1.05cqw, 12px);
+}
+.wb-card-value.is-sub {
+  font-size: clamp(14px, 1.8cqw, 19px);
 }
 .wb-card-total {
   margin-top: 1.3cqw;
@@ -2053,6 +2110,9 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 18px;
+}
+.wb-actions.is-top {
+  margin: 14px 0 18px;
 }
 .wb-btn {
   padding: 11px 18px;

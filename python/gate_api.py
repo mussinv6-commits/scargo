@@ -681,6 +681,19 @@ def scan(scanType: ScanType = ScanType.ENTRY, vehicleNo: Optional[str] = None):
             json=payload,
             timeout=5,
         )
+        # 2026-10-06 추가: 백엔드를 재시작하면 gate_api 의 로그인 세션이 사라져 401/403 이 나고
+        # 게이트 기록이 저장되지 않던 문제 → 다시 로그인한 뒤 한 번 더 전송
+        if resp.status_code in (401, 403):
+            logger.warning(f"게이트로그 저장 {resp.status_code} - 백엔드 세션 만료로 보고 다시 로그인합니다")
+            user_id, user_pw = get_credentials()
+            session = requests.Session()
+            login(session, DEFAULT_SCARGO_API_BASE, user_id, user_pw)
+            _state["session"] = session
+            resp = session.post(
+                f"{DEFAULT_SCARGO_API_BASE}/api/v1/gate-logs",
+                json=payload,
+                timeout=5,
+            )
         if resp.status_code == 201:
             gate_log_id = resp.json().get("gateLogId")
             logger.info(f" -> DB 저장 완료 (gate_log_id={gate_log_id})")
@@ -688,6 +701,8 @@ def scan(scanType: ScanType = ScanType.ENTRY, vehicleNo: Optional[str] = None):
             logger.error(f"게이트로그 저장 실패 (status={resp.status_code}): {resp.text}")
     except requests.exceptions.RequestException:
         logger.exception("게이트로그 저장 중 네트워크 오류")
+    except RuntimeError:
+        logger.exception("게이트로그 저장 - 재로그인 실패")
     logger.info(
         f"[{scanType.value}] [{path.name}] 인식={pred or '(판독불가)'} "
         f"매칭={match_result} 차단기={'오픈' if gate_open else '닫힘'}"

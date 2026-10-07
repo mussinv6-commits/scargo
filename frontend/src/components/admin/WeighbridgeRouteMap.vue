@@ -72,7 +72,7 @@ function dotIcon(color, big = false) {
 
 // 이미지 원본은 왼쪽(서쪽)을 보고 있음 → 동쪽으로 갈 때는 좌우 반전
 function truckIcon() {
-  const TRUCK_W = props.compact ? 72 : 96
+  const TRUCK_W = props.compact ? 96 : 96 // 26.10.06: 미니 창이 커져서 트럭 이미지도 키움
   const TRUCK_H = Math.round((TRUCK_W * 91) / 320)
   return L.divIcon({
     className: 'wrm-pin wrm-truck',
@@ -176,7 +176,7 @@ function draw(mode = 'status') {
     bounds.push(ll(wb))
   }
 
-  const pad = props.compact ? [24, 24] : [40, 40]
+  const pad = props.compact ? [40, 40] : [40, 40]
   if (bounds.length === 1) map.setView(bounds[0], 16)
   else if (bounds.length > 1) map.fitBounds(bounds, { padding: pad, maxZoom: 17 })
 
