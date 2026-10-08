@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>항만 출발 허브 경로</title>
+<style>
+  :root{
+    --panel-bg:#0d1420; --panel-bg-2:#121b2b; --panel-border:#26344a;
+    --text-main:#e7edf5; --text-dim:#8a97ab; --accent:#4fd1a5; --warn:#f3a33a; --orange:#E0602B;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+    background:radial-gradient(1200px 800px at 50% 20%,#14202f 0%,#0a0f17 70%,#070a10 100%);
+    font-family:"Pretendard","Malgun Gothic","Segoe UI",sans-serif; padding:24px 16px;
+  }
+  .dashboard-card{
+    width:100%; max-width:1080px;
+    background:linear-gradient(180deg,var(--panel-bg-2),var(--panel-bg));
+    border:1px solid var(--panel-border); border-radius:16px;
+    box-shadow:0 20px 60px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.03); overflow:hidden;
+  }
+  .card-header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px;border-bottom:1px solid var(--panel-border);flex-wrap:wrap}
+  .card-title{display:flex;flex-direction:column;gap:2px}
+  .card-title .main{color:var(--text-main);font-size:15px;font-weight:700;letter-spacing:-.2px}
+  .card-title .sub{color:var(--text-dim);font-size:12px}
+  .controls{display:flex;gap:8px;align-items:center}
+  .btn{background:#1a2638;border:1px solid var(--panel-border);color:var(--text-main);font-size:12px;padding:6px 12px;border-radius:8px;cursor:pointer;font-family:inherit}
+  .btn:hover{border-color:#3a4d6b}
+  .live-badge{display:flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;background:rgba(79,209,165,.1);border:1px solid rgba(79,209,165,.35);color:var(--accent);font-size:11px;font-weight:600;letter-spacing:.4px}
+  .live-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);animation:pulse 1.6s ease-out infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(79,209,165,.55)}70%{box-shadow:0 0 0 7px rgba(79,209,165,0)}100%{box-shadow:0 0 0 0 rgba(79,209,165,0)}}
+
+  .steps{display:flex;gap:0;padding:12px 20px;border-bottom:1px solid var(--panel-border);overflow-x:auto}
+  .step{flex:1;min-width:96px;display:flex;flex-direction:column;align-items:center;gap:6px;position:relative;color:var(--text-dim);font-size:11.5px;text-align:center}
+  .step::before{content:"";position:absolute;top:10px;left:-50%;width:100%;height:2px;background:#26344a;z-index:0}
+  .step:first-child::before{display:none}
+  .step .dot{width:22px;height:22px;border-radius:50%;background:#1a2638;border:2px solid #31445f;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;z-index:1;color:var(--text-dim);transition:all .3s}
+  .step.done .dot{background:var(--accent);border-color:var(--accent);color:#06281d}
+  .step.done::before,.step.active::before{background:var(--accent)}
+  .step.active .dot{background:var(--orange);border-color:var(--orange);color:#fff;box-shadow:0 0 0 5px rgba(224,96,43,.2)}
+  .step.active{color:var(--text-main);font-weight:600}
+
+  .scene-wrap{position:relative;width:100%;aspect-ratio:1000/460;background:#060a10}
+  .scene-wrap svg{position:absolute;inset:0;width:100%;height:100%;display:block}
+
+  .card-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 20px;border-top:1px solid var(--panel-border);color:var(--text-dim);font-size:12px;flex-wrap:wrap}
+  .log{color:var(--text-main);font-size:13px;font-weight:600;min-height:18px}
+  .log .tag{display:inline-block;padding:2px 8px;border-radius:6px;background:rgba(224,96,43,.15);color:#ff9a6a;font-size:11px;margin-right:8px}
+  .meta{font-family:"SFMono-Regular",Consolas,monospace;font-size:11.5px}
+  .meta b{color:#c7d2e0;font-weight:600}
+  @media (max-width:600px){ .step{min-width:78px;font-size:10.5px} .card-header{padding:12px 16px} .steps,.card-footer{padding-left:16px;padding-right:16px} }
+</style>
+</head>
+<body>
+<div class="dashboard-card">
+  <div class="card-header">
+    <div class="card-title">
+      <div class="main">항만 출발 → 허브 도착 경로 시뮬레이션</div>
+      <div class="sub">인천항 게이트 · 톨게이트 · 과적검문소 2곳 · 물류센터 하적 · 택배차 전환</div>
+    </div>
+    <div class="controls">
+      <button class="btn" id="btnPause">일시정지</button>
+      <button class="btn" id="btnRestart">처음부터</button>
+      <div class="live-badge"><span class="live-dot"></span>SIMULATION</div>
+    </div>
+  </div>
+
+  <div class="steps" id="steps">
+    <div class="step"><div class="dot">1</div>항만 게이트</div>
+    <div class="step"><div class="dot">2</div>톨게이트</div>
+    <div class="step"><div class="dot">3</div>과적검문소 1</div>
+    <div class="step"><div class="dot">4</div>과적검문소 2</div>
+    <div class="step"><div class="dot">5</div>물류센터 하적</div>
+    <div class="step"><div class="dot">6</div>허브 (택배차)</div>
+  </div>
+
+  <div class="scene-wrap">
+    <svg id="scene" viewBox="0 0 1000 460" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#0d1a2c"/><stop offset="100%" stop-color="#1d3047"/>
+        </linearGradient>
+        <linearGradient id="ground" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#1f2a24"/><stop offset="100%" stop-color="#141b17"/>
+        </linearGradient>
+        <linearGradient id="cab" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#f1f4f7"/><stop offset="100%" stop-color="#b9c2cc"/>
+        </linearGradient>
+        <linearGradient id="ctr" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#3f7fb0"/><stop offset="100%" stop-color="#255f8a"/>
+        </linearGradient>
+        <linearGradient id="bldg" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#3a4a5f"/><stop offset="100%" stop-color="#26313f"/>
+        </linearGradient>
+        <linearGradient id="van" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#ffffff"/><stop offset="100%" stop-color="#d7dde4"/>
+        </linearGradient>
+        <pattern id="ribs" width="8" height="10" patternUnits="userSpaceOnUse">
+          <rect width="8" height="10" fill="none"/><rect x="0" y="0" width="2" height="10" fill="rgba(0,0,0,.18)"/>
+        </pattern>
+        <g id="wheel">
+          <circle r="11" fill="#15191e"/><circle r="6" fill="#8f99a5"/>
+          <g class="spoke"><rect x="-1" y="-6" width="2" height="12" fill="#3b434d"/><rect x="-6" y="-1" width="12" height="2" fill="#3b434d"/></g>
+        </g>
+        <g id="smallwheel">
+          <circle r="8" fill="#15191e"/><circle r="4" fill="#8f99a5"/>
+          <g class="spoke"><rect x="-1" y="-4" width="2" height="8" fill="#3b434d"/></g>
+        </g>
+      </defs>
+
+      <rect width="1000" height="460" fill="url(#sky)"/>
+      <!-- stars -->
+      <g fill="#cfe0ff" opacity=".5">
+        <circle cx="80" cy="40" r="1"/><circle cx="220" cy="70" r="1.2"/><circle cx="410" cy="30" r="1"/><circle cx="560" cy="80" r="1"/><circle cx="720" cy="45" r="1.3"/><circle cx="880" cy="25" r="1"/><circle cx="950" cy="90" r="1"/>
+      </g>
+      <!-- far parallax -->
+      <g id="far"></g>
+      <!-- world -->
+      <g id="world"></g>
+    </svg>
+  </div>
+
+  <div class="card-footer">
+    <div class="log" id="log"></div>
+    <div class="meta" id="meta">차량 <b>인천 12가 3456</b> · 컨테이너 <b>MSKU 123456-7</b> · 목적지 <b>대전 허브</b></div>
+  </div>
+</div>
+
+<script>
+(() => {
+const NS = 'http://www.w3.org/2000/svg';
+const world = document.getElementById('world');
+const far = document.getElementById('far');
+const logEl = document.getElementById('log');
+const stepEls = [...document.querySelectorAll('.step')];
+const ROAD_Y = 360;          // road surface (wheel bottom)
+const WORLD_W = 2750;
+const VIEW_W = 1000;
+
+function el(tag, attrs = {}, parent) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+function txt(str, attrs, parent) { const t = el('text', attrs, parent); t.textContent = str; return t; }
+
+// ---------- stations (world x of stop line) ----------
+const ST = { gate: 330, toll: 760, cp1: 1180, cp2: 1560, dc: 2030, hub: 2560 };
+
+// ---------- far background (parallax) ----------
+(function buildFar() {
+  for (let i = 0; i < 26; i++) {
+    const x = i * 70, h = 40 + ((i * 37) % 70);
+    el('rect', { x, y: 300 - h, width: 52, height: h, fill: '#16253a' }, far);
+    if (i % 3 === 0) el('rect', { x: x + 10, y: 300 - h + 10, width: 6, height: 6, fill: '#f3d27a', opacity: .5 }, far);
+  }
+  el('path', { d: 'M0 300 Q 200 230 420 285 T 900 270 T 1500 290 T 1900 300 L1900 310 L0 310Z', fill: '#132034' }, far);
+})();
+
+// ---------- ground & road ----------
+el('rect', { x: -200, y: 300, width: WORLD_W + 400, height: 160, fill: 'url(#ground)' }, world);
+el('rect', { x: -200, y: 318, width: WORLD_W + 400, height: 70, fill: '#2a2f36' }, world);
+el('rect', { x: -200, y: 318, width: WORLD_W + 400, height: 3, fill: '#cfd6de', opacity: .55 }, world);
+el('rect', { x: -200, y: 386, width: WORLD_W + 400, height: 3, fill: '#cfd6de', opacity: .55 }, world);
+for (let x = -200; x < WORLD_W + 200; x += 60) el('rect', { x, y: 352, width: 30, height: 3, fill: '#e8c547', opacity: .7 }, world);
+
+// lamps & trees for motion feel
+for (let x = 520; x < WORLD_W; x += 190) {
+  if (Object.values(ST).some(s => Math.abs(s - x) < 120)) continue;
+  const g = el('g', {}, world);
+  el('rect', { x: x, y: 230, width: 3, height: 88, fill: '#56616f' }, g);
+  el('rect', { x: x - 14, y: 228, width: 18, height: 4, fill: '#56616f' }, g);
+  el('circle', { cx: x - 12, cy: 234, r: 4, fill: '#ffe39a' }, g);
+  el('circle', { cx: x - 12, cy: 250, r: 22, fill: '#ffe39a', opacity: .06 }, g);
+  el('circle', { cx: x + 80, cy: 282, r: 18, fill: '#1e3a2c' }, g);
+  el('rect', { x: x + 78, y: 290, width: 4, height: 18, fill: '#3a2b1e' }, g);
+}
+
+// ---------- PORT (start) ----------
+(function port() {
+  const g = el('g', {}, world);
+  // stacked containers
+  const cols = ['#c9533a', '#3f7fb0', '#d8a23a', '#4a8f62', '#7a5aa8', '#3f7fb0'];
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 4; c++) {
+    el('rect', { x: -40 + c * 62, y: 296 - (r + 1) * 26, width: 58, height: 24, fill: cols[(r * 4 + c) % cols.length], stroke: '#0b1018', 'stroke-width': 1 }, g);
+    el('rect', { x: -40 + c * 62, y: 296 - (r + 1) * 26, width: 58, height: 24, fill: 'url(#ribs)' }, g);
+  }
+  // gantry crane
+  el('rect', { x: 60, y: 120, width: 6, height: 180, fill: '#e0602b' }, g);
+  el('rect', { x: 150, y: 120, width: 6, height: 180, fill: '#e0602b' }, g);
+  el('rect', { x: 20, y: 114, width: 200, height: 10, fill: '#e0602b' }, g);
+  el('line', { x1: 110, y1: 124, x2: 110, y2: 170, stroke: '#9aa5b3', 'stroke-width': 2 }, g);
+  txt('INCHEON PORT', { x: 30, y: 105, fill: '#8a97ab', 'font-size': 13, 'font-weight': 700, 'letter-spacing': 2 }, g);
+})();
+
+// ---------- generic sign ----------
+function sign(x, y, label, color = '#1f6f4a', w = 130) {
+  const g = el('g', {}, world);
+  el('rect', { x: x - 2, y: y + 30, width: 4, height: 318 - y - 30, fill: '#56616f' }, g);
+  el('rect', { x: x - w / 2, y, width: w, height: 30, rx: 4, fill: color, stroke: '#ffffff', 'stroke-width': 1.5 }, g);
+  txt(label, { x, y: y + 20, fill: '#fff', 'font-size': 14, 'font-weight': 700, 'text-anchor': 'middle' }, g);
+  return g;
+}
+
+// ---------- barrier ----------
+function barrier(x, color = '#e0602b') {
+  const g = el('g', {}, world);
+  el('rect', { x: x + 4, y: 300, width: 16, height: 26, rx: 2, fill: '#c7d0da' }, g);
+  const arm = el('g', { transform: `rotate(0 ${x + 12} 304)` }, g);
+  for (let i = 0; i < 6; i++)
+    el('rect', { x: x + 12 - 72 + i * 12, y: 300, width: 12, height: 7, fill: i % 2 ? '#ffffff' : color }, arm);
+  return { arm, px: x + 12, py: 304, angle: 0 };
+}
+function setArm(b, a) { b.angle = a; b.arm.setAttribute('transform', `rotate(${a} ${b.px} ${b.py})`); }
+
+// ---------- GATE ----------
+const gate = (() => {
+  const x = ST.gate;
+  const g = el('g', {}, world);
+  el('rect', { x: x + 20, y: 250, width: 44, height: 50, rx: 3, fill: 'url(#bldg)' }, g);
+  el('rect', { x: x + 26, y: 258, width: 32, height: 16, fill: '#7ec8ff', opacity: .6 }, g);
+  el('rect', { x: x - 120, y: 200, width: 200, height: 12, fill: '#2f3d50' }, g);
+  el('rect', { x: x - 120, y: 200, width: 6, height: 118, fill: '#2f3d50' }, g);
+  el('rect', { x: x + 74, y: 200, width: 6, height: 118, fill: '#2f3d50' }, g);
+  txt('PORT GATE · OUT', { x: x - 20, y: 196, fill: '#cfd6de', 'font-size': 12, 'font-weight': 700, 'text-anchor': 'middle' }, g);
+  // ANPR camera
+  el('rect', { x: x - 60, y: 212, width: 18, height: 10, rx: 2, fill: '#c7d0da' }, g);
+  const beam = el('path', { d: `M${x - 52} 222 L${x - 120} 330 L${x - 20} 330 Z`, fill: '#4fd1a5', opacity: 0 }, g);
+  return { b: barrier(x), beam };
+})();
+
+// ---------- TOLL ----------
+const toll = (() => {
+  const x = ST.toll;
+  const g = el('g', {}, world);
+  el('rect', { x: x - 150, y: 196, width: 260, height: 18, fill: '#1f4f8a' }, g);
+  txt('인천 TG · 하이패스 / 화물차', { x: x - 20, y: 209, fill: '#fff', 'font-size': 12, 'font-weight': 700, 'text-anchor': 'middle' }, g);
+  el('rect', { x: x - 140, y: 214, width: 8, height: 104, fill: '#3a4a5f' }, g);
+  el('rect', { x: x + 92, y: 214, width: 8, height: 104, fill: '#3a4a5f' }, g);
+  el('rect', { x: x + 22, y: 262, width: 40, height: 40, rx: 3, fill: 'url(#bldg)' }, g);
+  el('rect', { x: x + 28, y: 268, width: 28, height: 14, fill: '#7ec8ff', opacity: .6 }, g);
+  const lamp = el('circle', { cx: x + 42, cy: 228, r: 6, fill: '#e04b3b' }, g);
+  // axle sensor strip
+  const strip = el('rect', { x: x - 120, y: 340, width: 120, height: 5, fill: '#4fd1a5', opacity: .25 }, g);
+  return { b: barrier(x, '#1f4f8a'), lamp, strip };
+})();
+
+// ---------- CHECKPOINTS ----------
+function checkpoint(x, name) {
+  const g = el('g', {}, world);
+  el('rect', { x: x + 30, y: 236, width: 110, height: 66, rx: 4, fill: 'url(#bldg)' }, g);
+  el('rect', { x: x + 40, y: 248, width: 36, height: 18, fill: '#7ec8ff', opacity: .55 }, g);
+  el('rect', { x: x + 86, y: 248, width: 40, height: 18, fill: '#7ec8ff', opacity: .55 }, g);
+  txt(name, { x: x + 85, y: 290, fill: '#f3d27a', 'font-size': 12, 'font-weight': 700, 'text-anchor': 'middle' }, g);
+  // weighbridge plate
+  const plate = el('rect', { x: x - 280, y: 346, width: 270, height: 10, rx: 2, fill: '#E0602B', opacity: .55 }, g);
+  // display board
+  const board = el('g', { opacity: 0 }, g);
+  el('rect', { x: x - 210, y: 150, width: 200, height: 54, rx: 6, fill: '#0b1220', stroke: '#4fd1a5', 'stroke-width': 1.5 }, board);
+  const l1 = txt('', { x: x - 110, y: 172, fill: '#cfe7ff', 'font-size': 12, 'text-anchor': 'middle', 'font-family': 'Consolas,monospace' }, board);
+  const l2 = txt('', { x: x - 110, y: 192, fill: '#4fd1a5', 'font-size': 14, 'font-weight': 700, 'text-anchor': 'middle' }, board);
+  sign(x - 300, 228, name, '#7a4a12', 120);
+  return { b: barrier(x), plate, board, l1, l2 };
+}
+const cp1 = checkpoint(ST.cp1, '과적검문소 1');
+const cp2 = checkpoint(ST.cp2, '과적검문소 2');
+
+// ---------- DISTRIBUTION CENTER ----------
+const dc = (() => {
+  const x = ST.dc;
+  const g = el('g', {}, world);
+  el('rect', { x: x - 300, y: 150, width: 420, height: 150, fill: 'url(#bldg)' }, g);
+  el('path', { d: `M${x - 310} 150 L${x - 90} 118 L${x + 130} 150 Z`, fill: '#2b3747' }, g);
+  txt('물류센터 (하적장)', { x: x - 90, y: 176, fill: '#e7edf5', 'font-size': 16, 'font-weight': 700, 'text-anchor': 'middle' }, g);
+  for (let i = 0; i < 4; i++) {
+    el('rect', { x: x - 280 + i * 100, y: 210, width: 70, height: 90, fill: '#1a222d', stroke: '#56616f' }, g);
+    for (let k = 0; k < 6; k++) el('rect', { x: x - 280 + i * 100, y: 214 + k * 14, width: 70, height: 2, fill: '#2f3a48' }, g);
+  }
+  // box pile (appears after unloading)
+  const boxes = el('g', { opacity: 0 }, g);
+  const bc = ['#c99a5b', '#b8874b', '#d6ab6e'];
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 4 - r; c++)
+    el('rect', { x: x - 180 + c * 20 + r * 10, y: 280 - r * 18, width: 18, height: 16, fill: bc[(r + c) % 3], stroke: '#7a5a30' }, boxes);
+  // overhead hoist
+  el('rect', { x: x - 250, y: 192, width: 260, height: 6, fill: '#E0602B' }, g);
+  const hook = el('g', {}, g);
+  const rope = el('line', { x1: 0, y1: 198, x2: 0, y2: 200, stroke: '#9aa5b3', 'stroke-width': 2 }, hook);
+  const hookHead = el('rect', { x: -8, y: 200, width: 16, height: 6, fill: '#f3d27a' }, hook);
+  return { boxes, hook, rope, hookHead, ropeLen: 2, hx: x - 90 };
+})();
+
+// ---------- HUB ----------
+const hub = (() => {
+  const x = ST.hub;
+  const g = el('g', {}, world);
+  el('rect', { x: x - 40, y: 170, width: 260, height: 130, fill: 'url(#bldg)' }, g);
+  el('rect', { x: x - 40, y: 160, width: 260, height: 14, fill: '#E0602B' }, g);
+  txt('택배 허브 (대전)', { x: x + 90, y: 200, fill: '#e7edf5', 'font-size': 16, 'font-weight': 700, 'text-anchor': 'middle' }, g);
+  el('rect', { x: x - 10, y: 230, width: 60, height: 70, fill: '#1a222d', stroke: '#56616f' }, g);
+  el('rect', { x: x + 70, y: 230, width: 60, height: 70, fill: '#1a222d', stroke: '#56616f' }, g);
+  el('rect', { x: x + 150, y: 230, width: 60, height: 70, fill: '#1a222d', stroke: '#56616f' }, g);
+  const glow = el('rect', { x: x - 40, y: 170, width: 260, height: 130, fill: '#4fd1a5', opacity: 0 }, g);
+  return { glow };
+})();
+
+// ---------- vehicles ----------
+// Tractor-trailer: origin = front bumper at road level, faces right
+const truck = (() => {
+  const g = el('g', {}, world);
+  // chassis
+  el('rect', { x: -268, y: -26, width: 200, height: 8, fill: '#2c333c' }, g);
+  // container (separate group for unloading)
+  const ctr = el('g', {}, g);
+  el('rect', { x: -266, y: -84, width: 192, height: 58, fill: 'url(#ctr)', stroke: '#173c58' }, ctr);
+  el('rect', { x: -266, y: -84, width: 192, height: 58, fill: 'url(#ribs)' }, ctr);
+  txt('MSKU 123456-7', { x: -170, y: -50, fill: '#e7f1fb', 'font-size': 12, 'font-weight': 700, 'text-anchor': 'middle', 'font-family': 'Consolas,monospace' }, ctr);
+  // cab
+  el('path', { d: 'M-70 -14 L-70 -86 L-18 -86 L-4 -60 L0 -60 L0 -14 Z', fill: 'url(#cab)', stroke: '#8995a3' }, g);
+  el('path', { d: 'M-60 -80 L-22 -80 L-12 -60 L-60 -60 Z', fill: '#2a4a68' }, g);
+  el('rect', { x: -2, y: -30, width: 4, height: 10, fill: '#ffe39a' }, g);
+  el('rect', { x: -66, y: -40, width: 30, height: 10, fill: '#f3d27a' }, g); // plate
+  txt('12가3456', { x: -51, y: -32, fill: '#111', 'font-size': 7, 'font-weight': 700, 'text-anchor': 'middle' }, g);
+  const wheels = [];
+  for (const wx of [-22, -92, -118, -214, -240]) {
+    const w = el('use', { href: '#wheel', x: wx, y: -11 }, g);
+    wheels.push(w);
+  }
+  return { g, ctr, wheels, x: 140, r: 11, ctrDX: 0, ctrDY: 0, ctrOp: 1 };
+})();
+
+const van = (() => {
+  const g = el('g', { opacity: 0 }, world);
+  el('rect', { x: -110, y: -66, width: 78, height: 52, rx: 3, fill: 'url(#van)', stroke: '#9aa5b3' }, g);
+  txt('택배', { x: -71, y: -36, fill: '#E0602B', 'font-size': 14, 'font-weight': 800, 'text-anchor': 'middle' }, g);
+  el('path', { d: 'M-32 -14 L-32 -52 L-12 -52 L0 -34 L0 -14 Z', fill: 'url(#cab)', stroke: '#8995a3' }, g);
+  el('path', { d: 'M-28 -48 L-14 -48 L-6 -34 L-28 -34 Z', fill: '#2a4a68' }, g);
+  el('rect', { x: -2, y: -26, width: 3, height: 7, fill: '#ffe39a' }, g);
+  const wheels = [el('use', { href: '#smallwheel', x: -16, y: -8 }, g), el('use', { href: '#smallwheel', x: -90, y: -8 }, g)];
+  return { g, wheels, x: ST.dc - 120, r: 8, y: 0, op: 0 };
+})();
+
+function drawTruck() {
+  truck.g.setAttribute('transform', `translate(${truck.x} ${ROAD_Y})`);
+  truck.ctr.setAttribute('transform', `translate(${truck.ctrDX} ${truck.ctrDY})`);
+  truck.ctr.setAttribute('opacity', truck.ctrOp);
+  const a = (truck.x / truck.r) * 57.3;
+  truck.wheels.forEach(w => w.setAttribute('transform', `rotate(${a} ${w.getAttribute('x')} ${w.getAttribute('y')})`));
+}
+function drawVan() {
+  van.g.setAttribute('transform', `translate(${van.x} ${ROAD_Y + van.y})`);
+  van.g.setAttribute('opacity', van.op);
+  const a = (van.x / van.r) * 57.3;
+  van.wheels.forEach(w => w.setAttribute('transform', `rotate(${a} ${w.getAttribute('x')} ${w.getAttribute('y')})`));
+}
+function drawHook(len) {
+  dc.rope.setAttribute('x1', dc.hx); dc.rope.setAttribute('x2', dc.hx);
+  dc.rope.setAttribute('y2', 198 + len);
+  dc.hookHead.setAttribute('x', dc.hx - 8); dc.hookHead.setAttribute('y', 198 + len);
+}
+
+// ---------- camera ----------
+let camX = 0, camTarget = () => truck.x;
+function updateCam(snap) {
+  const want = Math.max(0, Math.min(WORLD_W - VIEW_W, camTarget() - 560));
+  camX = snap ? want : camX + (want - camX) * 0.08;
+  world.setAttribute('transform', `translate(${-camX} 0)`);
+  far.setAttribute('transform', `translate(${-camX * 0.35} 0)`);
+}
+
+// ---------- timeline engine (pause-aware) ----------
+let paused = false, runId = 0, clock = 0, last = performance.now();
+const waiters = new Set();
+function frame(now) {
+  const dt = Math.min(50, now - last); last = now;
+  if (!paused) {
+    clock += dt;
+    for (const w of [...waiters]) w(clock);
+    updateCam(false);
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+function tween(ms, fn, id) {
+  return new Promise((res, rej) => {
+    const start = clock;
+    const w = (t) => {
+      if (id !== runId) { waiters.delete(w); return rej('cancel'); }
+      const p = Math.min(1, (t - start) / ms);
+      fn(p);
+      if (p >= 1) { waiters.delete(w); res(); }
+    };
+    waiters.add(w);
+  });
+}
+const wait = (ms, id) => tween(ms, () => {}, id);
+const ease = p => p < .5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+
+function drive(obj, to, speed, draw, id) {
+  const from = obj.x, dist = Math.abs(to - from);
+  return tween(Math.max(300, dist / speed * 1000), p => { obj.x = from + (to - from) * ease(p); draw(); }, id);
+}
+function armTo(b, deg, id) { const s = b.angle; return tween(700, p => setArm(b, s + (deg - s) * ease(p)), id); }
+
+function log(tag, msg) { logEl.innerHTML = `<span class="tag">${tag}</span>${msg}`; }
+function setStep(i) { stepEls.forEach((s, k) => { s.classList.toggle('done', k < i); s.classList.toggle('active', k === i); }); }
+
+function reset() {
+  truck.x = 140; truck.ctrDX = 0; truck.ctrDY = 0; truck.ctrOp = 1;
+  van.x = ST.dc - 120; van.y = 0; van.op = 0;
+  [gate.b, toll.b, cp1.b, cp2.b].forEach(b => setArm(b, 0));
+  gate.beam.setAttribute('opacity', 0);
+  toll.lamp.setAttribute('fill', '#e04b3b'); toll.strip.setAttribute('opacity', .25);
+  [cp1, cp2].forEach(c => { c.board.setAttribute('opacity', 0); c.plate.setAttribute('opacity', .55); });
+  dc.boxes.setAttribute('opacity', 0); drawHook(2);
+  hub.glow.setAttribute('opacity', 0);
+  camTarget = () => truck.x;
+  drawTruck(); drawVan(); updateCam(true);
+  setStep(-1); log('대기', '반출 컨테이너 상차 완료 — 출차 준비');
+}
+
+async function weigh(c, gross, axle, id) {
+  c.plate.setAttribute('opacity', 1);
+  c.board.setAttribute('opacity', 1);
+  c.l1.textContent = '계측 중...'; c.l2.textContent = '';
+  await tween(1200, p => { c.l1.textContent = `총중량 ${(gross * ease(p)).toFixed(1)} t`; }, id);
+  c.l2.textContent = `축중 최대 ${axle} t · PASS`;
+  await wait(700, id);
+  await armTo(c.b, 80, id);
+}
+
+async function run() {
+  const id = ++runId;
+  reset();
+  try {
+    await wait(900, id);
+    // 1. gate
+    setStep(0); log('항만 게이트', '출구 게이트로 이동');
+    await drive(truck, ST.gate - 72, 160, drawTruck, id);
+    gate.beam.setAttribute('opacity', .18);
+    log('항만 게이트', '번호판 12가3456 · 컨테이너 MSKU 123456-7 일치 확인 → 반출 승인');
+    await wait(1400, id);
+    gate.beam.setAttribute('opacity', 0);
+    await armTo(gate.b, 80, id);
+    // 2. toll
+    setStep(1); log('톨게이트', '고속도로 진입 — 인천 톨게이트');
+    await drive(truck, ST.toll - 72, 190, drawTruck, id);
+    toll.strip.setAttribute('opacity', .9);
+    log('톨게이트', '축수 감지 5축 · 화물차 요금 수납 · 하이패스 통과');
+    await wait(1300, id);
+    toll.lamp.setAttribute('fill', '#4fd1a5');
+    await armTo(toll.b, 80, id);
+    toll.strip.setAttribute('opacity', .25);
+    // 3. cp1
+    setStep(2); log('과적검문소 1', '검문소 진입 — 계중대 정차');
+    await drive(truck, ST.cp1 - 72, 200, drawTruck, id);
+    log('과적검문소 1', '총중량 · 축중 계측 중');
+    await weigh(cp1, 38.4, 9.6, id);
+    log('과적검문소 1', '총중량 38.4t / 기준 40t · 축중 9.6t / 기준 10t → 통과');
+    // 4. cp2
+    setStep(3);
+    await drive(truck, ST.cp2 - 72, 200, drawTruck, id);
+    log('과적검문소 2', '총중량 · 축중 재계측 — 운송 중 적재 변경 여부 확인');
+    await weigh(cp2, 38.4, 9.6, id);
+    log('과적검문소 2', '1차 계측과 동일 → 통과');
+    // 5. DC unload
+    setStep(4); log('물류센터', '물류센터 하적장 도착');
+    await drive(truck, ST.dc - 90 + 170, 180, drawTruck, id);
+    // container centre = truck.x - 170 ; hoist x = dc.hx
+    log('물류센터', '하적 — 컨테이너 개봉은 화주 도착지에서만 (목적지 도달)');
+    await tween(900, p => drawHook(2 + 74 * ease(p)), id);
+    await tween(1100, p => { truck.ctrDY = -60 * ease(p); drawHook(76 - 60 * ease(p)); drawTruck(); }, id);
+    await tween(900, p => { truck.ctrOp = 1 - p; drawTruck(); }, id);
+    dc.boxes.setAttribute('opacity', 1);
+    await tween(600, p => drawHook(16 - 14 * ease(p)), id);
+    log('물류센터', '화물 분류 완료 → 지역별 택배차로 옮겨 싣기');
+    await wait(900, id);
+    // 6. van to hub
+    setStep(5);
+    van.x = ST.dc - 120; van.y = -30; van.op = 0; drawVan();
+    camTarget = () => van.x;
+    await tween(700, p => { van.op = p; drawVan(); }, id);
+    await tween(700, p => { van.y = -30 + 30 * ease(p); van.x = ST.dc - 120 + 40 * p; drawVan(); }, id);
+    log('택배차 전환', '1톤 택배차 출발 — 허브로 이동');
+    await drive(van, ST.hub + 10, 230, drawVan, id);
+    hub.glow.setAttribute('opacity', .12);
+    setStep(6);
+    log('허브 도착', '대전 허브 도착 — 지역별 분류 후 배송 (택배 소분류)');
+    await wait(3500, id);
+    run();
+  } catch (e) { /* cancelled */ }
+}
+
+document.getElementById('btnPause').addEventListener('click', e => {
+  paused = !paused; e.target.textContent = paused ? '재생' : '일시정지';
+});
+document.getElementById('btnRestart').addEventListener('click', () => {
+  paused = false; document.getElementById('btnPause').textContent = '일시정지'; run();
+});
+run();
+})();
+</script>
+</body>
+</html>

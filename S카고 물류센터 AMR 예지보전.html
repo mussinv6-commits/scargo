@@ -1,0 +1,589 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>S카고 물류센터 AMR 예지보전</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: 상단 흐름 단계 → 좌 물류센터 평면도(캔버스) / 우 관제 패널 → 하단 센서·비교 정리 */
+:root{
+  --bg:#eceee9; --surface:#f7f8f5; --ink:#1c2320; --muted:#5b6660; --line:#d2d7d0;
+  --floor:#e2e5df; --grid:#d8dcd5; --aisle:#eef0eb; --lane:#d29a00; --rack:#7d8b84; --shelf:#c9d0ca;
+  --box:#c4884b; --amr:#0f766e; --ok:#15803d; --warn:#c96a00; --crit:#d42a2a; --spare:#7f8a84;
+  --truck:#3d4843; --courier:#2d5f8f; --chip:#e3e7e1;
+  --font-ui:'IBM Plex Sans KR','Apple SD Gothic Neo','Malgun Gothic',system-ui,sans-serif;
+  --font-data:'JetBrains Mono',ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#111513; --surface:#191e1c; --ink:#e3e8e4; --muted:#96a29b; --line:#2b3330;
+  --floor:#1c2220; --grid:#232a27; --aisle:#262e2b; --lane:#e2b222; --rack:#5d6a64; --shelf:#343d39;
+  --box:#b97f48; --amr:#2cb5a4; --ok:#34c26b; --warn:#f0a020; --crit:#f25555; --spare:#6c7771;
+  --truck:#a3aea8; --courier:#6a9ccf; --chip:#242b28; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#111513; --surface:#191e1c; --ink:#e3e8e4; --muted:#96a29b; --line:#2b3330;
+  --floor:#1c2220; --grid:#232a27; --aisle:#262e2b; --lane:#e2b222; --rack:#5d6a64; --shelf:#343d39;
+  --box:#b97f48; --amr:#2cb5a4; --ok:#34c26b; --warn:#f0a020; --crit:#f25555; --spare:#6c7771;
+  --truck:#a3aea8; --courier:#6a9ccf; --chip:#242b28; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-ui);font-size:14px;line-height:1.55}
+.wrap{max-width:1320px;margin:0 auto;padding-inline:20px;padding-block:22px 40px;display:flex;flex-direction:column;gap:16px}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
+h1{font-size:1.5rem;font-weight:700;margin:0;letter-spacing:-.01em;text-wrap:balance}
+.sub{color:var(--muted);margin:2px 0 0;font-size:.92rem}
+.flow{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:.8rem;color:var(--muted)}
+.flow span{padding:2px 8px;border:1px solid var(--line);border-radius:999px}
+.flow b{color:var(--ink);border-color:var(--amr);background:var(--chip)}
+.controls{display:flex;gap:6px;flex-wrap:wrap}
+button{font:600 .82rem var(--font-ui);color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:6px 12px;cursor:pointer}
+button:hover{border-color:var(--amr)}
+button:focus-visible{outline:2px solid var(--amr);outline-offset:2px}
+button[aria-pressed="true"]{background:var(--amr);color:var(--surface);border-color:var(--amr)}
+
+.stages{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+.stage{padding:8px 10px;border-top:3px solid var(--line);color:var(--muted);font-size:.8rem;min-width:0}
+.stage .n{font:600 .72rem var(--font-data);letter-spacing:.06em}
+.stage .t{display:block;font-weight:600;color:inherit}
+.stage.done{color:var(--ink);border-color:var(--ok)}
+.stage.now{color:var(--ink);border-color:var(--amr);background:var(--surface)}
+.stage.now[data-p="2"],.stage.now[data-p="3"]{border-color:var(--warn)}
+.stage.now[data-p="4"]{border-color:var(--crit)}
+.caption{margin:0;padding:10px 14px;background:var(--surface);border:1px solid var(--line);border-radius:8px;font-size:.92rem;min-height:3.2em}
+.pipe{display:flex;flex-wrap:wrap;gap:4px;align-items:center;font-size:.76rem}
+.pipe .node{padding:3px 9px;border-radius:4px;background:var(--chip);color:var(--muted);transition:background .3s,color .3s}
+.pipe .node.on{background:var(--amr);color:var(--surface)}
+.pipe .arr{color:var(--muted)}
+
+.main{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:16px;align-items:start}
+.floorwrap{min-width:0;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--floor)}
+#floor{display:block;width:100%;aspect-ratio:1000/640;cursor:pointer}
+.panel{display:flex;flex-direction:column;gap:12px;min-width:0}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px}
+.label{font-size:.7rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.selhead{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.selname{font:600 1.05rem var(--font-data)}
+.pill{font-size:.72rem;font-weight:600;padding:2px 8px;border-radius:999px;color:var(--surface);white-space:nowrap}
+.pill.ok{background:var(--ok)}.pill.warn{background:var(--warn)}.pill.crit{background:var(--crit)}.pill.spare{background:var(--spare)}
+.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin:10px 0 8px}
+.metric .v{font:600 1.05rem var(--font-data);font-variant-numeric:tabular-nums;display:block}
+.metric .k{font-size:.68rem;color:var(--muted)}
+.metric .v.warn{color:var(--warn)}.metric .v.crit{color:var(--crit)}
+#chart{display:block;width:100%;height:130px}
+.rul{margin-top:6px;font-size:.82rem;min-height:1.4em}
+.rul b{color:var(--crit);font-family:var(--font-data)}
+.fleet{display:flex;flex-direction:column;gap:2px;margin-top:6px}
+.frow{display:grid;grid-template-columns:62px minmax(0,1fr) 56px 74px;gap:8px;align-items:center;padding:5px 6px;border-radius:5px;cursor:pointer;font-size:.8rem;border:1px solid transparent;background:none;text-align:left;color:var(--ink);width:100%}
+.frow:hover{background:var(--chip)}
+.frow.sel{border-color:var(--amr)}
+.frow .nm{font-family:var(--font-data);font-weight:600}
+.frow .st{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar{height:6px;background:var(--chip);border-radius:3px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--ok);transition:width .3s}
+.frow .hs{font:600 .76rem var(--font-data);text-align:right;font-variant-numeric:tabular-nums}
+.kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.kpi .v{font:600 1.2rem var(--font-data);display:block;font-variant-numeric:tabular-nums}
+.kpi .k{font-size:.7rem;color:var(--muted)}
+.log{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:4px;font-size:.78rem}
+.log li{display:grid;grid-template-columns:44px minmax(0,1fr);gap:6px}
+.log time{font-family:var(--font-data);color:var(--muted)}
+.log li.warn span{color:var(--warn)}.log li.crit span{color:var(--crit)}.log li.ok span{color:var(--ok)}
+
+.notes{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:16px}
+.notes h2{font-size:1rem;margin:0 0 8px}
+.tbl{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.84rem}
+th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:.72rem;color:var(--muted);font-weight:600;letter-spacing:.04em}
+td:first-child{font-weight:600;white-space:nowrap}
+.foot{font-size:.76rem;color:var(--muted);margin:8px 0 0}
+@media (max-width:980px){.main{grid-template-columns:minmax(0,1fr)}.notes{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:640px){.stages{grid-template-columns:repeat(5,minmax(0,1fr));gap:3px}.stage{padding:6px 4px}.stage .t{font-size:.7rem}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>물류센터 AMR 예지보전</h1>
+      <p class="sub">고장 나기 전에 미리 감지하고, 예비 AMR로 교대해서 물류 흐름을 멈추지 않는다</p>
+      <div class="flow" aria-label="S카고 2차 프로젝트 흐름">
+        <span>항만 게이트</span>→<span>톨게이트</span>→<span>과적검문소</span>→<b>물류센터 하적 · AMR</b>→<span>허브 택배차</span>
+      </div>
+    </div>
+    <div class="controls">
+      <button id="play" type="button" aria-pressed="false">일시정지</button>
+      <button type="button" class="spd" data-s="1" aria-pressed="true">1x</button>
+      <button type="button" class="spd" data-s="2" aria-pressed="false">2x</button>
+      <button type="button" class="spd" data-s="4" aria-pressed="false">4x</button>
+      <button id="restart" type="button">처음부터</button>
+    </div>
+  </header>
+
+  <div class="stages" id="stages">
+    <div class="stage now" data-p="1"><span class="n">01</span><span class="t">정상 운영</span></div>
+    <div class="stage" data-p="2"><span class="n">02</span><span class="t">이상 징후 감지</span></div>
+    <div class="stage" data-p="3"><span class="n">03</span><span class="t">AI 고장 예측</span></div>
+    <div class="stage" data-p="4"><span class="n">04</span><span class="t">교대 · 계획 정비</span></div>
+    <div class="stage" data-p="5"><span class="n">05</span><span class="t">정상 복귀</span></div>
+  </div>
+  <p class="caption" id="caption"></p>
+  <div class="pipe" id="pipe" aria-label="데이터 흐름">
+    <span class="node" data-k="0">AMR 센서</span><span class="arr">→</span>
+    <span class="node" data-k="1">엣지 수집(MQTT)</span><span class="arr">→</span>
+    <span class="node" data-k="2">시계열 DB</span><span class="arr">→</span>
+    <span class="node" data-k="3">이상탐지 · 수명예측 모델</span><span class="arr">→</span>
+    <span class="node" data-k="4">관제 대시보드</span><span class="arr">→</span>
+    <span class="node" data-k="5">작업 재배분 · 정비 지시</span>
+  </div>
+
+  <div class="main">
+    <div class="floorwrap"><canvas id="floor" aria-label="물류센터 평면도 애니메이션. AMR이 입고 도크에서 랙으로, 랙에서 출고 도크로 화물을 옮긴다."></canvas></div>
+    <div class="panel">
+      <div class="card">
+        <div class="selhead"><span class="label">선택한 AMR</span><span class="pill ok" id="selPill">정상</span></div>
+        <div class="selname" id="selName">AMR-03</div>
+        <div class="metrics">
+          <div class="metric"><span class="v" id="mVib">-</span><span class="k">진동 mm/s</span></div>
+          <div class="metric"><span class="v" id="mTemp">-</span><span class="k">모터 °C</span></div>
+          <div class="metric"><span class="v" id="mBatt">-</span><span class="k">배터리 %</span></div>
+          <div class="metric"><span class="v" id="mHealth">-</span><span class="k">건강점수</span></div>
+        </div>
+        <canvas id="chart" aria-label="진동 추세 그래프"></canvas>
+        <div class="rul" id="rul"></div>
+      </div>
+      <div class="card">
+        <span class="label">플릿 현황 · 클릭해서 선택</span>
+        <div class="fleet" id="fleet"></div>
+      </div>
+      <div class="card kpis">
+        <div class="kpi"><span class="v" id="kThru">0</span><span class="k">처리 화물</span></div>
+        <div class="kpi"><span class="v" id="kAct">4/5</span><span class="k">가동 AMR</span></div>
+        <div class="kpi"><span class="v" id="kStop">0</span><span class="k">비계획 정지</span></div>
+      </div>
+      <div class="card">
+        <span class="label">이벤트 로그</span>
+        <ul class="log" id="log"></ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <div class="card">
+      <h2>센서로 잡아내는 고장</h2>
+      <div class="tbl"><table>
+        <thead><tr><th>센서</th><th>잡아내는 고장</th><th>판단 기준 (데모 예시)</th></tr></thead>
+        <tbody>
+          <tr><td>진동</td><td>구동모터 베어링 · 감속기 마모</td><td>4.5 mm/s 주의, 7.1 mm/s 고장 위험</td></tr>
+          <tr><td>모터 온도</td><td>과부하, 윤활 불량</td><td>70 °C 이상 주의</td></tr>
+          <tr><td>배터리</td><td>배터리 열화, 충전 이상</td><td>건강도(SOH) 80% 이하 교체 검토</td></tr>
+          <tr><td>바퀴 엔코더</td><td>바퀴 마모, 미끄러짐</td><td>지령 거리 대비 실제 이동 오차</td></tr>
+          <tr><td>라이다</td><td>센서 오염, 위치 인식 오류</td><td>지도 매칭 점수 하락</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+    <div class="card">
+      <h2>왜 예지보전인가</h2>
+      <div class="tbl"><table>
+        <thead><tr><th></th><th>흐름</th><th>결과</th></tr></thead>
+        <tbody>
+          <tr><td>사후 정비</td><td>고장 → 통로 막힘 → 긴급 수리</td><td>라인 정지, 출고 지연</td></tr>
+          <tr><td>예지보전</td><td>징후 감지 → 예비기 교대 → 계획 정비</td><td>정지 0, 처리량 유지</td></tr>
+        </tbody>
+      </table></div>
+      <p class="foot">수명 예측 시간은 데모용으로 압축한 값입니다 (화면 1초 = 실제 약 4시간).</p>
+    </div>
+  </div>
+</div>
+
+<script>
+(()=>{
+const W=1000,H=640;
+const AISLES=[60,175,295,415,540];
+const ROWS=[[90,140],[210,260],[330,380],[450,500]];
+const NS=9, SX=i=>255+i*50;
+const DOCK_Y=[120,300,480];
+const HXL=180,HXR=720;
+const SPEED=80;
+const CHARGERS=[255,300,345,390,435].map(x=>({x,y:612,kind:'station'}));
+const BAY={x:590,y:612,kind:'station'};
+const STATE_KO={idle:'대기',toPick:'픽업 이동',load:'적재 중',toDrop:'운반 중',unload:'하역 중',toMaint:'정비소 이동',maint:'정비 중',toHome:'복귀 중'};
+const CAPTIONS={
+ 1:'AMR 4대가 입고 도크 → 보관 랙 → 출고 도크(허브 택배차)로 화물을 옮깁니다. 각 AMR은 진동·모터 온도·배터리 값을 계속 전송합니다.',
+ 2:'AMR-03 구동모터 진동이 평소 범위(1.2~2.0 mm/s)를 벗어나기 시작합니다. 이상탐지 모델이 "주의"로 표시합니다.',
+ 3:'진동 추세로 고장 시점을 예측합니다. 고장 전에 정비를 지시하고, 대기 중이던 예비기 AMR-05를 투입합니다.',
+ 4:'AMR-03은 하던 작업만 마치고 정비 스테이션으로 이동합니다. 그동안 AMR-05가 작업을 이어받아 물류는 멈추지 않습니다.',
+ 5:'베어링 교체 후 진동이 정상으로 돌아왔습니다. AMR-03은 작업에 복귀하고 AMR-05는 대기 위치로 돌아갑니다.'
+};
+const PIPE_ON={1:[0,1,2],2:[2,3],3:[3,4],4:[4,5],5:[4]};
+
+// seeded rng
+let seed=7; const rnd=()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296};
+const pick=a=>a[Math.floor(rnd()*a.length)];
+
+let C={};
+const TOK=['floor','grid','aisle','lane','rack','shelf','box','amr','ok','warn','crit','spare','truck','courier','ink','muted','surface','line','chip'];
+function readTokens(){const cs=getComputedStyle(document.documentElement);TOK.forEach(k=>C[k]=cs.getPropertyValue('--'+k).trim());}
+
+let slots,inDocks,outDocks,amrs,sc,thru,logItems,simT,taskFlip,sampleAcc,selected;
+
+function init(){
+  seed=7; simT=0; thru=0; logItems=[]; taskFlip=0; sampleAcc=0;
+  slots=ROWS.map(()=>[0,1].map(()=>Array.from({length:NS},()=>rnd()<0.45?1:0)));
+  inDocks=DOCK_Y.map((y,d)=>({y,state:d===2?'empty':'docked',off:d===2?1:0,boxes:3+(d%2),res:0,timer:2}));
+  outDocks=DOCK_Y.map((y,d)=>({y,state:'docked',off:0,load:d,res:0,timer:0,cap:4}));
+  amrs=[0,1,2,3,4].map(i=>{const h=CHARGERS[i];return{id:i+1,name:'AMR-0'+(i+1),x:h.x,y:h.y,ang:-Math.PI/2,home:h,cur:h,dest:h,path:[],state:'idle',task:null,carry:false,timer:0,wait:0.3+i*0.5,role:i===4?'spare':'active',vib:1.5,temp:45,batt:62+i*7,health:98,hist:[],maintFlag:false,release:false,deg:0,ph:i*2.1}});
+  sc={phase:1,t:0,start:0,degrading:false,rul:null,slope:0};
+  selected=2;
+  addLog('관제 시작 · AMR 4대 가동, 1대 예비','');
+  setPhase(1,true);
+}
+
+// ---------- routing ----------
+function aisleOf(p){return p.kind==='station'?540:p.y}
+function route(P,Q){
+  let hx;
+  if(P.kind==='in'||Q.kind==='in')hx=HXL;
+  else if(P.kind==='out'||Q.kind==='out')hx=HXR;
+  else hx=(Math.abs(P.x-HXL)+Math.abs(Q.x-HXL)<=Math.abs(P.x-HXR)+Math.abs(Q.x-HXR))?HXL:HXR;
+  const ya=aisleOf(P),yb=aisleOf(Q),pts=[{x:P.x,y:ya}];
+  if(ya!==yb){pts.push({x:hx,y:ya},{x:hx,y:yb});}
+  pts.push({x:Q.x,y:yb},{x:Q.x,y:Q.y});
+  return pts;
+}
+function goTo(a,Q,st){a.path=route(a.cur,Q);a.dest=Q;a.state=st;}
+
+// ---------- tasks ----------
+function slotList(st){const o=[];slots.forEach((r,ri)=>r.forEach((s,si)=>s.forEach((v,i)=>{if(v===st)o.push({r:ri,s:si,i})})));return o}
+const slotPt=sl=>({x:SX(sl.i),y:AISLES[sl.r+sl.s],kind:'rack'});
+function near(a,list){list.sort((p,q)=>Math.hypot(SX(p.i)-a.x,AISLES[p.r+p.s]-a.y)-Math.hypot(SX(q.i)-a.x,AISLES[q.r+q.s]-a.y));return list[Math.floor(rnd()*Math.min(5,list.length))]}
+function tryIn(a){
+  const ds=inDocks.filter(d=>d.state==='docked'&&d.boxes-d.res>0);const em=slotList(0);
+  if(!ds.length||!em.length)return null;
+  const d=pick(ds),sl=near(a,em);d.res++;slots[sl.r][sl.s][sl.i]=2;
+  return{type:'in',dock:d,slot:sl,from:{x:110,y:d.y,kind:'in'},to:slotPt(sl)};
+}
+function tryOut(a){
+  const ds=outDocks.filter(d=>d.state==='docked'&&d.cap-d.load-d.res>0);const fl=slotList(1);
+  if(!ds.length||!fl.length)return null;
+  const d=pick(ds),sl=near(a,fl);d.res++;slots[sl.r][sl.s][sl.i]=3;
+  return{type:'out',dock:d,slot:sl,from:slotPt(sl),to:{x:890,y:d.y,kind:'out'}};
+}
+function assign(a){
+  const full=slotList(1).length/(4*2*NS);
+  let preferIn=(taskFlip++%2===0);
+  if(full>0.7)preferIn=false; if(full<0.25)preferIn=true;
+  return preferIn?(tryIn(a)||tryOut(a)):(tryOut(a)||tryIn(a));
+}
+function doPick(a){const t=a.task;if(t.type==='in'){t.dock.boxes--;t.dock.res--;}else{slots[t.slot.r][t.slot.s][t.slot.i]=0;}}
+function doDrop(a){const t=a.task;if(t.type==='in'){slots[t.slot.r][t.slot.s][t.slot.i]=1;}else{t.dock.load++;t.dock.res--;}thru++;}
+
+// ---------- docks ----------
+function updDocks(dt){
+  inDocks.forEach(d=>{
+    if(d.state==='docked'&&d.boxes===0&&d.res===0)d.state='leaving';
+    else if(d.state==='leaving'){d.off+=dt/1.4;if(d.off>=1){d.off=1;d.state='empty';d.timer=1.5+rnd()*2.5;}}
+    else if(d.state==='empty'){d.timer-=dt;if(d.timer<=0){d.state='arriving';d.boxes=3+Math.floor(rnd()*2);}}
+    else if(d.state==='arriving'){d.off-=dt/1.4;if(d.off<=0){d.off=0;d.state='docked';}}
+  });
+  outDocks.forEach(d=>{
+    if(d.state==='docked'&&d.load>=d.cap&&d.res===0)d.state='leaving';
+    else if(d.state==='leaving'){d.off+=dt/1.4;if(d.off>=1){d.off=1;d.state='empty';d.timer=1.2+rnd()*2;}}
+    else if(d.state==='empty'){d.timer-=dt;if(d.timer<=0){d.state='arriving';d.load=0;}}
+    else if(d.state==='arriving'){d.off-=dt/1.4;if(d.off<=0){d.off=0;d.state='docked';}}
+  });
+}
+
+// ---------- AMR ----------
+function move(a,dt){
+  let rem=SPEED*dt;
+  while(rem>0&&a.path.length){
+    const p=a.path[0],dx=p.x-a.x,dy=p.y-a.y,dist=Math.hypot(dx,dy);
+    if(dist>0.01)a.tAng=Math.atan2(dy,dx);
+    if(dist<=rem){a.x=p.x;a.y=p.y;rem-=dist;a.path.shift();}
+    else{a.x+=dx/dist*rem;a.y+=dy/dist*rem;rem=0;}
+  }
+  if(a.tAng!=null){let df=a.tAng-a.ang;while(df>Math.PI)df-=2*Math.PI;while(df<-Math.PI)df+=2*Math.PI;a.ang+=df*Math.min(1,dt*12);}
+  a.batt=Math.max(35,a.batt-dt*0.1);
+}
+function afterTask(a){
+  if(a.maintFlag){goTo(a,BAY,'toMaint');addLog(a.name+' 작업 완료 → 정비 스테이션으로 이동','crit');return;}
+  if(a.release){a.release=false;a.role='spare';goTo(a,a.home,'toHome');addLog(a.name+' 대기 위치로 복귀','');return;}
+  const t=assign(a);
+  if(t){a.task=t;goTo(a,t.from,'toPick');}else goTo(a,a.home,'toHome');
+}
+function arrive(a){
+  a.cur=a.dest;
+  if(a.state==='toPick'){a.state='load';a.timer=0.9;}
+  else if(a.state==='toDrop'){a.state='unload';a.timer=0.9;}
+  else if(a.state==='toMaint'){a.state='maint';a.timer=7;setPhase(4);addLog(a.name+' 정비 시작 · 구동모터 베어링 교체','crit');}
+  else if(a.state==='toHome'){a.state='idle';a.wait=0.6;}
+}
+function updAmr(a,dt){
+  a.ph+=dt;
+  const moving=a.path.length>0;
+  switch(a.state){
+    case 'idle':
+      a.batt=Math.min(100,a.batt+dt*0.8);
+      if(a.release){a.release=false;a.role='spare';}
+      a.wait-=dt;
+      if(a.wait<=0){
+        a.wait=0.6;
+        if(a.maintFlag){goTo(a,BAY,'toMaint');addLog(a.name+' 정비 스테이션으로 이동','crit');}
+        else if(a.role==='active'){const t=assign(a);if(t){a.task=t;goTo(a,t.from,'toPick');}}
+      }
+      break;
+    case 'toPick':case 'toDrop':case 'toMaint':case 'toHome':
+      move(a,dt);if(!a.path.length)arrive(a);break;
+    case 'load':a.timer-=dt;if(a.timer<=0){doPick(a);a.carry=true;goTo(a,a.task.to,'toDrop');}break;
+    case 'unload':a.timer-=dt;if(a.timer<=0){doDrop(a);a.carry=false;a.task=null;afterTask(a);}break;
+    case 'maint':a.timer-=dt;if(a.timer<=0)repair(a);break;
+  }
+  // sensors
+  const base=1.45+0.17*Math.sin(a.ph*1.3+a.id)+(Math.random()-0.5)*0.16+(moving?0.15:0);
+  a.vib=a.state==='maint'?0.2+Math.random()*0.05:base+a.deg;
+  const tt=a.state==='maint'?32:43+(moving?3:0)+a.deg*7+(Math.random()-0.5)*0.6;
+  a.temp+=(tt-a.temp)*Math.min(1,dt*1.2);
+  a.health=a.state==='maint'?a.health:Math.max(5,Math.min(99,100-Math.max(0,a.vib-1.9)*15-Math.max(0,a.temp-55)*0.7));
+}
+function repair(a){
+  a.deg=0;a.maintFlag=false;a.health=98;a.temp=40;
+  sc.degrading=false;sc.rul=null;
+  addLog(a.name+' 정비 완료 · 진동 정상','ok');
+  setPhase(5);
+  goTo(a,a.home,'toHome');
+  amrs[4].release=true;
+}
+
+// ---------- scenario ----------
+function setPhase(p,silent){
+  sc.phase=p;sc.start=sc.t;
+  document.querySelectorAll('.stage').forEach(el=>{const q=+el.dataset.p;el.classList.toggle('now',q===p);el.classList.toggle('done',q<p);});
+  document.getElementById('caption').textContent=CAPTIONS[p];
+  document.querySelectorAll('#pipe .node').forEach(n=>n.classList.toggle('on',PIPE_ON[p].includes(+n.dataset.k)));
+}
+function slopeOf(h){const v=h.filter(x=>x!=null).slice(-20);if(v.length<5)return 0;const n=v.length;let sx=0,sy=0,sxy=0,sxx=0;v.forEach((y,i)=>{sx+=i;sy+=y;sxy+=i*y;sxx+=i*i});return(n*sxy-sx*sy)/(n*sxx-sx*sx)/0.2;}
+function scenario(dt){
+  sc.t+=dt;const T=amrs[2],S=amrs[4];
+  if(sc.phase===1&&!sc.degrading&&sc.t-sc.start>9)sc.degrading=true;
+  if(sc.degrading&&T.state!=='maint')T.deg=Math.min(5.2,T.deg+dt*0.27);
+  if(sc.phase===1&&T.deg>1.2){setPhase(2);addLog('AMR-03 진동 이상 감지 · 평소 대비 +'+Math.round((T.vib/1.55-1)*100)+'%','warn');selected=2;}
+  if(sc.phase===2&&T.deg>2.5){
+    sc.slope=Math.max(0.08,slopeOf(T.hist));
+    sc.rul=Math.max(6,Math.round((7.1-T.vib)/sc.slope*4));
+    setPhase(3);
+    addLog('AI 예측 · 구동모터 베어링 마모, 고장까지 약 '+sc.rul+'시간','crit');
+    T.maintFlag=true;S.role='active';S.wait=0.2;
+    addLog('정비 지시 등록 · 예비기 AMR-05 투입','warn');
+  }
+  if(sc.phase===3&&sc.rul!=null){sc.slope=Math.max(0.08,slopeOf(T.hist)||sc.slope);}
+  if(sc.phase===5&&sc.t-sc.start>9){setPhase(1);sc.start=sc.t;addLog('정상 운영 · 다음 주기 모니터링','');}
+}
+
+// ---------- log ----------
+function fmt(t){const s=Math.floor(t);return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')}
+function addLog(text,lv){logItems.unshift({t:simT||0,text,lv});logItems=logItems.slice(0,7);renderLog();}
+function renderLog(){document.getElementById('log').innerHTML=logItems.map(l=>`<li class="${l.lv}"><time>${fmt(l.t)}</time><span>${l.text}</span></li>`).join('');}
+
+// ---------- status ----------
+function status(a){
+  if(a.state==='maint')return['crit','정비 중'];
+  if(a.maintFlag)return['crit','정비 필요'];
+  if(a.vib>2.6&&a.deg>0.5)return['warn','주의'];
+  if(a.role==='spare'&&a.state==='idle')return['spare','예비 대기'];
+  return['ok','정상'];
+}
+
+// ---------- drawing ----------
+const cv=document.getElementById('floor'),ctx=cv.getContext('2d');
+const ch=document.getElementById('chart'),cx=ch.getContext('2d');
+function size(){
+  const dpr=window.devicePixelRatio||1;
+  const w=cv.clientWidth;cv.width=Math.round(w*dpr);cv.height=Math.round(w*H/W*dpr);
+  const cw=ch.clientWidth;ch.width=Math.round(cw*dpr);ch.height=Math.round(130*dpr);
+}
+new ResizeObserver(size).observe(cv);new ResizeObserver(size).observe(ch);
+function rr(c,x,y,w,h,r){c.beginPath();c.roundRect?c.roundRect(x,y,w,h,r):c.rect(x,y,w,h);}
+function txt(s,x,y,col,f,al){ctx.fillStyle=col;ctx.font=f||"600 12px 'IBM Plex Sans KR',sans-serif";ctx.textAlign=al||'center';ctx.textBaseline='middle';ctx.fillText(s,x,y);}
+
+function drawFloor(){
+  ctx.fillStyle=C.floor;ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle=C.grid;ctx.lineWidth=1;
+  for(let x=80;x<=920;x+=40){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+  for(let y=0;y<=H;y+=40){ctx.beginPath();ctx.moveTo(80,y);ctx.lineTo(920,y);ctx.stroke();}
+  // lanes
+  const seg=[[HXL,30,HXL,560],[HXR,30,HXR,560]];
+  AISLES.forEach(y=>seg.push([HXL,y,HXR,y]));
+  DOCK_Y.forEach(y=>{seg.push([96,y,HXL,y]);seg.push([HXR,y,904,y]);});
+  ctx.lineCap='round';
+  ctx.strokeStyle=C.aisle;ctx.lineWidth=26;
+  seg.forEach(s=>{ctx.beginPath();ctx.moveTo(s[0],s[1]);ctx.lineTo(s[2],s[3]);ctx.stroke();});
+  ctx.strokeStyle=C.lane;ctx.lineWidth=1.5;ctx.setLineDash([8,8]);ctx.globalAlpha=.7;
+  seg.forEach(s=>{ctx.beginPath();ctx.moveTo(s[0],s[1]);ctx.lineTo(s[2],s[3]);ctx.stroke();});
+  ctx.setLineDash([]);ctx.globalAlpha=1;ctx.lineCap='butt';
+  // walls
+  ctx.fillStyle=C.rack;
+  [[78,0,4,H],[918,0,4,H]].forEach(r=>ctx.fillRect(...r));
+  ctx.fillStyle=C.floor;
+  DOCK_Y.forEach(y=>{ctx.fillRect(77,y-22,6,44);ctx.fillRect(917,y-22,6,44);});
+  ctx.fillStyle=C.lane;
+  DOCK_Y.forEach(y=>{ctx.fillRect(76,y-24,8,3);ctx.fillRect(76,y+21,8,3);ctx.fillRect(916,y-24,8,3);ctx.fillRect(916,y+21,8,3);});
+  txt('입고',40,28,C.muted,"700 13px 'IBM Plex Sans KR',sans-serif");
+  txt('출고 · 허브',960,28,C.muted,"700 13px 'IBM Plex Sans KR',sans-serif");
+  // racks
+  ROWS.forEach(([y0,y1],r)=>{
+    ctx.fillStyle=C.shelf;ctx.fillRect(232,y0,446,y1-y0);
+    ctx.strokeStyle=C.rack;ctx.lineWidth=2;ctx.strokeRect(232,y0,446,y1-y0);
+    const mid=(y0+y1)/2;ctx.beginPath();ctx.moveTo(232,mid);ctx.lineTo(678,mid);ctx.lineWidth=1;ctx.stroke();
+    for(let i=0;i<=NS;i++){const x=230+i*50;ctx.beginPath();ctx.moveTo(x,y0);ctx.lineTo(x,y1);ctx.stroke();}
+    txt('ABCD'[r],218,mid,C.muted,"700 13px 'JetBrains Mono',monospace");
+    for(let s=0;s<2;s++)for(let i=0;i<NS;i++){
+      const v=slots[r][s][i],bx=SX(i)-14,by=(s?mid:y0)+4,bw=28,bh=(y1-y0)/2-8;
+      if(v===1||v===3){ctx.fillStyle=C.box;ctx.fillRect(bx,by,bw,bh);ctx.strokeStyle=C.ink;ctx.globalAlpha=.25;ctx.strokeRect(bx+.5,by+.5,bw-1,bh-1);ctx.globalAlpha=1;}
+      if(v===2||v===3){ctx.setLineDash([3,3]);ctx.strokeStyle=C.amr;ctx.lineWidth=1.5;ctx.strokeRect(bx-1,by-1,bw+2,bh+2);ctx.setLineDash([]);}
+    }
+  });
+  txt('보관 랙',455,22,C.muted,"700 13px 'IBM Plex Sans KR',sans-serif");
+  // stations
+  CHARGERS.forEach(c=>{ctx.strokeStyle=C.rack;ctx.lineWidth=1.5;rr(ctx,c.x-17,c.y-15,34,30,4);ctx.stroke();ctx.fillStyle=C.ok;ctx.fillRect(c.x-6,c.y+11,12,3);});
+  txt('충전 · 대기',345,634,C.muted,"600 11px 'IBM Plex Sans KR',sans-serif");
+  const T=amrs[2];
+  ctx.strokeStyle=C.crit;ctx.lineWidth=2;ctx.setLineDash([6,4]);rr(ctx,BAY.x-34,BAY.y-22,68,44,5);ctx.stroke();ctx.setLineDash([]);
+  txt('정비 스테이션',BAY.x,634,C.crit,"600 11px 'IBM Plex Sans KR',sans-serif");
+  if(T.state==='maint'){
+    const p=1-T.timer/7;ctx.fillStyle=C.chip;ctx.fillRect(BAY.x+44,BAY.y-6,80,8);ctx.fillStyle=C.crit;ctx.fillRect(BAY.x+44,BAY.y-6,80*p,8);
+    txt('교체 '+Math.round(p*100)+'%',BAY.x+84,BAY.y+12,C.crit,"600 11px 'JetBrains Mono',monospace");
+  }
+}
+function drawTrucks(){
+  inDocks.forEach(d=>{
+    if(d.state==='empty')return;
+    const ox=-d.off*90;
+    ctx.save();ctx.translate(ox,d.y);
+    ctx.fillStyle=C.truck;rr(ctx,4,-12,14,24,3);ctx.fill();
+    ctx.fillStyle=C.truck;ctx.globalAlpha=.85;ctx.fillRect(20,-18,52,36);ctx.globalAlpha=1;
+    for(let k=0;k<d.boxes;k++){ctx.fillStyle=C.box;ctx.fillRect(58-k*12,-8,10,16);}
+    ctx.restore();
+  });
+  outDocks.forEach(d=>{
+    if(d.state==='empty')return;
+    const ox=d.off*90;
+    ctx.save();ctx.translate(ox,d.y);
+    ctx.fillStyle=C.courier;ctx.fillRect(928,-18,50,36);
+    rr(ctx,980,-12,14,24,3);ctx.fill();
+    for(let k=0;k<d.load;k++){ctx.fillStyle=C.box;ctx.fillRect(932+k*11,-8,9,16);}
+    ctx.restore();
+  });
+}
+function drawAmr(a,i,now){
+  const [lv]=status(a);
+  const sel=i===selected;
+  if(sel&&a.path.length){
+    ctx.strokeStyle=lv==='crit'?C.crit:C.amr;ctx.lineWidth=2;ctx.setLineDash([5,5]);ctx.globalAlpha=.8;
+    ctx.beginPath();ctx.moveTo(a.x,a.y);a.path.forEach(p=>ctx.lineTo(p.x,p.y));ctx.stroke();ctx.setLineDash([]);ctx.globalAlpha=1;
+  }
+  if(lv==='crit'||lv==='warn'){
+    const r=17+4*Math.sin(now/180);
+    ctx.strokeStyle=lv==='crit'?C.crit:C.warn;ctx.lineWidth=2;ctx.globalAlpha=.55;
+    ctx.beginPath();ctx.arc(a.x,a.y,r,0,Math.PI*2);ctx.stroke();ctx.globalAlpha=1;
+  }
+  ctx.save();ctx.translate(a.x,a.y);ctx.rotate(a.ang);
+  ctx.fillStyle=(a.role==='spare'&&a.state==='idle')?C.spare:C.amr;
+  rr(ctx,-13,-10,26,20,4);ctx.fill();
+  if(lv!=='ok'&&lv!=='spare'){ctx.strokeStyle=lv==='crit'?C.crit:C.warn;ctx.lineWidth=2.5;ctx.stroke();}
+  ctx.fillStyle=C.surface;ctx.globalAlpha=.85;ctx.fillRect(9,-6,3,12);ctx.globalAlpha=1;
+  if(a.carry||a.state==='load'){ctx.fillStyle=C.box;ctx.fillRect(-9,-7,15,14);ctx.strokeStyle=C.ink;ctx.globalAlpha=.3;ctx.lineWidth=1;ctx.strokeRect(-9,-7,15,14);ctx.globalAlpha=1;}
+  ctx.restore();
+  const lx=a.x,ly=a.y-22;
+  ctx.fillStyle=sel?C.ink:C.surface;rr(ctx,lx-15,ly-8,30,16,8);ctx.fill();
+  if(!sel){ctx.strokeStyle=C.line;ctx.lineWidth=1;ctx.stroke();}
+  txt('0'+a.id,lx,ly+.5,sel?C.surface:C.ink,"600 11px 'JetBrains Mono',monospace");
+}
+function render(now){
+  const s=cv.width/W;ctx.setTransform(s,0,0,s,0,0);
+  drawFloor();drawTrucks();
+  amrs.forEach((a,i)=>drawAmr(a,i,now));
+}
+function drawChart(){
+  const a=amrs[selected],dpr=window.devicePixelRatio||1,w=ch.width/dpr,h=130;
+  cx.setTransform(dpr,0,0,dpr,0,0);cx.clearRect(0,0,w,h);
+  const L=26,R=w-4,Tp=8,B=h-18,pw=(R-L)*0.74,ymax=8;
+  const Y=v=>B-(v/ymax)*(B-Tp);
+  cx.font="10px 'JetBrains Mono',monospace";cx.textAlign='right';cx.textBaseline='middle';
+  [0,2,4,6,8].forEach(v=>{cx.strokeStyle=C.line;cx.lineWidth=1;cx.beginPath();cx.moveTo(L,Y(v));cx.lineTo(R,Y(v));cx.stroke();cx.fillStyle=C.muted;cx.fillText(v,L-5,Y(v));});
+  [[4.5,C.warn,'주의'],[7.1,C.crit,'고장']].forEach(([v,c,l])=>{cx.strokeStyle=c;cx.setLineDash([4,3]);cx.beginPath();cx.moveTo(L,Y(v));cx.lineTo(R,Y(v));cx.stroke();cx.setLineDash([]);cx.fillStyle=c;cx.textAlign='left';cx.fillText(l,L+3,Y(v)-7);cx.textAlign='right';});
+  cx.fillStyle=C.muted;cx.textAlign='left';cx.fillText('최근 30초',L,h-6);cx.textAlign='right';cx.fillText('예측',R,h-6);
+  cx.strokeStyle=C.line;cx.beginPath();cx.moveTo(L+pw,Tp);cx.lineTo(L+pw,B);cx.stroke();
+  const hs=a.hist,N=150,dx=pw/(N-1),off=N-hs.length;
+  cx.beginPath();let started=false,lx=0,ly=0;
+  hs.forEach((v,i)=>{if(v==null){started=false;return;}const x=L+(off+i)*dx,y=Y(Math.min(ymax,v));if(!started){cx.moveTo(x,y);started=true;}else cx.lineTo(x,y);lx=x;ly=v;});
+  const [lv]=status(a);
+  cx.strokeStyle=lv==='crit'?C.crit:lv==='warn'?C.warn:C.amr;cx.lineWidth=1.8;cx.stroke();
+  if(started){cx.fillStyle=cx.strokeStyle;cx.beginPath();cx.arc(lx,Y(Math.min(ymax,ly)),3,0,7);cx.fill();}
+  if(selected===2&&a.maintFlag&&sc.rul!=null&&a.state!=='maint'&&started){
+    const sl=Math.max(0.08,sc.slope),secs=(7.1-ly)/sl,px=Math.min(R,lx+secs*5*dx);
+    const py=px>=R?Y(ly+sl*(R-lx)/(5*dx)):Y(7.1);
+    cx.strokeStyle=C.crit;cx.setLineDash([2,3]);cx.lineWidth=1.5;cx.beginPath();cx.moveTo(lx,Y(ly));cx.lineTo(px,py);cx.stroke();cx.setLineDash([]);
+    if(px<R){cx.beginPath();cx.arc(px,py,4,0,7);cx.stroke();}
+  }
+}
+
+// ---------- panel ----------
+const fleetEl=document.getElementById('fleet');
+function buildFleet(){
+  fleetEl.innerHTML=amrs.map((a,i)=>`<button type="button" class="frow" data-i="${i}"><span class="nm">${a.name}</span><span class="st"></span><span class="bar"><i></i></span><span class="hs"></span></button>`).join('');
+  fleetEl.querySelectorAll('.frow').forEach(b=>b.addEventListener('click',()=>{selected=+b.dataset.i;updPanel();}));
+}
+const $=id=>document.getElementById(id);
+function updPanel(){
+  const a=amrs[selected],[lv,lt]=status(a);
+  $('selName').textContent=a.name+' · '+(a.role==='spare'&&a.state==='idle'?'예비 대기':STATE_KO[a.state]);
+  const p=$('selPill');p.className='pill '+lv;p.textContent=lt;
+  const mv=$('mVib');mv.textContent=a.vib.toFixed(1);mv.className='v'+(a.vib>=4.5?' crit':a.vib>=2.6?' warn':'');
+  const mt=$('mTemp');mt.textContent=Math.round(a.temp);mt.className='v'+(a.temp>=70?' crit':a.temp>=58?' warn':'');
+  $('mBatt').textContent=Math.round(a.batt);
+  const mh=$('mHealth');mh.textContent=Math.round(a.health);mh.className='v'+(a.health<50?' crit':a.health<80?' warn':'');
+  $('rul').innerHTML=(selected===2&&a.maintFlag&&sc.rul!=null)?`예측 결과: 고장까지 약 <b>${sc.rul}시간</b> · 고장 전 정비 예약`:(a.state==='maint'?'정비 진행 중 · 예비기가 작업 대체':'');
+  fleetEl.querySelectorAll('.frow').forEach((r,i)=>{
+    const b=amrs[i],[l,t]=status(b);
+    r.classList.toggle('sel',i===selected);
+    r.querySelector('.st').textContent=(b.role==='spare'&&b.state==='idle')?'예비 대기':STATE_KO[b.state];
+    const bar=r.querySelector('.bar i');bar.style.width=Math.round(b.health)+'%';bar.style.background=l==='crit'?'var(--crit)':l==='warn'?'var(--warn)':l==='spare'?'var(--spare)':'var(--ok)';
+    r.querySelector('.hs').textContent=t==='정상'?Math.round(b.health)+'점':t;
+  });
+  $('kThru').textContent=thru;
+  $('kAct').textContent=amrs.filter(b=>b.role==='active'&&b.state!=='maint'&&!(b.maintFlag&&b.state==='toMaint')).length+'/5';
+}
+
+// ---------- canvas click ----------
+cv.addEventListener('click',e=>{
+  const r=cv.getBoundingClientRect(),x=(e.clientX-r.left)*W/r.width,y=(e.clientY-r.top)*H/r.height;
+  let best=-1,bd=30;amrs.forEach((a,i)=>{const d=Math.hypot(a.x-x,a.y-y);if(d<bd){bd=d;best=i;}});
+  if(best>=0){selected=best;updPanel();}
+});
+
+// ---------- loop ----------
+let speed=1,playing=!window.matchMedia('(prefers-reduced-motion: reduce)').matches,last=performance.now(),panelAcc=0,tokAcc=0;
+function step(dt){
+  simT+=dt;scenario(dt);updDocks(dt);amrs.forEach(a=>updAmr(a,dt));
+  sampleAcc+=dt;while(sampleAcc>=0.2){sampleAcc-=0.2;amrs.forEach(a=>{a.hist.push(a.state==='maint'?null:a.vib);if(a.hist.length>150)a.hist.shift();});}
+}
+function frame(now){
+  let dt=Math.min(0.05,(now-last)/1000);last=now;
+  if(playing){let t=dt*speed;while(t>0){const s=Math.min(0.03,t);step(s);t-=s;}}
+  tokAcc+=dt;if(tokAcc>0.5||!C.floor){tokAcc=0;readTokens();}
+  render(now);
+  panelAcc+=dt;if(panelAcc>0.15){panelAcc=0;updPanel();drawChart();}
+  requestAnimationFrame(frame);
+}
+const playBtn=$('play');
+function syncPlay(){playBtn.textContent=playing?'일시정지':'재생';playBtn.setAttribute('aria-pressed',String(!playing));}
+playBtn.addEventListener('click',()=>{playing=!playing;syncPlay();});
+document.querySelectorAll('.spd').forEach(b=>b.addEventListener('click',()=>{speed=+b.dataset.s;document.querySelectorAll('.spd').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));}));
+$('restart').addEventListener('click',()=>{init();buildFleet();updPanel();playing=true;syncPlay();});
+
+readTokens();init();buildFleet();size();
+// warm-up so the first frame already shows motion and history
+for(let i=0;i<60;i++)step(0.05);
+updPanel();drawChart();syncPlay();
+requestAnimationFrame(frame);
+})();
+</script>
+
+</body></html>
