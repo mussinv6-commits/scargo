@@ -21,6 +21,7 @@ export const ADMIN_MENU = {
     { to: '/admin/weighbridge', label: '검사소 계량', icon: 'bi-truck-front', img: dashIcons.sidebar.과적검사관리 }, // 26.10.01 추가
     { to: '/admin/overload-checks', label: '과적 검사 관리', icon: 'bi-speedometer', img: dashIcons.sidebar.과적검사관리 },
     { to: '/admin/gates', label: '검문소 관리', icon: 'bi-shield-check', img: dashIcons.sidebar.검문소관리 },
+    { to: '/admin/amr-twin', label: '물류센터 AMR 관제', icon: 'bi-robot', img: dashIcons.sidebar.야드관리 }, // 26.10.08 추가: 3D 디지털 트윈
   ],
   notice: [
     { to: '/admin/notices', label: '공지사항', icon: 'bi-megaphone', img: dashIcons.sidebar.적재기록조회 },

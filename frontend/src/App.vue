@@ -8,7 +8,7 @@ import { authState, clearLogin } from "@/auth/authState.js";
 import { API_BASE } from "@/utils/apiBase.js";
 import { ADMIN_MENU } from "@/components/admin/adminMenu.js";
 import { COMPANY_MENU } from "@/components/company/companyMenu.js";
-import safeCargoLogo from "@/assets/scargo_logo_4x.png";
+import scargoLogo from "@/assets/scargo_logo_4x.png";
 
 const router = useRouter();
 const route = useRoute();
@@ -126,7 +126,7 @@ function scrollToTop() {
     <nav class="navbar navbar-expand-lg navbar-dark bg-brand sticky-top site-nav">
       <div class="container-fluid nav-grid">
         <RouterLink to="/" class="navbar-brand brand-logo">
-          <img :src="safeCargoLogo" alt="S Cargo" />
+          <img :src="scargoLogo" alt="S Cargo" />
         </RouterLink>
 
         <button

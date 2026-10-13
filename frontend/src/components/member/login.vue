@@ -8,7 +8,7 @@
       <div class="brand">
 
         <div class="brand-icon">
-          <img :src="safeCargoLogo" alt="S Cargo 로고" />
+          <img :src="scargoLogo" alt="S Cargo 로고" />
         </div>
 
         <div class="brand-info">
@@ -173,12 +173,12 @@ const { cookies } = useCookies();
 
 import axios from "axios";
 import { setLogin } from "@/auth/authState.js";   // 추가
-import safeCargoLogo from "@/assets/scargo_logo_4x.png";
+import scargoLogo from "@/assets/scargo_logo_4x.png";
 
 export default {
   data() {
     return {
-      safeCargoLogo,
+      scargoLogo,
       id: "",
       pw: "",
       sid: false,

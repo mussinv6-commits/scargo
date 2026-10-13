@@ -1,0 +1,79 @@
+/* ============================================================
+   26.10.08 추가: 화물차 기사 모바일 앱 전용 스타일
+   -----------------------------------------------------------
+   기사 화면(tokens.css)은 PC 웹 기준이라, 앱에서만 아래를 덮어쓴다.
+   - 웹 상단 네비가 없으므로 --nav-h = 0
+   - 좌측 사이드바 대신 하단 탭바, 휴대폰 노치/홈바 안전 영역 반영
+   - 터치하기 좋은 크기로 버튼·여백 조정
+   웹(src/main.js)에서는 이 파일을 불러오지 않으므로 영향 없음.
+   ============================================================ */
+:root { --nav-h: 0px; --drv-tab-h: 62px; }
+
+html, body { background: var(--color-bg, #f4f6f8); overscroll-behavior-y: none; }
+body { -webkit-tap-highlight-color: transparent; }
+
+.drv-app.driver-app-shell {
+  display: block;
+  min-height: 100dvh;
+  overflow: visible;
+}
+.driver-app-shell.drv-app .drv-app-main {
+  min-height: 100dvh;
+  padding-bottom: calc(var(--drv-tab-h) + env(safe-area-inset-bottom, 0px) + 12px);
+}
+
+/* 화면 제목줄: 상단 고정 + 노치 영역 */
+.driver-app-shell.drv-app .topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  min-height: 0;
+  padding: calc(env(safe-area-inset-top, 0px) + 14px) 18px 12px;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid #e3e8ef;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.driver-app-shell.drv-app .topbar .brand { font-size: 23px; }
+.driver-app-shell.drv-app .topbar .sub { font-size: 12.5px; }
+.driver-app-shell.drv-app .page { padding: 16px; }
+.driver-app-shell.drv-app .layout-2col { grid-template-columns: 1fr; gap: 14px; }
+.driver-app-shell.drv-app .side-panel { position: static; }
+.driver-app-shell.drv-app .card-grid { grid-template-columns: 1fr; gap: 12px; }
+.driver-app-shell.drv-app .empty-state { padding: 64px 12px; }
+.driver-app-shell.drv-app .drv-cta { min-height: 50px; width: 100%; max-width: 320px; font-size: 15.5px; }
+.driver-app-shell.drv-app .driver-main :is(.btn-fill, .btn-outline, .btn-primary, .btn-secondary, .btn-request),
+.driver-app-shell.drv-app .drv-app-main :is(.btn-fill, .btn-outline, .btn-primary, .btn-secondary, .btn-request) { min-height: 48px; }
+.driver-app-shell.drv-app table { font-size: 13px; }
+.driver-app-shell.drv-app .table-wrap, .driver-app-shell.drv-app .table-responsive { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+/* 하단 탭바 */
+.drv-tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 50;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  height: calc(var(--drv-tab-h) + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background: #fff;
+  border-top: 1px solid #e3e8ef;
+  box-shadow: 0 -6px 18px rgba(10, 37, 64, 0.06);
+}
+.drv-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  color: #8a99ab;
+  font-size: 11.5px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.drv-tab svg { width: 23px; height: 23px; }
+.drv-tab.active { color: var(--color-accent, #ff6b00); }
+.drv-tab:hover { color: var(--color-accent, #ff6b00); }

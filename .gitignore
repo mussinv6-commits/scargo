@@ -1,9 +1,21 @@
-# ===== SCargo 공통 =====
+# ===== S-CARGO 공통 =====
 .DS_Store
 Thumbs.db
 *.log
 .idea/
 .vscode/
+
+# ===== 문서 · 발표 · 대용량 파일은 깃허브에 올리지 않음 =====
+*.pptx
+*.ppt
+*.pdf
+*.docx
+*.xlsx
+*.hwp
+*.zip
+*.mp4
+*.mov
+*.apk
 
 # ===== 이클립스/STS 설정 (사람마다 달라서 올리지 않음) =====
 .project
@@ -14,25 +26,26 @@ Thumbs.db
 .apt_generated_tests/
 
 # ===== 백엔드 (Spring Boot / Gradle) =====
-backend/scargo/build/
-backend/scargo/bin/
-backend/scargo/.gradle/
-backend/scargo/out/
-backend/scargo/src/main/resources/firebase/
+backend/build/
+backend/bin/
+backend/.gradle/
+backend/out/
+backend/src/main/resources/firebase/
 
 # ===== 프론트엔드 (Vue / Vite) =====
 frontend/node_modules/
 frontend/dist/
+frontend/dist-driver/
+frontend/android/
 
-# ===== 파이썬 (게이트 OCR) =====
+# ===== AMR 관리자 앱 (Capacitor) =====
+amr-app/node_modules/
+amr-app/dist/
+
+# ===== AI · OCR (Python) =====
 __pycache__/
 *.pyc
-python/runs/
-python/build/
-python/dist/
-python/crash_log.txt
-
-# ===== 백엔드 IDE 산출물 =====
-backend/scargo/.apt_generated/
-backend/scargo/.apt_generated_tests/
-python/__pycache__/
+ai-ocr/build/
+ai-ocr/dist/
+ai-ocr/crash_log.txt
+ai-ocr/게이트_수신함/

@@ -50,7 +50,7 @@ const collapsed = ref(false)
 const dateEl = ref(null)
 
 const isDash = computed(() => route.path === '/admin')
-const DATE_LOCKED = ['/admin/loading-locations', '/admin/gate-ocr', '/admin/weighbridge']
+const DATE_LOCKED = ['/admin/loading-locations', '/admin/gate-ocr', '/admin/weighbridge', '/admin/amr-twin']
 const dateEnabled = computed(() => !DATE_LOCKED.includes(route.path))
 watch(dateEnabled, (on) => { if (!on) resetViewDateToday() }, { immediate: true })
 

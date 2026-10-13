@@ -16,6 +16,7 @@ import AdminProfile from "@/components/admin/screens/AdminProfile.vue";
 import AdminNoticeList from "@/components/admin/screens/AdminNoticeList.vue";
 import AdminNoticeDetail from "@/components/admin/screens/AdminNoticeDetail.vue";
 import AdminNoticeForm from "@/components/admin/screens/AdminNoticeForm.vue";
+import AdminAmrTwin from "@/components/admin/screens/AdminAmrTwin.vue"; // 26.10.08 추가: 물류센터 AMR 3D 관제
 
 // 관리자 전용 화면 묶음. 실제 접근 제어(로그인/ADMIN 권한 체크)는
 // router/index.js 의 beforeEach 가드에서 meta.requiresAdmin 을 보고 처리한다.
@@ -43,6 +44,7 @@ export default [
       { path: "notices/:id", name: "admin-notice-detail", component: AdminNoticeDetail },
       { path: "gate-ocr", name: "admin-gate-ocr", component: GateDemo }, // 26.10.01: 기존 /gate-demo
       { path: "weighbridge", name: "admin-weighbridge", component: AdminWeighbridge }, // 26.10.01 추가: 게이트 OCR → 검사소 계량
+      { path: "amr-twin", name: "admin-amr-twin", component: AdminAmrTwin }, // 26.10.08 추가: 물류센터 AMR 3D 디지털 트윈
     ],
   },
 ];

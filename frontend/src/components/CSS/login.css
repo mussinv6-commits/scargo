@@ -92,7 +92,7 @@
  
  
 /* ========================================= 
-   SafeCargo 로고 
+   S-CARGO 로고 
    ========================================= */ 
  
 .brand { 
@@ -129,7 +129,7 @@
 } 
  
  
-/* 🟡 추가: SafeCargo 로고 이미지 */ 
+/* 🟡 추가: S-CARGO 로고 이미지 */ 
 .brand-icon img { 
   width: 100%; 
  
@@ -145,7 +145,7 @@
 } 
  
  
-/* SafeCargo + 설명 */ 
+/* S-CARGO + 설명 */ 
 .brand-info { 
   display: flex; 
  
@@ -154,14 +154,14 @@
   align-items: flex-start; 
  
   /* 
-    SafeCargo와 아래 설명의 
+    S-CARGO와 아래 설명의 
     왼쪽 시작점을 동일하게 맞춤 
   */ 
   text-align: left; 
 } 
  
  
-/* SafeCargo */ 
+/* S-CARGO */ 
 .brand-name { 
   font-size: clamp(24px, 2.4vw, 32px); /* 🟡 변경: clamp(20px, 2vw, 25px) */ 
  
@@ -179,7 +179,7 @@
 } 
  
  
-/* SafeCargo 아래 설명 */ 
+/* S-CARGO 아래 설명 */ 
 .brand-subtitle { 
   margin-top: 6px; 
  
@@ -207,7 +207,7 @@
  
   /* 
     기존 88px보다 줄여서 
-    SafeCargo와 메인 문구가 적당히 떨어지도록 함 
+    S-CARGO와 메인 문구가 적당히 떨어지도록 함 
   */ 
   margin-top: clamp(55px, 7vh, 85px); 
  
