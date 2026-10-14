@@ -1,4 +1,4 @@
-/* S카고 물류센터 AMR 디지털 트윈 — 관제 화면 (의도적으로 다크 단일 테마)
+/* S카고 허브 AMR 디지털 트윈 — 관제 화면 (다크 기본 · 라이트 선택)
    관리자 화면 전역 스타일과 섞이지 않도록 모든 규칙을 .amr-twin 아래로 한정한다. */
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
 
@@ -9,11 +9,23 @@
   --hub0:#b48cff; --hub1:#5aa8ff; --hub2:#ff7eb3;
   --font-ui:'Pretendard','IBM Plex Sans KR','Apple SD Gothic Neo','Malgun Gothic',system-ui,sans-serif;
   --font-data:'JetBrains Mono',ui-monospace,Consolas,monospace;
+  --glass:8,12,17; --floor:#0b1016; --glow:#11202c;
   color-scheme:dark;
-  background:radial-gradient(1200px 600px at 70% -10%,#11202c 0%,var(--bg) 60%),var(--bg);
+  background:radial-gradient(1200px 600px at 70% -10%,var(--glow) 0%,var(--bg) 60%),var(--bg);
   color:var(--ink);font-family:var(--font-ui);font-size:14px;line-height:1.55;text-align:left;
   border-radius:14px;
 }
+/* 라이트 모드 */
+.amr-twin.light{
+  --bg:#f2f5f8; --bg2:#e7ecf1; --panel:#ffffff; --panel2:#f3f6f9; --edge:#d9e1e8; --edge2:#c4cfda;
+  --ink:#0f1a24; --muted:#56677a; --dim:#8796a7;
+  --cyan:#0b9e8f; --amber:#c97d00; --red:#d9363c; --green:#1c9a57; --sky:#2a78bd;
+  --hub0:#7d4fe0; --hub1:#2f7fe0; --hub2:#d9467f;
+  --glass:255,255,255; --floor:#dfe6ec; --glow:#e3edf5;
+  color-scheme:light;
+}
+.amr-twin.light button[aria-pressed="true"]{color:#fff}
+.amr-twin.light .floorwrap{box-shadow:0 10px 30px rgba(15,26,36,.12)}
 .amr-twin *{box-sizing:border-box}
 .amr-twin .wrap{max-width:1500px;margin:0 auto;padding-inline:20px;padding-block:22px 40px;display:flex;flex-direction:column;gap:14px}
 .amr-twin header.twin-head{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:14px;margin:0;padding:0;background:none;border:0;position:static}
@@ -49,7 +61,7 @@
 .amr-twin .stage[data-p="2"],.amr-twin .stage[data-p="3"]{--c:var(--amber)}.amr-twin .stage[data-p="4"]{--c:var(--red)}.amr-twin .stage[data-p="5"]{--c:var(--green)}
 .amr-twin .stages{flex:1 1 420px;min-width:0}
 /* 단계 설명 · 데이터 흐름: 3D 화면 왼쪽 아래에 자막처럼 */
-.amr-twin .capbar{position:absolute;left:12px;bottom:12px;z-index:3;max-width:min(720px,calc(100% - 24px));display:flex;flex-direction:column;gap:6px;padding:9px 13px;background:rgba(8,12,17,.82);backdrop-filter:blur(6px);border:1px solid var(--edge2);border-left:3px solid var(--cyan);border-radius:8px;pointer-events:none}
+.amr-twin .capbar{position:absolute;left:12px;bottom:12px;z-index:3;max-width:min(720px,calc(100% - 24px));display:flex;flex-direction:column;gap:6px;padding:9px 13px;background:rgba(var(--glass),.82);backdrop-filter:blur(6px);border:1px solid var(--edge2);border-left:3px solid var(--cyan);border-radius:8px;pointer-events:none}
 .amr-twin .caption{margin:0;font-size:.84rem;line-height:1.5;color:var(--ink)}
 .amr-twin .pipe{display:flex;flex-wrap:wrap;gap:3px;align-items:center;font-size:.66rem}
 .amr-twin .pipe .node{padding:3px 8px;border-radius:4px;border:1px solid var(--edge);color:var(--dim);transition:all .35s}
@@ -58,21 +70,21 @@
 
 .amr-twin .main{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;align-items:start}
 .amr-twin .main .floorwrap{order:-1}
-.amr-twin .floorwrap{position:relative;min-width:0;border:1px solid var(--edge);border-radius:10px;overflow:hidden;background:#0b1016;box-shadow:0 20px 60px rgba(0,0,0,.45)}
+.amr-twin .floorwrap{position:relative;min-width:0;border:1px solid var(--edge);border-radius:10px;overflow:hidden;background:var(--floor);box-shadow:0 20px 60px rgba(0,0,0,.45)}
 .amr-twin .twin-viewport{position:relative;width:100%;aspect-ratio:16/10;min-height:380px;max-height:78vh;overflow:hidden;cursor:grab;touch-action:none}
 .amr-twin .twin-viewport:active{cursor:grabbing}
 .amr-twin .twin-gl{position:absolute;inset:0;width:100%!important;height:100%!important;display:block}
 .amr-twin .twin-labels{position:absolute;inset:0;pointer-events:none}
 .amr-twin .twin-views{position:absolute;right:12px;top:12px;display:flex;gap:4px;z-index:3;flex-wrap:wrap;justify-content:flex-end}
-.amr-twin .twin-views button{background:rgba(8,12,17,.78);backdrop-filter:blur(6px);font-size:.74rem;padding:5px 10px}
+.amr-twin .twin-views button{background:rgba(var(--glass),.78);backdrop-filter:blur(6px);font-size:.74rem;padding:5px 10px}
 .amr-twin .twin-views button[aria-pressed="true"]{background:var(--cyan);color:#081016;border-color:var(--cyan)}
-.amr-twin .twin-help{position:absolute;left:12px;top:12px;z-index:3;font-size:.7rem;color:var(--muted);background:rgba(8,12,17,.65);padding:4px 9px;border-radius:999px;pointer-events:none}
-.amr-twin .twin-banner{position:absolute;left:50%;top:54px;z-index:4;transform:translate(-50%,-8px);opacity:0;transition:opacity .3s,transform .3s;display:flex;align-items:center;gap:8px;padding:6px 16px 6px 12px;border-radius:999px;background:rgba(8,12,17,.9);border:1px solid var(--c,var(--cyan));font-weight:700;font-size:.86rem;white-space:nowrap;pointer-events:none}
+.amr-twin .twin-help{position:absolute;left:12px;top:12px;z-index:3;font-size:.7rem;color:var(--muted);background:rgba(var(--glass),.65);padding:4px 9px;border-radius:999px;pointer-events:none}
+.amr-twin .twin-banner{position:absolute;left:50%;top:54px;z-index:4;transform:translate(-50%,-8px);opacity:0;transition:opacity .3s,transform .3s;display:flex;align-items:center;gap:8px;padding:6px 16px 6px 12px;border-radius:999px;background:rgba(var(--glass),.9);border:1px solid var(--c,var(--cyan));font-weight:700;font-size:.86rem;white-space:nowrap;pointer-events:none}
 .amr-twin .twin-banner i{width:8px;height:8px;border-radius:50%;background:var(--c,var(--cyan));box-shadow:0 0 10px var(--c,var(--cyan))}
 .amr-twin .twin-banner.show{opacity:1;transform:translate(-50%,0)}
 .amr-twin .twin-fallback{position:absolute;inset:0;display:grid;place-items:center;padding:24px;text-align:center;color:var(--muted);font-size:.9rem}
 
-.amr-twin .twin-tag{font:700 11px var(--font-data);color:var(--ink);background:rgba(8,12,17,.85);border:1px solid #2a3b4c;border-radius:999px;padding:1px 8px;white-space:nowrap;transform:translateY(-4px)}
+.amr-twin .twin-tag{font:700 11px var(--font-data);color:var(--ink);background:rgba(var(--glass),.85);border:1px solid #2a3b4c;border-radius:999px;padding:1px 8px;white-space:nowrap;transform:translateY(-4px)}
 .amr-twin .twin-tag-amr.is-ok{border-color:rgba(63,224,204,.6)}
 .amr-twin .twin-tag-amr.is-warn{border-color:var(--amber);color:var(--amber)}
 .amr-twin .twin-tag-amr.is-crit{border-color:var(--red);color:var(--red)}
@@ -84,7 +96,7 @@
 .amr-twin .twin-tag-ocr{color:var(--amber);border-color:var(--amber);font-family:var(--font-ui);font-size:11px}
 .amr-twin .twin-tag-ocr.is-done{color:#0b0f14;background:var(--hub,#fff);border-color:var(--hub,#fff)}
 .amr-twin .twin-tag-maint{color:#fff;background:var(--red);border-color:var(--red);font-family:var(--font-ui)}
-.amr-twin .twin-callout{display:flex;flex-direction:column;gap:1px;padding:7px 12px 7px 11px;border-radius:8px;background:rgba(8,12,17,.92);border:1px solid var(--c,var(--amber));border-left-width:3px;font-size:11px;white-space:nowrap;transform:translate(70px,-6px);box-shadow:0 8px 24px rgba(0,0,0,.4)}
+.amr-twin .twin-callout{display:flex;flex-direction:column;gap:1px;padding:7px 12px 7px 11px;border-radius:8px;background:rgba(var(--glass),.92);border:1px solid var(--c,var(--amber));border-left-width:3px;font-size:11px;white-space:nowrap;transform:translate(70px,-6px);box-shadow:0 8px 24px rgba(0,0,0,.4)}
 .amr-twin .twin-callout b{color:var(--c,var(--amber));font-size:12px}
 .amr-twin .twin-callout span{color:var(--muted)}
 
@@ -163,7 +175,7 @@
 .amr-twin .log li.warn span{color:var(--amber)}.amr-twin .log li.crit span{color:var(--red)}.amr-twin .log li.ok span{color:var(--green)}.amr-twin .log li.hub span{color:var(--muted)}
 
 /* 설명 패널: '설명' 버튼으로 여는 덮개 창 */
-.amr-twin .notes{display:none;position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(1180px,92vw);max-height:88vh;z-index:1050;overflow:auto;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:14px;align-content:start;padding:20px;background:rgba(8,12,17,.97);border:1px solid var(--edge2);border-radius:14px;box-shadow:0 30px 90px rgba(0,0,0,.6)}
+.amr-twin .notes{display:none;position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(1180px,92vw);max-height:88vh;z-index:1050;overflow:auto;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:14px;align-content:start;padding:20px;background:rgba(var(--glass),.97);border:1px solid var(--edge2);border-radius:14px;box-shadow:0 30px 90px rgba(0,0,0,.6)}
 .amr-twin.notes-open .notes{display:grid}
 .amr-twin.notes-open::after{content:"";position:fixed;inset:0;z-index:1040;background:rgba(0,0,0,.55)}
 .amr-twin .notes-head,.amr-twin .notes-intro{grid-column:1/-1}
@@ -214,3 +226,15 @@
   .amr-twin .legend{padding:5px 10px}
 }
 @media (max-width:640px){.amr-twin .pipe{display:none}.amr-twin .capbar{left:8px;right:8px;bottom:8px;max-width:none}.amr-twin .twin-help{display:none}.amr-twin .wrap{padding-inline:16px}.amr-twin .stage{padding:7px 6px}.amr-twin .stage .t{font-size:.68rem}.amr-twin h1{font-size:1.35rem}.amr-twin .twin-viewport{aspect-ratio:4/5}}
+
+/* 정비 승인 카드 (26.10.14 DB · 앱 연동) */
+.amr-twin .approve-card{border:1px solid var(--red);background:linear-gradient(180deg,rgba(255,90,95,.12),rgba(255,90,95,.04));animation:twin-ap 1.6s ease-in-out infinite}
+.amr-twin .approve-card.done{border-color:var(--green);background:linear-gradient(180deg,rgba(79,220,138,.12),rgba(79,220,138,.03));animation:none}
+.amr-twin .approve-card .ap-t{display:flex;align-items:center;gap:8px;font-size:.95rem}
+.amr-twin .approve-card .ap-t i{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;background:var(--red);color:#fff;font-style:normal;font-weight:800;font-size:.8rem}
+.amr-twin .approve-card.done .ap-t i{background:var(--green)}
+.amr-twin .approve-card .ap-p{margin:6px 0 8px;color:var(--muted);font-size:.82rem;line-height:1.5}
+.amr-twin .approve-card .ap-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.amr-twin .approve-card .ap-btn{background:var(--red);border-color:var(--red);color:#fff;font-weight:800}
+.amr-twin .approve-card .ap-s{font-size:.75rem;color:var(--dim)}
+@keyframes twin-ap{0%,100%{box-shadow:0 0 0 0 rgba(255,90,95,0)}50%{box-shadow:0 0 0 4px rgba(255,90,95,.18)}}

@@ -2,5 +2,12 @@
   "appId": "com.scargo.amr",
   "appName": "S카고 AMR 관제",
   "webDir": "dist",
-  "android": { "backgroundColor": "#070b10" }
+  "android": {
+    "backgroundColor": "#070b10",
+    "allowMixedContent": true
+  },
+  "server": {
+    "androidScheme": "http",
+    "cleartext": true
+  }
 }

@@ -12,7 +12,7 @@
     <main id="pages">
       <!-- ① 홈 -->
       <section class="page on" data-page="home">
-        <header class="hd"><div><small>S-CARGO AMR</small><h2>관제 홈</h2></div><span class="live"><i></i>LIVE</span></header>
+        <header class="hd"><div><small>S-CARGO AMR</small><h2>관제 홈</h2></div><div class="hd-r"><button type="button" class="db-chip" id="db-chip">단독</button><button type="button" class="theme-btn" data-theme-toggle>라이트 모드</button><span class="live"><i></i>LIVE</span></div></header>
         <div class="scroll">
           <div class="step" id="h-step"><b>STEP 01</b><span>정상 운영</span><span class="dots"><i></i><i></i><i></i><i></i><i></i></span></div>
           <p class="cap" id="h-cap"></p>
@@ -25,11 +25,17 @@
           <div class="card alert" id="h-alert" hidden>
             <div class="t"><i>!</i><span id="h-alert-t"></span></div>
             <p id="h-alert-p"></p>
-            <div class="act"><button type="button" class="btn p" data-go-robot="2">상세 보기</button><button type="button" class="btn" data-go="3d">3D로 보기</button></div>
+            <div class="act"><button type="button" class="btn danger" id="h-approve" hidden>정비 승인</button><button type="button" class="btn p" data-go-robot="2">상세 보기</button><button type="button" class="btn" data-go="3d">3D로 보기</button></div>
           </div>
           <div class="card mini-card">
             <div class="row-sb"><span class="lbl">3D View · 실시간 트윈</span><button type="button" class="btn sm c" data-go="3d">⤢ 전체 화면</button></div>
             <div class="mini" id="mini-slot"></div>
+          </div>
+          <div class="card" id="db-card">
+            <span class="lbl">Server · DB 연동</span>
+            <p class="db-status" id="db-status">-</p>
+            <div class="db-row"><input id="db-url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="노트북 IP 예: 192.168.0.10:8080" /><button type="button" class="btn sm c" id="db-save">연결</button></div>
+            <p class="hint">노트북과 휴대폰을 같은 와이파이에 두고, 노트북 IP를 넣으세요. 웹 관제 화면이 켜져 있으면 승인 · 상태가 함께 움직입니다.</p>
           </div>
           <div class="card">
             <div class="row-sb"><span class="lbl">Fleet · 로봇 6대</span><span class="hint">눌러서 상세</span></div>
@@ -51,6 +57,8 @@
           </div>
         </div>
         <div class="ov-side">
+          <button type="button" id="v-2d" title="2D / 3D 전환">2D</button>
+          <button type="button" data-theme-toggle title="다크 / 라이트">라이트</button>
           <button type="button" id="v-quality" title="화질">저사양</button>
           <button type="button" id="v-speed" title="배속">1x</button>
           <button type="button" id="v-pause" title="일시정지">Ⅱ</button>
@@ -92,7 +100,7 @@
             <div class="met"><b id="r-state">-</b><span>상태</span></div>
           </div>
           <div class="card">
-            <div class="row-sb"><span class="lbl">Vibration · 최근 30초</span><span class="hint">주의 4.5 · 고장 7.1</span></div>
+            <div class="row-sb"><span class="lbl" id="r-chart-lbl">Vibration · 최근 30초</span><span class="hint">주의 4.5 · 고장 7.1</span></div>
             <canvas id="r-chart" class="chart"></canvas>
           </div>
           <div class="card" id="r-maint-card">
@@ -113,10 +121,10 @@
               <div class="fn"><div class="ic">🚛</div><b id="c-in">0</b><span>입고 OCR</span></div><span class="fa">›</span>
               <div class="fn"><div class="ic c">▤</div><b id="c-store">0</b><span>보관 중</span></div><span class="fa">›</span>
               <div class="fn"><div class="ic a">⇄</div><b id="c-move">0</b><span>이동 중</span></div><span class="fa">›</span>
-              <div class="fn"><div class="ic b">➜</div><b id="c-out">0</b><span>허브 출고</span></div>
+              <div class="fn"><div class="ic b">➜</div><b id="c-out">0</b><span>권역 출고</span></div>
             </div>
           </div>
-          <div class="card"><span class="lbl">Hub · 허브 택배차 적재</span><div id="c-hubs"></div></div>
+          <div class="card"><span class="lbl">Out · 권역별 택배차 적재</span><div id="c-hubs"></div></div>
           <div class="card"><span class="lbl">Storage · 보관 현황 (바닥 칸 / 위 단)</span><div id="c-stock"></div></div>
           <div class="card">
             <div class="row-sb"><span class="lbl">Moving · 지금 움직이는 화물</span><span class="mini-chips" id="c-filter"><button type="button" class="on" data-f="all">전체</button><button type="button" data-f="cold">냉장</button></span></div>

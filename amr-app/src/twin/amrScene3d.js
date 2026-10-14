@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────
-// S카고 물류센터 3D 디지털 트윈 렌더러 (Three.js)
+// S카고 허브 3D 디지털 트윈 렌더러 (Three.js)
 // 시뮬레이션(amrSim.js)의 평면도 좌표를 미터로 바꿔서 실사형 창고로 그린다.
 //   1px = 0.05m  →  건물 약 42m x 32m
 // ─────────────────────────────────────────────────────────────
@@ -83,7 +83,7 @@ function texSign(text, sub, bg, fg) {
 }
 /* ── 택배 박스: 크라프트 골판지 + 브랜드 테이프 + 취급 스티커 + 운송장 ──
    면별 텍스처는 (크기 · 취급표시) 조합마다 한 번만 만들어 공유하고,
-   화물마다 다른 운송장(번호 · 허브 · 무게 · 바코드)만 작은 라벨 판으로 붙인다. */
+   화물마다 다른 운송장(번호 · 권역 · 무게 · 바코드)만 작은 라벨 판으로 붙인다. */
 const SIZE_MM = { S: [720, 420, 600], M: [920, 620, 740], L: [1040, 860, 840] }
 const HANDLE_STYLE = {
   파손주의: { bg: '#d62828', fg: '#ffffff', ko: '파손주의', en: 'FRAGILE', icon: 'glass' },
@@ -220,7 +220,7 @@ function cargoMaterials(size, handle) {
     }
     g.fillStyle = cold ? '#1f6fd1' : 'rgba(20,30,50,0.85)'; g.font = `900 ${h * 0.1}px ${FONT}`; g.textBaseline = 'alphabetic'
     g.fillText('S CARGO', w * 0.05, h * 0.92)
-    g.font = `700 ${h * 0.045}px ${FONT}`; g.fillText('LOGISTICS · 물류센터', w * 0.05, h * 0.97)
+    g.font = `700 ${h * 0.045}px ${FONT}`; g.fillText('LOGISTICS · 허브', w * 0.05, h * 0.97)
     upArrows(g, w * 0.82, h * 0.1, Math.min(90, h * 0.2))
     if (st) sticker(g, w * 0.04, h * 0.2, Math.min(w * 0.3, h * 0.5), st)
   })
@@ -239,7 +239,7 @@ function cargoMaterials(size, handle) {
   cargoMatCache.set(key, mats)
   return mats
 }
-// 화물별 운송장 라벨 (허브 색 띠 · 허브명 · 송장번호 · 무게 · 바코드)
+// 화물별 운송장 라벨 (권역 색 띠 · 권역명 · 송장번호 · 무게 · 바코드)
 function waybillTex(c) {
   const h = HUBS[c.hub]
   return canvasTex(256, 168, (g, w, hh) => {
@@ -326,6 +326,16 @@ export function createAmrScene(container, sim, opts = {}) {
   controls.maxDistance = 95
   let viewMode = 'auto'
   controls.addEventListener('start', () => { if (viewMode !== 'free') { viewMode = 'free'; opts.onViewChange && opts.onViewChange(viewMode) } })
+
+  // 2D 모드: 위에서 똑바로 내려다보는 평면 지도 (회전 없음 · 이동/확대만 · 빛 효과 없이 가볍게)
+  const cam2 = new THREE.OrthographicCamera(-20, 20, 20, -20, 0.1, 200)
+  cam2.up.set(0, 0, -1); cam2.position.set(0, 90, 0); cam2.lookAt(0, 0, 0)
+  const controls2 = new OrbitControls(cam2, renderer.domElement)
+  controls2.enableRotate = false; controls2.screenSpacePanning = true; controls2.enableDamping = true; controls2.dampingFactor = 0.1
+  controls2.minZoom = 0.6; controls2.maxZoom = 6; controls2.enabled = false
+  controls2.addEventListener('start', () => { if (viewMode !== 'free') { viewMode = 'free'; opts.onViewChange && opts.onViewChange(viewMode) } })
+  let is2D = false
+  const activeCam = () => (is2D ? cam2 : camera)
 
   const composer = new EffectComposer(renderer)
   composer.addPass(new RenderPass(scene, camera))
@@ -591,9 +601,9 @@ export function createAmrScene(container, sim, opts = {}) {
       // 도크 레벨러 (바닥 철판)
       const lev = mesh(box(1.6, 0.04, DOOR_W - 0.4), MAT.steel, wx - outward * 0.8, 0.02, zc, false); world.add(lev)
       dockDoors[kind].push({ door, lampMat, open: 0 })
-      // 도크 번호 · 허브 표지
+      // 도크 번호 · 권역 표지
       const label = kind === 'in' ? 'D' + (i + 1) : 'D' + (i + 4)
-      const sub = kind === 'in' ? '입고 · 운송장 OCR' : HUBS[i].name + ' 허브행'
+      const sub = kind === 'in' ? '입고 · 운송장 OCR' : HUBS[i].name + '행'
       const col = kind === 'in' ? '#2a3440' : HUBS[i].col
       const fg = kind === 'in' ? '#ffffff' : '#0b0f14'
       const st = texSign(label, sub, col, fg)
@@ -633,7 +643,7 @@ export function createAmrScene(container, sim, opts = {}) {
     LEVELS.forEach((ly) => zs.forEach((z) => beamPos.push([(rackX0 + rackX1) / 2, ly, z])))
     // 구역 표지판 (랙 서쪽 끝 위)
     const zn = ZONES[r]
-    const st = texSign(zn.tag + '  ' + zn.name, cold ? '냉장 · 냉동 창고' : zn.name + ' 허브행 보관', zn.col, '#0b0f14')
+    const st = texSign(zn.tag + '  ' + zn.name, cold ? '냉장 · 냉동 창고' : zn.name + '행 보관', zn.col, '#0b0f14')
     const sm = new THREE.MeshStandardMaterial({ map: st, roughness: 0.5, emissive: 0xffffff, emissiveMap: st, emissiveIntensity: 0.35, side: THREE.DoubleSide })
     const sign = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 1.2), sm)
     const zc = cold ? (z0 + zm) / 2 : zm
@@ -740,7 +750,7 @@ export function createAmrScene(container, sim, opts = {}) {
   // 화물차 번호판 (영업용 노란 번호판) · 후미등 · 후부 안전판
   let plateSeq = 0
   function plateText(kind) {
-    const IN = ['부산 98사 4417', '부산 96아 2085', '인천 94자 7731'], OUT = ['경기 82배 3051', '강원 87배 1294', '대구 85배 6620']
+    const IN = ['부산 98사 4417', '부산 96아 2085', '인천 94자 7731'], OUT = ['인천 82배 3051', '서울 87배 1294', '경기 85배 6620']
     return (kind === 'in' ? IN : OUT)[plateSeq++ % 3]
   }
   const plateGeo = new THREE.PlaneGeometry(0.52, 0.11), tailGeo = box(0.05, 0.12, 0.3); disposables.push(plateGeo)
@@ -781,7 +791,7 @@ export function createAmrScene(container, sim, opts = {}) {
     return g
   }
   function makeCourierTruck(hub) {
-    // 출고: 허브행 택배차 (뒷문이 건물 쪽 -X)
+    // 출고: 권역행 택배차 (뒷문이 건물 쪽 -X)
     const g = new THREE.Group()
     const L = 5.2, Wd = 2.3, Hh = 2.3
     const h = HUBS[hub]
@@ -789,7 +799,7 @@ export function createAmrScene(container, sim, opts = {}) {
       cg.fillStyle = '#f4f6f8'; cg.fillRect(0, 0, w, hh)
       cg.fillStyle = h.col; cg.fillRect(0, hh - 70, w, 70)
       cg.fillStyle = '#0b2540'; cg.font = `800 54px ${FONT}`; cg.fillText('S CARGO', 30, 90)
-      cg.fillStyle = '#0b0f14'; cg.font = `800 40px ${FONT}`; cg.fillText(h.name + ' 허브행', 30, hh - 22)
+      cg.fillStyle = '#0b0f14'; cg.font = `800 40px ${FONT}`; cg.fillText(h.name + '행', 30, hh - 22)
     })
     const sideMat = new THREE.MeshStandardMaterial({ map: sideTex, roughness: 0.45, metalness: 0.2 })
     const roofMat = new THREE.MeshStandardMaterial({ color: 0xf4f6f8, roughness: 0.4, transparent: true, opacity: 0.18, depthWrite: false })
@@ -841,7 +851,7 @@ export function createAmrScene(container, sim, opts = {}) {
     for (let x = WALL_L + 1.5; x < WALL_R - 1.5; x += 3.2) world.add(mesh(box(2.6, 0.75, 0.05), winMat, x + 1.3, WALL_H - 0.9, WALL_N + 0.01, false))
     const bTex = canvasTex(1024, 128, (g, w, h) => {
       g.fillStyle = '#0b2540'; g.fillRect(0, 0, w, h); g.fillStyle = '#ff6b00'; g.fillRect(0, h - 14, w, 14)
-      g.fillStyle = '#fff'; g.font = `900 58px ${FONT}`; g.textBaseline = 'middle'; g.fillText('S CARGO 물류센터', 34, 58)
+      g.fillStyle = '#fff'; g.font = `900 58px ${FONT}`; g.textBaseline = 'middle'; g.fillText('S CARGO 허브', 34, 58)
       g.font = `700 34px ${FONT}`; g.fillStyle = '#ffd38a'; g.fillText('안전이 최우선입니다 · 무재해 365일', 560, 58)
     })
     const ban = new THREE.Mesh(new THREE.PlaneGeometry(12, 1.5), new THREE.MeshStandardMaterial({ map: bTex, emissive: 0xffffff, emissiveMap: bTex, emissiveIntensity: 0.18 }))
@@ -855,7 +865,7 @@ export function createAmrScene(container, sim, opts = {}) {
     const aMat = new THREE.MeshStandardMaterial({ map: aTex, emissive: 0xffffff, emissiveMap: aTex, emissiveIntensity: 0.15 })
     ;[-15, 9].forEach((x) => { const sg = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 1.0), aMat); sg.position.set(x, 2.2, WALL_N + 0.02); world.add(sg) })
   }
-  // 롤테이너 (출고 대기 · 허브 색) — 동쪽 도크 사이 빈 공간
+  // 롤테이너 (출고 대기 · 권역 색) — 동쪽 도크 사이 빈 공간
   const cageTex = canvasTex(128, 128, (g, w, h) => { g.clearRect(0, 0, w, h); g.strokeStyle = '#c9d0d6'; g.lineWidth = 3; for (let k = 0; k <= w; k += 16) { g.beginPath(); g.moveTo(k, 0); g.lineTo(k, h); g.stroke(); g.beginPath(); g.moveTo(0, k); g.lineTo(w, k); g.stroke() } })
   disposables.push(cageTex)
   const cageMat = new THREE.MeshStandardMaterial({ map: cageTex, transparent: true, alphaTest: 0.3, side: THREE.DoubleSide, metalness: 0.7, roughness: 0.4 })
@@ -1308,7 +1318,7 @@ export function createAmrScene(container, sim, opts = {}) {
     })
 
     // AMR
-    const T = S.amrs[2]
+    const T = S.amrs[S.sc.target == null ? 2 : S.sc.target]
     S.amrs.forEach((a, i) => {
       const o = amrs3[i], [lv] = status(a), col = lvCol(lv)
       const [x, z] = o.fl ? [o.px, o.pz] : amrPos(a)
@@ -1428,7 +1438,7 @@ export function createAmrScene(container, sim, opts = {}) {
       u.torso.rotation.z = Math.sin(ph * 1.3) * 0.015
       u.head.rotation.y = Math.sin(ph * 0.4) * 0.5
       if (k === 'tech') {
-        const working = S.amrs[2].state === 'maint'
+        const working = S.amrs.some((a, i) => i < 4 && a.state === 'maint')
         u.crouch = (u.crouch || 0) + ((working ? 1 : 0) - (u.crouch || 0)) * Math.min(1, dtReal * 3)
         const c = u.crouch
         u.hip.position.y = 0.9 - c * 0.42
@@ -1448,7 +1458,7 @@ export function createAmrScene(container, sim, opts = {}) {
       callout.visible = true
       const [x, z] = amrPos(T)
       callout.position.set(x, 2.1, z)
-      const html = `<b>AMR-03 · ${ui.callout.title}</b><span>${ui.callout.line}</span>`
+      const html = `<b>${S.amrs[S.sc.target == null ? 2 : S.sc.target].name} · ${ui.callout.title}</b><span>${ui.callout.line}</span>`
       if (callout.userData.html !== html) { callout.element.innerHTML = html; callout.userData.html = html }
       callout.element.style.setProperty('--c', ui.callout.col)
     } else callout.visible = false
@@ -1456,17 +1466,23 @@ export function createAmrScene(container, sim, opts = {}) {
     // 카메라
     if (viewMode !== 'free') {
       let follow = viewMode === 'follow' || (viewMode === 'auto' && ui.phase >= 2 && ui.phase <= 4)
-      const fi = viewMode === 'follow' ? followIdx : 2
+      const fi = viewMode === 'follow' ? followIdx : (S.sc.target == null ? 2 : S.sc.target)
       if (follow) {
         const a = S.amrs[fi], [x, z] = amrPos(a)
         camGoalTgt.set(x, 0.6, z)
         camGoalPos.set(x + 9, 11, z + 13)
       } else { camGoalTgt.copy(HOME_TGT); camGoalPos.copy(HOME_POS) }
       const k = Math.min(1, dtReal * 1.6)
-      controls.target.lerp(camGoalTgt, k)
-      camera.position.lerp(camGoalPos, k)
+      if (is2D) {
+        tmpV.set(follow ? camGoalTgt.x : 0, 0, follow ? camGoalTgt.z : 0)
+        controls2.target.lerp(tmpV, k); cam2.position.set(controls2.target.x, 90, controls2.target.z)
+        const zGoal = follow ? 2.2 : 1; cam2.zoom += (zGoal - cam2.zoom) * k; cam2.updateProjectionMatrix()
+      } else {
+        controls.target.lerp(camGoalTgt, k)
+        camera.position.lerp(camGoalPos, k)
+      }
     }
-    controls.update()
+    if (is2D) controls2.update(); else controls.update()
   }
 
   /* ── 화질: 'normal' 일반 / 'low' 저사양 (그림자 · 빛 번짐 · 먼지 · 냉기 끄고 해상도 1배) ── */
@@ -1481,7 +1497,20 @@ export function createAmrScene(container, sim, opts = {}) {
     ;[fx.dust, fx.mist, fx.shafts].forEach((o) => { if (o) o.visible = !low })
     resize()
   }
+  function set2D(on) {
+    is2D = !!on
+    controls.enabled = !is2D; controls2.enabled = is2D
+    if (is2D) { controls2.target.set(0, 0, 0); cam2.position.set(0, 90, 0); cam2.zoom = 1 }
+    resize()
+  }
+  const THEME_BG = { dark: 0x0b1016, light: 0xdfe6ec }
+  let theme = 'dark'
+  function setTheme(t) {
+    theme = t === 'light' ? 'light' : 'dark'
+    scene.background.set(THEME_BG[theme]); scene.fog.color.set(THEME_BG[theme])
+  }
   function render() {
+    if (is2D) { renderer.render(scene, cam2); labelRenderer.render(scene, cam2); return }
     if (quality === 'low') { renderer.render(scene, camera); labelRenderer.render(scene, camera); return }
     composer.render()
     labelRenderer.render(scene, camera)
@@ -1496,6 +1525,9 @@ export function createAmrScene(container, sim, opts = {}) {
     labelRenderer.setSize(w, h)
     camera.aspect = w / h
     camera.updateProjectionMatrix()
+    // 2D: 창고 전체(가로 약 50m · 세로 약 34m)가 화면에 들어오게
+    const asp = w / h, hh = Math.max(18, 26 / asp), hw = hh * asp
+    cam2.left = -hw; cam2.right = hw; cam2.top = hh; cam2.bottom = -hh; cam2.updateProjectionMatrix()
   }
   const ro = new ResizeObserver(resize); ro.observe(container); resize()
 
@@ -1507,7 +1539,7 @@ export function createAmrScene(container, sim, opts = {}) {
     if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 5) return
     const r = renderer.domElement.getBoundingClientRect()
     ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1)
-    ray.setFromCamera(ndc, camera)
+    ray.setFromCamera(ndc, activeCam())
     const targets = amrs3.map((o) => o.body).concat([...cargoMeshes.values()].filter((m) => m.g.visible).map((m) => m.g), [...upperSets.values()], [upPallet])
     const hit = ray.intersectObjects(targets, true)[0]
     if (!hit) return
@@ -1523,7 +1555,7 @@ export function createAmrScene(container, sim, opts = {}) {
     ro.disconnect()
     renderer.domElement.removeEventListener('pointerdown', onDown)
     renderer.domElement.removeEventListener('pointerup', onUp)
-    controls.dispose()
+    controls.dispose(); controls2.dispose()
     scene.traverse((o) => {
       if (o.geometry) o.geometry.dispose()
       if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => { if (m.map) m.map.dispose(); m.dispose() })
@@ -1539,5 +1571,5 @@ export function createAmrScene(container, sim, opts = {}) {
     labelRenderer.domElement.remove()
   }
 
-  return { update, render, setView, resize, dispose, setQuality, get quality() { return quality }, camera, controls, renderer, world, toWorld: (x, y) => [X(x), Z(y)], get viewMode() { return viewMode } }
+  return { update, render, setView, resize, dispose, setQuality, set2D, setTheme, get is2D() { return is2D }, get theme() { return theme }, get quality() { return quality }, camera, controls, renderer, world, toWorld: (x, y) => [X(x), Z(y)], get viewMode() { return viewMode } }
 }

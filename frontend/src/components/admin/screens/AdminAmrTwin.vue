@@ -1,12 +1,12 @@
 <template>
-  <!-- 26.10.08 추가: 물류센터 AMR 3D 디지털 트윈 (Three.js)
+  <!-- 26.10.08 추가: 허브 AMR 3D 디지털 트윈 (Three.js)
        로직은 src/components/amr/ 아래 모듈에 있고, 이 화면은 붙이기만 한다. -->
   <div ref="root" class="amr-twin">
   <div class="wrap">
     <header class="twin-head">
       <div>
         <div class="eyebrow">S-CARGO · Logistics Center Digital Twin</div>
-        <h1>물류센터 AMR 예지보전</h1>
+        <h1>허브 AMR 예지보전</h1>
       </div>
       <div class="stages">
         <div class="stage now" data-p="1"><span class="n">STEP 01</span><span class="t">정상 운영</span></div>
@@ -26,6 +26,8 @@
           <button type="button" data-q="normal" aria-pressed="true" title="그림자 · 빛 번짐 · 먼지 효과 포함">일반</button>
           <button type="button" data-q="low" aria-pressed="false" title="그래픽카드 없는 노트북용 — 효과를 끄고 가볍게">저사양</button>
         </div>
+        <button id="tw-2d" type="button" aria-pressed="false" title="위에서 내려다본 평면 지도 (회전 없음 · 가볍게)">2D</button>
+        <button id="tw-theme" type="button" title="다크 / 라이트 전환">라이트 모드</button>
         <button id="tw-notes" type="button" aria-expanded="false" title="화물 데이터 · 센서 · 예지보전 설명">설명</button>
         <button id="tw-sound" type="button" class="snd" aria-pressed="false" title="현장 음향 (AMR 모터 · OCR · 셔터 · 트럭 · 경보)"><span class="ico" aria-hidden="true"></span><span class="lbl">소리 켜기</span></button>
       </div>
@@ -58,7 +60,7 @@
         </div>
       </div>
       <div class="floorwrap">
-        <div class="twin-viewport" id="tw-viewport" aria-label="물류센터 3D 디지털 트윈. 입고 도크에서 운송장을 스캔하고, 권역별 랙에 보관한 뒤, 허브별 출고 도크의 택배차로 옮긴다.">
+        <div class="twin-viewport" id="tw-viewport" aria-label="허브 3D 디지털 트윈. 입고 도크에서 운송장을 스캔하고, 권역별 랙에 보관한 뒤, 권역별 출고 도크의 택배차로 옮긴다.">
           <div class="twin-banner" id="tw-banner"><i></i><span></span></div>
           <div class="twin-views">
             <button type="button" data-view="auto" aria-pressed="true">자동 연출</button>
@@ -79,9 +81,9 @@
           <div class="twin-help">드래그 회전 · 휠 확대 · 우클릭 드래그 이동 · AMR/박스 클릭 선택</div>
         </div>
         <div class="legend">
-          <span><i style="background:var(--hub0)"></i>호남 허브</span>
-          <span><i style="background:var(--hub1)"></i>강원 허브</span>
-          <span><i style="background:var(--hub2)"></i>영남 허브</span>
+          <span><i style="background:var(--hub0)"></i>인천 권역</span>
+          <span><i style="background:var(--hub1)"></i>서울 권역</span>
+          <span><i style="background:var(--hub2)"></i>경기 권역</span>
           <span><i style="background:#e9eff2"></i>냉장 창고 화물</span>
           <span><i style="background:#f2b705"></i>무인 지게차 (위 단 보충)</span>
           <span><i style="background:var(--cyan)"></i>AMR 정상</span>
@@ -120,11 +122,11 @@
     </div>
 
     <div class="notes" id="tw-notesPanel">
-      <div class="notes-head"><h2>S카고 2차 프로젝트 · 물류센터 AMR 예지보전</h2><button type="button" class="notes-close" id="tw-notesClose" aria-label="설명 닫기">닫기</button></div>
+      <div class="notes-head"><h2>S카고 2차 프로젝트 · 허브 AMR 예지보전</h2><button type="button" class="notes-close" id="tw-notesClose" aria-label="설명 닫기">닫기</button></div>
       <div class="notes-intro">
-        <p class="sub">운송장으로 목적지를 분류해 허브별로 출고하고, AMR 고장은 미리 감지해 물류 흐름을 멈추지 않는다</p>
+        <p class="sub">운송장으로 목적지를 분류해 권역별로 출고하고, AMR 고장은 미리 감지해 물류 흐름을 멈추지 않는다</p>
         <div class="flow" aria-label="S카고 2차 프로젝트 흐름">
-          <span>항만 게이트</span>→<span>톨게이트</span>→<span>과적검문소</span>→<b>물류센터 하적 · AMR</b>→<span>허브 택배차</span>
+          <span>항만 게이트</span>→<span>톨게이트</span>→<span>과적검문소</span>→<b>허브 하적 · AMR</b>→<span>권역 택배차</span>
         </div>
       </div>
       <div class="card">
@@ -132,7 +134,7 @@
         <div class="tbl"><table>
           <thead><tr><th>항목</th><th>어디에 쓰나</th></tr></thead>
           <tbody>
-            <tr class="hl"><td>목적지 허브</td><td>보관 구역과 출고 도크 결정</td></tr>
+            <tr class="hl"><td>목적지 권역</td><td>보관 구역과 출고 도크 결정</td></tr>
             <tr><td>무게</td><td>AMR 적재 한도, 누적 운반 중량(마모 판단)</td></tr>
             <tr><td>크기</td><td>랙 칸 배정, 택배차 공간</td></tr>
             <tr><td>취급 속성</td><td>냉장 → 냉장 구역 보관, 파손주의 · 취급주의 · 중량물 → 감속 운반 (박스 스티커로 표시)</td></tr>
@@ -159,11 +161,11 @@
         <div class="tbl"><table>
           <thead><tr><th></th><th>흐름</th><th>결과</th></tr></thead>
           <tbody>
-            <tr><td>사후 정비</td><td>고장 → 통로 막힘 → 긴급 수리</td><td>라인 정지, 허브 출고 지연</td></tr>
+            <tr><td>사후 정비</td><td>고장 → 통로 막힘 → 긴급 수리</td><td>라인 정지, 권역 출고 지연</td></tr>
             <tr class="hl"><td>예지보전</td><td>징후 감지 → 예비기 교대 → 계획 정비</td><td>정지 0, 처리량 유지</td></tr>
           </tbody>
         </table></div>
-        <p class="foot">수명 예측 시간과 허브 지역명은 데모용 값입니다 (화면 1초 = 실제 약 4시간).</p>
+        <p class="foot">수명 예측 시간과 권역명은 데모용 값입니다 (화면 1초 = 실제 약 4시간).</p>
       </div>
     </div>
   </div>

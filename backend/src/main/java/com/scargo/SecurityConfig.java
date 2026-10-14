@@ -54,7 +54,9 @@ public class SecurityConfig {
 
         // Vue 개발 서버 주소 (localhost 및 127.0.0.1 모두 허용)
         configuration.setAllowedOrigins(
-            List.of("http://localhost:5173", "http://127.0.0.1:5173")
+            List.of("http://localhost:5173", "http://127.0.0.1:5173",
+                    // AMR 관리자 앱 (vite dev · Capacitor 안드로이드)
+                    "http://localhost:5175", "http://localhost", "https://localhost", "capacitor://localhost")
         );
 
         // 허용할 HTTP Method
@@ -102,6 +104,8 @@ public class SecurityConfig {
                 // 26.10.01 추가: 스프링 내부 에러 페이지(/error)는 공개 - 막혀 있으면 404/500 같은
                 // 실제 오류가 전부 "권한 없음(403)"으로 바뀌어 보여서 원인을 알 수 없었음
                 .requestMatchers("/error").permitAll()
+                // AMR 관제 API (시뮬레이터 · 로그인 없는 관리자 앱이 호출)
+                .requestMatchers("/api/amr/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/accounts", "/api/accounts/login").permitAll()
 
                 // 2. 외부 연동 / 공개 API (매핑, 업체 등 서비스 요구사항에 맞게 설정)

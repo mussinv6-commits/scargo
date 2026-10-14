@@ -1,23 +1,25 @@
 // ─────────────────────────────────────────────────────────────
-// S카고 물류센터 AMR 디지털 트윈 — 화면 조립
+// S카고 허브 AMR 디지털 트윈 — 화면 조립
 // 시뮬레이션 + 3D 씬 + 관제 패널(차트·화물·로그)을 하나의 루트 요소에 붙인다.
 // 사용: const app = mountAmrTwin(rootEl)  →  화면을 떠날 때 app.destroy()
 // ─────────────────────────────────────────────────────────────
-import { createSim, HUBS, ZONES, STATE_KO, PHASE_T, CAPTIONS, PIPE_ON, PH_COL, COLORS, status, lvCol, tons, zoneRow } from './amrSim.js'
-// ZONES: 0 D 냉장 창고 · 1 A 호남 · 2 B 강원 · 3 C 영남
+import { createSim, HUBS, ZONES, STATE_KO, PHASE_T, CAPTIONS, PIPE_ON, PH_COL, COLORS, status, lvCol, tons, zoneRow, captionOf } from './amrSim.js'
+// ZONES: 0 D 냉장 창고 · 1 A 인천 · 2 B 서울 · 3 C 경기
 import { createAmrScene } from './amrScene3d.js'
 import { createAmrSound } from './amrSound.js'
+import { amrApi } from './amrApi.js'   // DB 연동 (서버가 꺼져 있으면 시뮬레이션만으로 동작)
 
 export function mountAmrTwin(root) {
   const $ = (id) => root.querySelector('#tw-' + id)
   let selected = 2, cargoPin = null, speed = 1, playing = !window.matchMedia('(prefers-reduced-motion: reduce)').matches
   let bannerTimer = 0, raf = 0, scene = null, destroyed = false
   let lastScanVer = -1
+  let simRef = null   // createSim 도중에도 단계 콜백이 불릴 수 있어서 따로 둔다
 
   /* ── 단계 · 배너 · 로그 ── */
   function applyPhase(p) {
     root.querySelectorAll('.stage').forEach((el) => { const q = +el.dataset.p; el.classList.toggle('now', q === p); el.classList.toggle('done', q < p) })
-    $('caption').textContent = CAPTIONS[p]
+    $('caption').textContent = simRef ? captionOf(simRef.S) : CAPTIONS[p]
     root.querySelectorAll('.pipe .node').forEach((n) => n.classList.toggle('on', PIPE_ON[p].includes(+n.dataset.k)))
     const b = $('banner')
     b.style.setProperty('--c', PH_COL[p])
@@ -25,14 +27,43 @@ export function mountAmrTwin(root) {
     b.classList.add('show')
     clearTimeout(bannerTimer)
     bannerTimer = setTimeout(() => b.classList.remove('show'), 3000)
-    if (p === 2) { selected = 2; cargoPin = null }
+    if (p === 2) { selected = simRef ? simRef.S.sc.target : 2; cargoPin = null }
   }
   function fmt(t) { const s = Math.floor(t); return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0') }
   function renderLog(items) {
     $('log').innerHTML = items.map((l) => `<li class="${l.lv}"><time>${fmt(l.t)}</time><span>${l.text}</span></li>`).join('')
   }
 
-  const sim = createSim({ onLog: renderLog, onPhase: applyPhase })
+  /* ── DB 연동: 이 화면이 현장(시뮬레이터) 역할 → 센서 · 예측 · 정비 진행을 저장, 승인은 앱 · 웹 어디서든 ── */
+  let maintId = null, remote = null, approveFlash = 0
+  function onSimEvent(type, p) {
+    if (type !== 'maint') return
+    if (p.eventType === 'WARN') amrApi.event(p.code, 'WARN', 2, p.code + ' 진동 이상 감지 · ' + (p.vibration || 0).toFixed(1) + ' mm/s')
+    else if (p.eventType === 'PREDICT') amrApi.predict(p).then((m) => { if (m) maintId = m.id })
+    else if (p.eventType === 'APPROVE') { approveFlash = 6; if (maintId) amrApi.approve(maintId, p.by) }
+    else if (p.eventType === 'START') { if (maintId) amrApi.start(maintId) }
+    else if (p.eventType === 'DONE') { const id = maintId; maintId = null; if (id) amrApi.done(id) }
+  }
+  const sim = createSim({ onLog: renderLog, onPhase: applyPhase, onEvent: onSimEvent, autoApproveSec: () => (amrApi.online ? 60 : 20) })
+  simRef = sim
+  // 2초마다 DB 상태를 읽어서 앱에서 누른 승인을 반영
+  async function pollState() {
+    const st = await amrApi.state(); if (!st || destroyed) return
+    remote = st
+    const a = st.active || st.pending
+    if (a && !maintId && S.sc.await) maintId = a.id
+    if (st.active && st.active.approvedAt && S.sc.await && (!maintId || st.active.id === maintId)) {
+      sim.approve(st.active.approvedBy || '관리자')
+      if (!/웹/.test(st.active.approvedBy || '')) notice('정비 승인됨 · ' + (st.active.approvedBy || '관리자') + ' (DB 연동)', COLORS.green)
+    }
+  }
+  /* ── DB 연결 표시 ── */
+  const dbBadge = document.createElement('span')
+  dbBadge.style.cssText = 'margin-left:10px;font-size:12px;font-weight:800;padding:3px 10px;border-radius:999px;border:1px solid;white-space:nowrap'
+  ;(root.querySelector('.twin-head') || root).appendChild(dbBadge)
+  const offDb = amrApi.onStatus((on) => { dbBadge.textContent = on ? '● DB 연결 · 앱 연동' : '○ DB 오프라인 · 시뮬레이션만'; dbBadge.style.color = on ? '#4fdc8a' : '#8a9bb0'; dbBadge.style.borderColor = on ? '#4fdc8a' : '#3a4a5c' })
+  amrApi.check()
+  let dbAcc = 0
   const S = sim.S
   const warm = () => { for (let i = 0; i < 80; i++) sim.step(0.05); S.packets.length = 0 }
   warm()
@@ -58,7 +89,7 @@ export function mountAmrTwin(root) {
     $('cSize').textContent = { S: '소형 (S)', M: '중형 (M)', L: '대형 (L)' }[c.size]
     const HANDLE_NOTE = { 냉장: ' · D 냉장 구역 보관', 파손주의: ' · 저속 운반 (0.6배)', 취급주의: ' · 감속 운반', 중량물: ' · 감속 운반 · 하단 적재' }
     const hd = $('cHandle'); hd.textContent = c.handle + (HANDLE_NOTE[c.handle] || ''); hd.className = c.handle === '냉장' ? 'cold' : c.handle === '일반' ? '' : 'fragile'
-    $('cDock').textContent = 'D' + (c.hub + 4) + ' · ' + h.name + ' 허브행 택배차'
+    $('cDock').textContent = 'D' + (c.hub + 4) + ' · ' + h.name + '행 택배차'
     $('cLoc').textContent = '현재 위치 · ' + sim.locText(c)
     $('cHint').textContent = cargoPin ? '고른 화물을 따라가는 중입니다. 로봇을 클릭하면 해제됩니다.' : '선택한 로봇이 옮기는 화물을 따라갑니다. 랙의 박스(위 단 포함)를 클릭하면 그 화물로 고정됩니다.'
   }
@@ -110,6 +141,7 @@ export function mountAmrTwin(root) {
   /* ── 진동 차트 ── */
   const ch = $('chart'), cx = ch.getContext('2d')
   const CH = { edge: '#1f2c3a', dim: '#566679' }
+  const readCH = () => { const cs = getComputedStyle(root); CH.edge = cs.getPropertyValue('--edge').trim() || CH.edge; CH.dim = cs.getPropertyValue('--dim').trim() || CH.dim }
   function sizeChart() { const dpr = Math.min(2, window.devicePixelRatio || 1); ch.width = Math.round(ch.clientWidth * dpr); ch.height = Math.round(130 * dpr) }
   const chartRO = new ResizeObserver(() => { sizeChart(); drawChart() }); chartRO.observe(ch)
   function drawChart() {
@@ -147,9 +179,9 @@ export function mountAmrTwin(root) {
     }
   }
 
-  /* ── 말풍선 (AMR-03) ── */
+  /* ── 말풍선 (고장 대상 로봇) ── */
   function calloutInfo() {
-    const T = S.amrs[2], p = S.sc.phase
+    const T = S.amrs[S.sc.target], p = S.sc.phase
     if (p < 2 || p > 4) return null
     if (T.state === 'maint') return { title: '정비 중', line: '예비기 AMR-05가 작업 대체', col: COLORS.red }
     if (T.maintFlag) return { title: '고장 예측 · 약 ' + S.sc.rul + '시간', line: '누적 ' + tons(T) + 't · 작업 후 정비 이동', col: COLORS.red }
@@ -219,6 +251,28 @@ export function mountAmrTwin(root) {
   try { savedQ = localStorage.getItem(QUAL_KEY) } catch { savedQ = null }
   setQuality(savedQ === 'low' ? 'low' : 'normal', false)
   qualBtns.forEach((b) => b.addEventListener('click', () => { autoChecked = true; setQuality(b.dataset.q, true) }))
+  /* ── 2D 모드 · 다크/라이트 (선택은 브라우저에 기억) ── */
+  const VIEW2D_KEY = 'scargo_twin_2d', THEME_KEY = 'scargo_twin_theme'
+  const store = { get: (k) => { try { return localStorage.getItem(k) } catch { return null } }, set: (k, v) => { try { localStorage.setItem(k, v) } catch { /* 무시 */ } } }
+  const btn2d = $('2d'), btnTheme = $('theme')
+  function set2D(on, save) {
+    if (scene) scene.set2D(on)
+    if (btn2d) { btn2d.setAttribute('aria-pressed', String(!!on)); btn2d.textContent = on ? '3D' : '2D' }
+    if (save) store.set(VIEW2D_KEY, on ? '1' : '0')
+  }
+  function setTheme(t, save) {
+    const light = t === 'light'
+    root.classList.toggle('light', light)
+    if (scene) scene.setTheme(light ? 'light' : 'dark')
+    if (btnTheme) btnTheme.textContent = light ? '다크 모드' : '라이트 모드'
+    if (save) store.set(THEME_KEY, light ? 'light' : 'dark')
+    readCH(); drawChart()
+  }
+  if (btn2d) btn2d.addEventListener('click', () => set2D(!(scene && scene.is2D), true))
+  if (btnTheme) btnTheme.addEventListener('click', () => setTheme(root.classList.contains('light') ? 'dark' : 'light', true))
+  set2D(store.get(VIEW2D_KEY) === '1', false)
+  setTheme(store.get(THEME_KEY) === 'light' ? 'light' : 'dark', false)
+
   function notice(text, col) {
     const b = $('banner')
     b.style.setProperty('--c', col)
@@ -235,7 +289,7 @@ export function mountAmrTwin(root) {
   const syncPlay = () => { playBtn.textContent = playing ? '일시정지' : '재생' }
   playBtn.addEventListener('click', () => { playing = !playing; syncPlay() })
   root.querySelectorAll('.spd').forEach((b) => b.addEventListener('click', () => { speed = +b.dataset.s; root.querySelectorAll('.spd').forEach((x) => x.setAttribute('aria-pressed', String(x === b))) }))
-  $('restart').addEventListener('click', () => { sim.init(); warm(); selected = 2; cargoPin = null; lastScanVer = -1; buildFleet(); updPanel(); playing = true; syncPlay() })
+  $('restart').addEventListener('click', () => { sim.init(); warm(); maintId = null; selected = 2; cargoPin = null; lastScanVer = -1; buildFleet(); updPanel(); playing = true; syncPlay() })
 
   /* ── 루프 ── */
   let last = performance.now(), panelAcc = 0
@@ -250,7 +304,7 @@ export function mountAmrTwin(root) {
       sound.update({ S, camera: scene.camera, toWorld: scene.toWorld, simDt, playing })
     }
     panelAcc += dt
-    if (panelAcc > 0.15) { panelAcc = 0; updPanel(); drawChart() }
+    if (panelAcc > 0.15) { approveFlash = Math.max(0, approveFlash - panelAcc); panelAcc = 0; updPanel(); drawChart(); renderApprove() }
     if (!autoChecked && scene && !document.hidden) {
       const real = (now - (frame.prev || now)) / 1000
       warmT += real
@@ -267,6 +321,33 @@ export function mountAmrTwin(root) {
     raf = requestAnimationFrame(frame)
   }
 
+  /* ── 정비 승인 카드 (웹에서도 승인 가능 · 앱에서 승인하면 여기 반영) ── */
+  const apCard = document.createElement('div')
+  apCard.className = 'card approve-card'; apCard.hidden = true
+  apCard.innerHTML = '<div class="ap-t"><i>!</i><b class="ap-h"></b></div><p class="ap-p"></p><div class="ap-row"><button type="button" class="ap-btn">정비 승인</button><span class="ap-s"></span></div>'
+  ;(root.querySelector('.side-l') || root).prepend(apCard)
+  apCard.querySelector('.ap-btn').addEventListener('click', () => sim.approve('웹 · 관제'))
+  function renderApprove() {
+    const sc = S.sc
+    if (sc.await) {
+      apCard.hidden = false; apCard.classList.remove('done')
+      apCard.querySelector('.ap-h').textContent = 'AI 고장 예측 · 정비 승인 필요'
+      apCard.querySelector('.ap-p').textContent = S.amrs[sc.target].name + ' 구동모터 베어링 · 고장까지 약 ' + (sc.rul || '-') + '시간. 승인하면 예비기 AMR-05가 작업을 이어받고 ' + S.amrs[sc.target].name + '은 정비소로 이동합니다.'
+      apCard.querySelector('.ap-btn').hidden = false
+      const left = Math.max(0, Math.round((amrApi.online ? 60 : 20) - (sc.t - sc.awaitT)))
+      apCard.querySelector('.ap-s').textContent = (amrApi.online ? '앱에서도 승인할 수 있습니다 · ' : '') + left + '초 뒤 자동 승인'
+    } else if (approveFlash > 0 || (sc.phase === 3 && sc.approvedBy)) {
+      apCard.hidden = false; apCard.classList.add('done')
+      apCard.querySelector('.ap-h').textContent = '정비 승인 완료'
+      apCard.querySelector('.ap-p').textContent = '승인: ' + (sc.approvedBy || '관리자') + ' · 예비기 AMR-05 투입, ' + S.amrs[sc.target].name + ' 정비소 이동'
+      apCard.querySelector('.ap-btn').hidden = true
+      apCard.querySelector('.ap-s').textContent = amrApi.online ? 'DB에 기록됨' : ''
+    } else apCard.hidden = true
+  }
+
+  // DB: 실제 시간 2초마다 센서 저장 + 상태 읽기 (화면이 느려도 간격 유지)
+  const dbTimer = setInterval(() => { if (playing) amrApi.telemetry(S.sc.phase, S.amrs); pollState() }, 2000)
+
   buildFleet(); sizeChart(); updPanel(); drawChart(); syncPlay()
   applyPhase(S.sc.phase)
   raf = requestAnimationFrame(frame)
@@ -276,6 +357,8 @@ export function mountAmrTwin(root) {
     get scene() { return scene },
     destroy() {
       destroyed = true
+      offDb()
+      clearInterval(dbTimer)
       cancelAnimationFrame(raf)
       clearTimeout(bannerTimer)
       chartRO.disconnect()

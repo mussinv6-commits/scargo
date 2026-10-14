@@ -1,9 +1,9 @@
 // ─────────────────────────────────────────────────────────────
-// S카고 물류센터 AMR 시뮬레이션 코어 (그리기 없음)
+// S카고 허브 AMR 시뮬레이션 코어 (그리기 없음)
 // 평면도 좌표(px, 1000 x 640) 기준으로 동작하고, 3D 렌더러가 미터로 변환해서 그린다.
-//   - 입고: 운송장 OCR로 목적지 허브 확인 → 권역별 랙 보관
-//   - 출고: 허브별 출고 도크 택배차로 이동
-//   - 예지보전: AMR-03 진동 상승 → 고장 예측 → 예비기 교대 → 계획 정비
+//   - 입고: 운송장 OCR로 목적지 권역 확인 → 권역별 랙 보관
+//   - 출고: 권역별 출고 도크 택배차로 이동
+//   - 예지보전: 누적 운반량이 가장 많은 AMR 진동 상승 → 고장 예측 → 관리자 승인 → 예비기 교대 → 계획 정비
 // ─────────────────────────────────────────────────────────────
 export const W = 1000, H = 640
 export const AISLES = [62, 175, 295, 415, 540]
@@ -27,25 +27,25 @@ const VMAX = 84, ACC = 150, VMAX_FL = 56
 
 export const COLORS = { cyan: '#3fe0cc', amber: '#ffb84d', red: '#ff5a5f', green: '#4fdc8a', spare: '#6b7a8a', sky: '#9fd8ff' }
 export const HUBS = [
-  { name: '호남', full: '호남 허브 (광주)', col: '#b48cff' },
-  { name: '강원', full: '강원 허브 (원주)', col: '#5aa8ff' },
-  { name: '영남', full: '영남 허브 (대구)', col: '#ff7eb3' },
+  { name: '인천', full: '인천 권역 (서브터미널)', col: '#b48cff' },
+  { name: '서울', full: '서울 권역 (서브터미널)', col: '#5aa8ff' },
+  { name: '경기', full: '경기 권역 (서브터미널)', col: '#ff7eb3' },
 ]
 export const ZONES = [
   { tag: 'D', name: '냉장', col: COLORS.sky },
-  { tag: 'A', name: '호남', col: HUBS[0].col },
-  { tag: 'B', name: '강원', col: HUBS[1].col },
-  { tag: 'C', name: '영남', col: HUBS[2].col },
+  { tag: 'A', name: '인천', col: HUBS[0].col },
+  { tag: 'B', name: '서울', col: HUBS[1].col },
+  { tag: 'C', name: '경기', col: HUBS[2].col },
 ]
 // 줄 · 면이 실제로 쓰이는지 (냉장 창고 줄은 북쪽 면만)
 export const sideOn = (r, s) => !(r === COLD_ROW && s === 1)
 export const STATE_KO = { idle: '대기', toPick: '픽업 이동', load: '적재 중', toDrop: '운반 중', unload: '하역 중', toMaint: '정비소 이동', maint: '정비 중', toHome: '복귀 중', toRack: '랙 이동', fwork: '랙 작업 중' }
 export const PHASE_T = { 1: '정상 운영', 2: '이상 징후 감지', 3: 'AI 고장 예측', 4: '교대 · 계획 정비', 5: '정상 복귀' }
 export const CAPTIONS = {
-  1: '입고 도크에서 운송장 OCR로 목적지를 읽고, AMR이 권역별 랙 바닥 칸(A 호남 · B 강원 · C 영남 · D 냉장 창고)에 보관합니다. 위 단 보충 재고는 무인 지게차가 내리고 올리며, 출고는 허브별 택배차로 나갑니다.',
+  1: '입고 도크에서 운송장 OCR로 목적지를 읽고, AMR이 권역별 랙 바닥 칸(A 인천 · B 서울 · C 경기 · D 냉장 창고)에 보관합니다. 위 단 보충 재고는 무인 지게차가 내리고 올리며, 출고는 권역별 택배차로 나갑니다.',
   2: 'AMR-03 구동모터 진동이 평소 범위(1.2~2.0 mm/s)를 벗어나기 시작합니다. 무거운 화물을 가장 많이 나른 기체입니다.',
   3: '진동 추세와 누적 운반 중량으로 고장 시점을 예측합니다. 고장 전에 정비를 예약하고, 예비기 AMR-05를 투입합니다.',
-  4: 'AMR-03은 하던 작업만 마치고 정비 스테이션으로 이동합니다. 그동안 AMR-05가 작업을 이어받아 허브 출고는 멈추지 않습니다.',
+  4: 'AMR-03은 하던 작업만 마치고 정비 스테이션으로 이동합니다. 그동안 AMR-05가 작업을 이어받아 권역 출고는 멈추지 않습니다.',
   5: '베어링 교체 후 진동이 정상으로 돌아오고 누적 운반 중량도 초기화됩니다. AMR-05는 대기 위치로 돌아갑니다.',
 }
 export const PIPE_ON = { 1: [0, 1, 2], 2: [2, 3], 3: [3, 4], 4: [4, 5], 5: [4] }
@@ -66,6 +66,10 @@ export const lvCol = (lv) => (lv === 'crit' ? COLORS.red : lv === 'warn' ? COLOR
 export function createSim(hooks = {}) {
   const onLog = hooks.onLog || (() => {})
   const onPhase = hooks.onPhase || (() => {})
+  const onEvent = hooks.onEvent || (() => {})   // DB 저장용: ('move' | 'maint', 내용)
+  // 관리자 승인: AI 예측 뒤 바로 교대하지 않고 승인을 기다린다. 응답이 없으면 autoApproveSec 뒤 자동 승인
+  const autoApproveSec = () => (typeof hooks.autoApproveSec === 'function' ? hooks.autoApproveSec() : hooks.autoApproveSec == null ? 20 : hooks.autoApproveSec)
+  const slotName = (sl) => (sl ? 'R' + (sl.r + 1) + '-' + (sl.s ? 'B' : 'A') + (sl.i + 1) : '')
 
   let seed = 11
   const rnd = () => { seed |= 0; seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296 }
@@ -124,7 +128,7 @@ export function createSim(hooks = {}) {
       v: 0, blocked: 0, dirx: 0, diry: -1, pktAcc: 0.4, cumKg: 5300, vib: 1.1, temp: 41, batt: 82, health: 97, hist: [], maintFlag: false, release: false, deg: 0, ph: 1,
       forkH: 0, reach: 0, fw: null, fx: 0, fy: 0,
     })
-    S.sc = { phase: 1, t: 0, start: 0, degrading: false, rul: null, slope: 0 }
+    S.sc = { phase: 1, t: 0, start: 0, degrading: false, rul: null, slope: 0, await: false, awaitT: 0, approvedBy: null, target: 2 }
     addLog('관제 시작 · AMR 4대 가동, 1대 예비 · 무인 지게차 1대', '')
     setPhase(1)
   }
@@ -145,7 +149,7 @@ export function createSim(hooks = {}) {
   }
   function goTo(a, Q, st) { a.path = route(a.cur, Q); a.dest = Q; a.state = st }
 
-  // ── 작업 할당: 목적지 허브 기준 ──
+  // ── 작업 할당: 목적지 권역 기준 ──
   function slotsWhere(fn) { const o = []; S.slots.forEach((r, ri) => r.forEach((s, si) => s.forEach((v, i) => { if (fn(v, ri)) o.push({ r: ri, s: si, i }) }))); return o }
   const slotAt = (sl) => S.slots[sl.r][sl.s][sl.i]
   const slotPt = (sl) => ({ x: SX(sl.i), y: AISLES[sl.r + sl.s], kind: 'rack' })
@@ -184,13 +188,16 @@ export function createSim(hooks = {}) {
     const t = a.task, c = t.box
     if (t.type === 'in') { t.dock.cargo.splice(t.dock.cargo.indexOf(c), 1); S.scans.unshift({ t: S.simT, c }); S.scans = S.scans.slice(0, 4); S.scanVer++ }
     else { const s = slotAt(t.slot); s.st = 0; s.box = null }
-    c.loc = { type: 'amr', a }; a.box = c; a.lastBox = c
+    c.loc = { type: 'amr', a }; a.box = c; a.lastBox = c; a.pickedAt = new Date().toISOString()
   }
   function doDrop(a) {
     const t = a.task, c = t.box
     if (t.type === 'in') { const s = slotAt(t.slot); s.st = 1; s.box = c; c.loc = { type: 'slot', ...t.slot }; c.res = false }
     else { t.dock.boxes.push(c); t.dock.res--; c.loc = { type: 'outTruck', d: t.dock.hub } }
     a.cumKg += c.w; a.box = null; S.thru++
+    onEvent('move', { code: a.name, waybillNo: c.id, taskType: t.type === 'in' ? 'IN' : 'OUT',
+      fromLoc: t.type === 'in' ? '입고 D' + (t.dk + 1) : slotName(t.slot), toLoc: t.type === 'in' ? slotName(t.slot) : '출고 D' + (t.dock.hub + 4),
+      hub: c.handle === '냉장' ? '냉장' : (HUBS[c.hub] ? HUBS[c.hub].name : null), handleType: c.handle, weightKg: c.w, startedAt: a.pickedAt, finishedAt: new Date().toISOString() })
   }
 
   // ── 도크 ──
@@ -207,7 +214,7 @@ export function createSim(hooks = {}) {
         const kg = d.boxes.reduce((s, c) => s + c.w, 0)
         d.boxes.forEach((c) => (c.loc = { type: 'gone', hub: d.hub }))
         S.hubSent[d.hub] += d.boxes.length
-        addLog('D' + (d.hub + 4) + ' ' + HUBS[d.hub].name + ' 허브행 택배차 출발 · ' + d.boxes.length + '건 ' + kg + 'kg', 'hub')
+        addLog('D' + (d.hub + 4) + ' ' + HUBS[d.hub].name + '행 택배차 출발 · ' + d.boxes.length + '건 ' + kg + 'kg', 'hub')
       } else if (d.state === 'leaving') { d.off += dt / 2.2; if (d.off >= 1) { d.off = 1; d.state = 'empty'; d.timer = 1.2 + rnd() * 2 } }
       else if (d.state === 'empty') { d.timer -= dt; if (d.timer <= 0) { d.state = 'arriving'; d.boxes = [] } }
       else if (d.state === 'arriving') { d.off -= dt / 2.2; if (d.off <= 0) { d.off = 0; d.state = 'docked' } }
@@ -270,7 +277,7 @@ export function createSim(hooks = {}) {
     a.cur = a.dest; a.v = 0
     if (a.state === 'toPick') { a.state = 'load'; a.timer = a.task.type === 'in' ? 1.4 : 0.9 }
     else if (a.state === 'toDrop') { a.state = 'unload'; a.timer = 0.9 }
-    else if (a.state === 'toMaint') { a.state = 'maint'; a.timer = 7; setPhase(4); addLog(a.name + ' 정비 시작 · 구동모터 베어링 교체', 'crit') }
+    else if (a.state === 'toMaint') { a.state = 'maint'; a.timer = 7; setPhase(4); addLog(a.name + ' 정비 시작 · 구동모터 베어링 교체', 'crit'); onEvent('maint', { code: a.name, eventType: 'START', vibration: a.vib, note: '구동모터 베어링 교체' }) }
     else if (a.state === 'toHome') { a.state = 'idle'; a.wait = 0.6 }
   }
   // ── 무인 지게차: 위 단 보충 재고 ↔ 바닥 칸 ──
@@ -398,6 +405,7 @@ export function createSim(hooks = {}) {
     a.deg = 0; a.maintFlag = false; a.health = 98; a.temp = 40; a.cumKg = 0
     S.sc.degrading = false; S.sc.rul = null
     addLog(a.name + ' 정비 완료 · 진동 정상, 누적 운반 초기화', 'ok')
+    onEvent('maint', { code: a.name, eventType: 'DONE', vibration: a.vib, note: '정비 완료 · 진동 정상' })
     setPhase(5)
     goTo(a, a.home, 'toHome')
     S.amrs[4].release = true
@@ -406,21 +414,54 @@ export function createSim(hooks = {}) {
   // ── 예지보전 시나리오 ──
   function slopeOf(h) { const v = h.filter((x) => x != null).slice(-20); if (v.length < 5) return 0; const n = v.length; let sx = 0, sy = 0, sxy = 0, sxx = 0; v.forEach((y, i) => { sx += i; sy += y; sxy += i * y; sxx += i * i }); return (n * sxy - sx * sy) / (n * sxx - sx * sx) / 0.2 }
   function scenario(dt) {
-    const sc = S.sc, T = S.amrs[2], SP = S.amrs[4]
+    const sc = S.sc, SP = S.amrs[4]
     sc.t += dt
-    if (sc.phase === 1 && !sc.degrading && sc.t - sc.start > 9) sc.degrading = true
+    if (sc.phase === 1 && !sc.degrading && sc.t - sc.start > 9) { sc.target = pickTarget(); sc.degrading = true }
+    const T = S.amrs[sc.target]
     if (sc.degrading && T.state !== 'maint') T.deg = Math.min(5.2, T.deg + dt * 0.27)
-    if (sc.phase === 1 && T.deg > 1.2) { setPhase(2); addLog('AMR-03 진동 이상 감지 · 평소 대비 +' + Math.round((T.vib / 1.55 - 1) * 100) + '%', 'warn') }
+    if (sc.phase === 1 && T.deg > 1.2) { setPhase(2); addLog(T.name + ' 진동 이상 감지 · 평소 대비 +' + Math.round((T.vib / 1.55 - 1) * 100) + '%', 'warn'); onEvent('maint', { code: T.name, eventType: 'WARN', vibration: T.vib, note: '진동 이상 감지' }) }
     if (sc.phase === 2 && T.deg > 2.5) {
       sc.slope = Math.max(0.08, slopeOf(T.hist))
       sc.rul = Math.max(6, Math.round(((7.1 - T.vib) / sc.slope) * 4))
       setPhase(3)
       addLog('AI 예측 · 베어링 마모(누적 ' + tons(T) + 't 운반), 고장까지 약 ' + sc.rul + '시간', 'crit')
-      T.maintFlag = true; SP.role = 'active'; SP.wait = 0.2
-      addLog('정비 예약 · 예비기 AMR-05 투입', 'warn')
+      sc.await = true; sc.awaitT = sc.t
+      addLog('정비 예약 요청 · 관리자 승인 대기', 'warn')
+      onEvent('maint', { code: T.name, eventType: 'PREDICT', vibration: T.vib, rulHours: sc.rul, slope: sc.slope, cumKg: T.cumKg, note: '고장 예측 · 정비 승인 요청' })
     }
+    if (sc.await && autoApproveSec() > 0 && sc.t - sc.awaitT > autoApproveSec()) approve('자동 (응답 없음)')
     if (sc.phase === 3 && sc.rul != null) sc.slope = Math.max(0.08, slopeOf(T.hist) || sc.slope)
     if (sc.phase === 5 && sc.t - sc.start > 9) { setPhase(1); addLog('정상 운영 · 다음 주기 모니터링', '') }
+  }
+
+  // 고장 대상: 가동 중인 AMR-01~04 중 누적 운반량(정비 후)이 가장 많은 로봇 — 많이 쓴 로봇이 먼저 마모된다
+  function pickTarget() {
+    let best = 0
+    for (let i = 0; i < 4; i++) { const a = S.amrs[i]; if (a.role === 'active' && a.state !== 'maint' && a.cumKg > S.amrs[best].cumKg) best = i }
+    return best
+  }
+  // 관리자 승인 → 정비 예약 확정 · 예비기 투입
+  function approve(by) {
+    const sc = S.sc, T = S.amrs[sc.target], SP = S.amrs[4]
+    if (!sc.await) return false
+    sc.await = false; sc.approvedBy = by || '관리자'
+    T.maintFlag = true; SP.role = 'active'; SP.wait = 0.2
+    addLog('정비 승인 (' + sc.approvedBy + ') · 예비기 AMR-05 투입', 'warn')
+    onEvent('maint', { code: T.name, eventType: 'APPROVE', by: sc.approvedBy, vibration: T.vib, note: '정비 승인 · 예비기 AMR-05 투입' })
+    return true
+  }
+  // 다른 화면(웹 · 앱)이 DB에 남긴 상태를 따라간다: 고장 예측 · 승인을 맞춘다
+  function follow(r) {
+    const sc = S.sc
+    if (!r) return
+    // 웹(현장)이 고른 고장 로봇에 맞춘다
+    if (r.code && sc.phase < 3) { const i = S.amrs.findIndex((a) => a.name === r.code); if (i >= 0 && i < 4 && i !== sc.target) { S.amrs[sc.target].deg = 0; sc.target = i } }
+    const T = S.amrs[sc.target]
+    if ((r.pending || r.approved) && sc.phase < 3 && T.state !== 'maint') {
+      T.deg = Math.max(T.deg, 2.6); sc.degrading = true
+      if (sc.phase < 2) setPhase(2)
+    }
+    if (r.approved && sc.await) approve(r.approvedBy || '관리자')
   }
 
   function step(dt) {
@@ -444,5 +485,8 @@ export function createSim(hooks = {}) {
   }
 
   init()
-  return { S, init, step, locText }
+  return { S, init, step, locText, approve, follow }
 }
+
+// 단계 설명 문구 속 로봇 이름을 실제 고장 대상으로 바꿔서 돌려준다
+export function captionOf(S) { const T = S.amrs[S.sc.target == null ? 2 : S.sc.target]; return CAPTIONS[S.sc.phase].replace(/AMR-03/g, T.name) }
