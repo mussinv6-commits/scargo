@@ -13,6 +13,7 @@ public class AmrDtos {
     public record PredictionRequest(String code, Double rulHours, Double vibration, Double slope, Double cumLoadKg, String reason) {}
     public record ApproveRequest(String by) {}
     public record EventRequest(String code, String level, Integer phase, String message) {}
+    public record SettingsRequest(Integer rulThresholdHours, Integer chargeAtPct, String by) {}
 
     // ── 응답 ──
     public record RobotView(String code, String type, String role, String state, Double battery, Double health,
@@ -21,7 +22,8 @@ public class AmrDtos {
                             Double rulHours, Double vibration, OffsetDateTime scheduledAt, OffsetDateTime approvedAt,
                             String approvedBy, OffsetDateTime startedAt, OffsetDateTime completedAt) {}
     public record EventView(Long id, String robotCode, String level, Integer phase, String message, OffsetDateTime createdAt) {}
+    public record SettingsView(Integer rulThresholdHours, Integer chargeAtPct, String updatedBy, OffsetDateTime updatedAt) {}
     public record StateView(boolean producerLive, OffsetDateTime producerAt, Integer phase, List<RobotView> robots,
-                            MaintView pending, MaintView active, List<EventView> events) {}
+                            MaintView pending, MaintView active, List<EventView> events, SettingsView settings) {}
     public record SensorPoint(OffsetDateTime t, Double vibration, Double health, String state) {}
 }

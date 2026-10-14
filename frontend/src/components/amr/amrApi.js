@@ -52,6 +52,8 @@ export const amrApi = {
   start(id) { return req('POST', '/api/amr/maintenance/' + id + '/start') },
   done(id) { return req('POST', '/api/amr/maintenance/' + id + '/done') },
   event(code, level, phase, message) { return req('POST', '/api/amr/events', { code, level, phase, message }) },
+  settings() { return req('GET', '/api/amr/settings') },
+  saveSettings(rulThresholdHours, chargeAtPct, by) { return req('PUT', '/api/amr/settings', { rulThresholdHours, chargeAtPct, by }) },
   history(code, minutes = 5) { return req('GET', '/api/amr/robots/' + encodeURIComponent(code) + '/telemetry?minutes=' + minutes) },
   maintenanceList(limit = 10) { return req('GET', '/api/amr/maintenance?limit=' + limit) },
 }

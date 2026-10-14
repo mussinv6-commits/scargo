@@ -62,7 +62,7 @@ let remote = null            // 서버 /api/amr/state 응답
 const linked = () => !!(remote && remote.producerLive && amrApi.online)   // 웹 관제(현장)가 돌고 있을 때만 따라간다
 let dbHist = null            // 선택 로봇의 DB 진동 기록
 
-const sim = createSim({ onLog, onPhase, autoApproveSec: () => (linked() ? 0 : 20) })
+const sim = createSim({ onLog, onPhase, autoApproveSec: 0 })
 const S = sim.S
 for (let i = 0; i < 80; i++) sim.step(0.05)
 S.packets.length = 0
@@ -132,12 +132,11 @@ function renderHome() {
   const hm = $('h-maint'); hm.textContent = maintN; hm.className = maintN ? 'crit' : ''
   // 위험 알림 카드
   const al = $('h-alert'), [lv] = status(T)
-  $('h-approve').hidden = !S.sc.await
   al.querySelector('[data-go-robot]').dataset.goRobot = S.sc.target
-  if (S.sc.await) {
-    al.hidden = false; al.classList.remove('amber')
-    $('h-alert-t').textContent = T.name + ' 고장 예측 · 정비 승인 필요'
-    $('h-alert-p').textContent = '구동모터 베어링 · 고장까지 약 ' + (S.sc.rul || '-') + '시간. 승인하면 예비기 AMR-05가 작업을 이어받습니다.' + (linked() ? ' (웹 관제와 DB로 연동 중)' : ' (앱 단독 · 20초 뒤 자동 승인)')
+  if (S.sc.phase === 2 && S.sc.rul != null && T.state !== 'maint') {
+    al.hidden = false; al.classList.add('amber')
+    $('h-alert-t').textContent = T.name + ' 진동 이상 · 남은 수명 약 ' + S.sc.rul + '시간'
+    $('h-alert-p').textContent = '정비 기준 ' + S.cfg.rulAt + '시간 이하가 되면 자동으로 정비를 예약하고 예비기 AMR-05를 투입합니다. 기준은 아래 "운영 기준"에서 바꿀 수 있습니다.'
   } else if (lv === 'crit' || lv === 'warn') {
     al.hidden = false; al.classList.toggle('amber', lv === 'warn')
     if (T.state === 'maint') { $('h-alert-t').textContent = T.name + ' 정비 중 · 베어링 교체'; $('h-alert-p').textContent = '예비기 AMR-05가 작업을 대신하고 있어 권역 출고는 멈추지 않습니다.' }
@@ -413,33 +412,39 @@ async function pollRemote() {
     const act = st.active
     const mm = st.pending || act
     if (mm && mm.rulHours) S.sc.rul = Math.round(mm.rulHours)   // 남은 수명은 웹(현장)이 계산해 DB에 남긴 값으로 맞춘다
+    if (st.settings && Date.now() - cfgLocalT > 3000) sim.setCfg({ rulAt: st.settings.rulThresholdHours, chargeAt: st.settings.chargeAtPct })
     sim.follow({ pending: !!st.pending, approved: !!(act && act.approvedAt), approvedBy: act && act.approvedBy, code: (st.pending || act || {}).robotCode })
-    if (act && act.approvedAt && act.approvedBy !== lastApprover) {
-      lastApprover = act.approvedBy
-      if (!/앱/.test(act.approvedBy || '')) toast('정비 승인됨 · ' + act.approvedBy + ' (DB 연동)', 'ok')
-    }
+    if (act && act.approvedAt && act.id !== lastApprover) { lastApprover = act.id; toast(act.robotCode + ' 자동 정비 예약 · 예비기 투입 (웹 관제)', 'amber') }
     const a = S.amrs[selected]
     if (tab === 'robot') {
       const h = await amrApi.history(a.name, 5)
       if (h) dbHist = { code: a.name, v: h.slice(-150).map((p) => (p.state === 'MAINT' ? null : p.vibration)) }
     }
   }
-  renderDb()
+  renderDb(); renderCfg()
 }
 setInterval(pollRemote, 2000); pollRemote()
 
-async function approveFromApp() {
-  if (!S.sc.await) return
-  if (linked() && remote.pending) {
-    const m = await amrApi.approve(remote.pending.id, '앱 · 관리자')
-    if (!m) { toast('서버에 승인을 저장하지 못했습니다. 연결을 확인하세요.'); return }
-    lastApprover = '앱 · 관리자'
-    toast('정비 승인 완료 · DB 저장 → 웹 관제 화면에 반영', 'ok')
-  }
-  sim.approve('앱 · 관리자')
-  renderAll()
+/* ── 관리자 운영 기준 (정비 · 충전): 앱에서 바꾸면 DB → 웹 관제 3D 로봇이 바로 그 기준으로 움직인다 ── */
+let cfgTimer = 0, cfgLocalT = 0
+function renderCfg() {
+  $('cfg-rul').textContent = S.cfg.rulAt
+  $('cfg-chg').textContent = S.cfg.chargeAt
+  const st = remote && remote.settings
+  $('cfg-by').textContent = st && st.updatedBy ? '최근 변경: ' + st.updatedBy : linked() ? 'DB 연동' : '앱 단독'
 }
-$('h-approve').addEventListener('click', approveFromApp)
+document.getElementById('cfg-card').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-k]'); if (!b) return
+  const d = +b.dataset.d
+  if (b.dataset.k === 'rul') sim.setCfg({ rulAt: S.cfg.rulAt + d }); else sim.setCfg({ chargeAt: S.cfg.chargeAt + d })
+  cfgLocalT = Date.now(); renderCfg(); renderAll()
+  clearTimeout(cfgTimer)
+  cfgTimer = setTimeout(async () => {
+    if (!amrApi.online) { toast('앱 단독 모드 · 이 휴대폰에만 적용', 'amber'); return }
+    const v = await amrApi.saveSettings(S.cfg.rulAt, S.cfg.chargeAt, '앱 · 관리자')
+    toast(v ? '운영 기준 저장 · 정비 ' + v.rulThresholdHours + '시간 · 충전 ' + v.chargeAtPct + '% → 웹 관제 반영' : '서버에 저장하지 못했습니다', v ? 'ok' : '')
+  }, 500)
+})
 
 function renderDb() {
   const on = amrApi.online, live = linked()

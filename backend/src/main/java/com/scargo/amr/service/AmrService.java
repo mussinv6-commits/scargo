@@ -25,9 +25,18 @@ public class AmrService {
     private static final List<String> OPEN = List.of("SCHEDULED", "IN_PROGRESS");
     private static final Set<String> STATES = Set.of("IDLE", "TO_PICK", "LOADING", "TO_DROP", "UNLOADING",
             "TO_MAINT", "MAINT", "TO_HOME", "TO_RACK", "FORK_WORK", "CHARGING");
-    private static final Map<String, String> SIM_STATE = Map.of(
-            "idle", "IDLE", "toPick", "TO_PICK", "load", "LOADING", "toDrop", "TO_DROP", "unload", "UNLOADING",
-            "toMaint", "TO_MAINT", "maint", "MAINT", "toHome", "TO_HOME", "toRack", "TO_RACK", "fwork", "FORK_WORK");
+    private static final Map<String, String> SIM_STATE = Map.ofEntries(
+            Map.entry("idle", "IDLE"),
+            Map.entry("toPick", "TO_PICK"),
+            Map.entry("load", "LOADING"),
+            Map.entry("toDrop", "TO_DROP"),
+            Map.entry("unload", "UNLOADING"),
+            Map.entry("toMaint", "TO_MAINT"),
+            Map.entry("maint", "MAINT"),
+            Map.entry("toHome", "TO_HOME"),
+            Map.entry("toRack", "TO_RACK"),
+            Map.entry("fwork", "FORK_WORK"),
+            Map.entry("charge", "CHARGING"));
 
     private final HubRepository hubRepo;
     private final AmrRobotRepository robotRepo;
@@ -35,6 +44,7 @@ public class AmrService {
     private final AmrPredictionRepository predictionRepo;
     private final AmrMaintenanceRepository maintRepo;
     private final HubEventRepository eventRepo;
+    private final AmrSettingRepository settingRepo;
 
     // 시뮬레이터가 마지막으로 보낸 값 (진동 · 온도는 amr_robots 에 컬럼이 없어 메모리에 둔다)
     private final Map<String, TelemetryItem> latest = new ConcurrentHashMap<>();
@@ -193,7 +203,38 @@ public class AmrService {
                 .map(e -> new EventView(e.getEventId(), codeOf(e.getRobotId()), e.getEventLevel(), e.getPhaseNo(), e.getMessage(), e.getCreatedAt()))
                 .toList();
         boolean live = producerAt != null && producerAt.isAfter(OffsetDateTime.now().minusSeconds(10));
-        return new StateView(live, producerAt, phase, robots, pending, active, events);
+        return new StateView(live, producerAt, phase, robots, pending, active, events, settingsView(hub));
+    }
+
+    // ── 관리자 운영 기준 (앱 · 웹 어디서 바꿔도 DB 한 곳) ──
+    private SettingsView settingsView(Long hub) {
+        AmrSetting s = settingRepo.findById(hub).orElseGet(() -> { AmrSetting n = new AmrSetting(); n.setHubId(hub); return n; });
+        return new SettingsView(s.getRulThresholdHours(), s.getChargeAtPct(), s.getUpdatedBy(), s.getUpdatedAt());
+    }
+
+    @Transactional(readOnly = true)
+    public SettingsView settings() { return settingsView(hubId()); }
+
+    @Transactional
+    public SettingsView updateSettings(SettingsRequest req) {
+        Long hub = hubId();
+        AmrSetting s = settingRepo.findById(hub).orElseGet(() -> { AmrSetting n = new AmrSetting(); n.setHubId(hub); return n; });
+        StringBuilder msg = new StringBuilder();
+        if (req.rulThresholdHours() != null) {
+            int v = Math.max(6, Math.min(60, req.rulThresholdHours()));
+            if (v != s.getRulThresholdHours()) msg.append("정비 기준 ").append(s.getRulThresholdHours()).append("→").append(v).append("시간 ");
+            s.setRulThresholdHours(v);
+        }
+        if (req.chargeAtPct() != null) {
+            int v = Math.max(10, Math.min(80, req.chargeAtPct()));
+            if (v != s.getChargeAtPct()) msg.append("충전 기준 ").append(s.getChargeAtPct()).append("→").append(v).append("% ");
+            s.setChargeAtPct(v);
+        }
+        s.setUpdatedBy(req.by() == null || req.by().isBlank() ? "관리자" : req.by());
+        s.setUpdatedAt(OffsetDateTime.now());
+        settingRepo.save(s);
+        if (msg.length() > 0) event(null, "INFO", "운영 기준 변경 (" + s.getUpdatedBy() + ") · " + msg.toString().trim());
+        return settingsView(hub);
     }
 
     @Transactional(readOnly = true)

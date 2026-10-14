@@ -25,11 +25,16 @@
           <div class="card alert" id="h-alert" hidden>
             <div class="t"><i>!</i><span id="h-alert-t"></span></div>
             <p id="h-alert-p"></p>
-            <div class="act"><button type="button" class="btn danger" id="h-approve" hidden>정비 승인</button><button type="button" class="btn p" data-go-robot="2">상세 보기</button><button type="button" class="btn" data-go="3d">3D로 보기</button></div>
+            <div class="act"><button type="button" class="btn p" data-go-robot="2">상세 보기</button><button type="button" class="btn" data-go="3d">3D로 보기</button></div>
           </div>
           <div class="card mini-card">
             <div class="row-sb"><span class="lbl">3D View · 실시간 트윈</span><button type="button" class="btn sm c" data-go="3d">⤢ 전체 화면</button></div>
             <div class="mini" id="mini-slot"></div>
+          </div>
+          <div class="card cfg" id="cfg-card">
+            <div class="row-sb"><span class="lbl">Control · 운영 기준 (관리자)</span><span class="hint" id="cfg-by">-</span></div>
+            <div class="cfg-row"><div><b>정비 기준</b><small>남은 수명이 이 시간 이하면 자동 정비</small></div><div class="cfg-step"><button type="button" data-k="rul" data-d="-6">−</button><strong id="cfg-rul">24</strong><em>시간</em><button type="button" data-k="rul" data-d="6">+</button></div></div>
+            <div class="cfg-row"><div><b>충전 기준</b><small>배터리가 이 % 이하면 작업 후 충전</small></div><div class="cfg-step"><button type="button" data-k="chg" data-d="-10">−</button><strong id="cfg-chg">30</strong><em>%</em><button type="button" data-k="chg" data-d="10">+</button></div></div>
           </div>
           <div class="card" id="db-card">
             <span class="lbl">Server · DB 연동</span>

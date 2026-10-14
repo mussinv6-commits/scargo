@@ -10,7 +10,7 @@ import java.util.Map;
 
 // 26.10.14 AMR 연동 API (SecurityConfig 에서 /api/amr/** 공개)
 //  웹 관제 화면: telemetry · predictions · start · done 저장
-//  앱 · 웹 공통: state 조회(2초마다), approve(정비 승인)
+//  앱 · 웹 공통: state 조회(2초마다), settings(관리자 운영 기준: 정비 · 충전)
 //  ※ @PathVariable · @RequestParam 이름을 직접 적음 (STS 컴파일은 파라미터 이름 정보가 없어서 생략하면 500 오류)
 @RestController
 @RequestMapping("/api/amr")
@@ -44,6 +44,12 @@ public class AmrController {
 
     @GetMapping("/maintenance")
     public List<MaintView> maintenance(@RequestParam(name = "limit", defaultValue = "10") int limit) { return service.maintenanceList(limit); }
+
+    @GetMapping("/settings")
+    public SettingsView settings() { return service.settings(); }
+
+    @PutMapping("/settings")
+    public SettingsView updateSettings(@RequestBody SettingsRequest req) { return service.updateSettings(req); }
 
     @PostMapping("/events")
     public Map<String, Object> event(@RequestBody EventRequest req) { service.addEvent(req); return Map.of("ok", true); }

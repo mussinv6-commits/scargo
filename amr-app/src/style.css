@@ -194,3 +194,12 @@ canvas.chart{display:block;width:100%;height:150px;margin-top:6px}
 .db-row{display:flex;gap:8px}
 .db-row input{flex:1;min-width:0;height:36px;border-radius:10px;border:1px solid var(--edge2);background:var(--bg2);color:var(--ink);padding:0 10px;font:600 13px var(--mono)}
 .btn.danger{background:var(--green);border-color:var(--green);color:#06221e;font-weight:800}
+
+/* 운영 기준 (26.10.15) */
+.cfg .cfg-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px dashed var(--edge)}
+.cfg .cfg-row b{font-size:14px}
+.cfg .cfg-row small{display:block;font-size:11px;color:var(--dim);margin-top:2px}
+.cfg .cfg-step{display:flex;align-items:center;gap:6px}
+.cfg .cfg-step button{width:38px;height:38px;border-radius:12px;border:1px solid var(--edge2);background:var(--panel2);color:var(--ink);font-size:20px;font-weight:800}
+.cfg .cfg-step strong{min-width:36px;text-align:center;font:800 20px var(--mono);color:var(--cyan)}
+.cfg .cfg-step em{font-style:normal;font-size:11px;color:var(--muted);min-width:24px}

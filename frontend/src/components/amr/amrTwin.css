@@ -238,3 +238,13 @@
 .amr-twin .approve-card .ap-btn{background:var(--red);border-color:var(--red);color:#fff;font-weight:800}
 .amr-twin .approve-card .ap-s{font-size:.75rem;color:var(--dim)}
 @keyframes twin-ap{0%,100%{box-shadow:0 0 0 0 rgba(255,90,95,0)}50%{box-shadow:0 0 0 4px rgba(255,90,95,.18)}}
+
+/* 운영 기준 카드 (26.10.15) */
+.amr-twin .cfg-card .cfg-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px dashed var(--edge)}
+.amr-twin .cfg-card .cfg-row span{font-size:.84rem;font-weight:600}
+.amr-twin .cfg-card .cfg-row em{display:block;font-style:normal;font-size:.72rem;color:var(--dim);font-weight:500}
+.amr-twin .cfg-card .cfg-step{display:flex;align-items:center;gap:6px}
+.amr-twin .cfg-card .cfg-step button{width:30px;height:30px;padding:0;font-size:1rem;font-weight:800}
+.amr-twin .cfg-card .cfg-step b{min-width:34px;text-align:center;font:700 1.15rem var(--font-data);color:var(--cyan)}
+.amr-twin .cfg-card .cfg-step i{font-style:normal;font-size:.72rem;color:var(--muted);min-width:44px}
+.amr-twin .cfg-card .cfg-note{margin:8px 0 0;font-size:.74rem;color:var(--dim);line-height:1.5}

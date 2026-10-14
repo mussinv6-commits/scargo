@@ -39,12 +39,12 @@ export const ZONES = [
 ]
 // 줄 · 면이 실제로 쓰이는지 (냉장 창고 줄은 북쪽 면만)
 export const sideOn = (r, s) => !(r === COLD_ROW && s === 1)
-export const STATE_KO = { idle: '대기', toPick: '픽업 이동', load: '적재 중', toDrop: '운반 중', unload: '하역 중', toMaint: '정비소 이동', maint: '정비 중', toHome: '복귀 중', toRack: '랙 이동', fwork: '랙 작업 중' }
+export const STATE_KO = { charge: '충전 중', idle: '대기', toPick: '픽업 이동', load: '적재 중', toDrop: '운반 중', unload: '하역 중', toMaint: '정비소 이동', maint: '정비 중', toHome: '복귀 중', toRack: '랙 이동', fwork: '랙 작업 중' }
 export const PHASE_T = { 1: '정상 운영', 2: '이상 징후 감지', 3: 'AI 고장 예측', 4: '교대 · 계획 정비', 5: '정상 복귀' }
 export const CAPTIONS = {
   1: '입고 도크에서 운송장 OCR로 목적지를 읽고, AMR이 권역별 랙 바닥 칸(A 인천 · B 서울 · C 경기 · D 냉장 창고)에 보관합니다. 위 단 보충 재고는 무인 지게차가 내리고 올리며, 출고는 권역별 택배차로 나갑니다.',
   2: 'AMR-03 구동모터 진동이 평소 범위(1.2~2.0 mm/s)를 벗어나기 시작합니다. 무거운 화물을 가장 많이 나른 기체입니다.',
-  3: '진동 추세와 누적 운반 중량으로 고장 시점을 예측합니다. 고장 전에 정비를 예약하고, 예비기 AMR-05를 투입합니다.',
+  3: '진동 추세로 남은 수명을 계산합니다. 관리자가 정한 정비 기준 이하로 떨어지면 자동으로 정비를 예약하고 예비기 AMR-05를 투입합니다.',
   4: 'AMR-03은 하던 작업만 마치고 정비 스테이션으로 이동합니다. 그동안 AMR-05가 작업을 이어받아 권역 출고는 멈추지 않습니다.',
   5: '베어링 교체 후 진동이 정상으로 돌아오고 누적 운반 중량도 초기화됩니다. AMR-05는 대기 위치로 돌아갑니다.',
 }
@@ -128,6 +128,7 @@ export function createSim(hooks = {}) {
       v: 0, blocked: 0, dirx: 0, diry: -1, pktAcc: 0.4, cumKg: 5300, vib: 1.1, temp: 41, batt: 82, health: 97, hist: [], maintFlag: false, release: false, deg: 0, ph: 1,
       forkH: 0, reach: 0, fw: null, fx: 0, fy: 0,
     })
+    S.cfg = S.cfg || { rulAt: 24, chargeAt: 30, chargeTo: 90 }   // 관리자 운영 기준 (앱 · 웹에서 바꾸면 DB로 공유)
     S.sc = { phase: 1, t: 0, start: 0, degrading: false, rul: null, slope: 0, await: false, awaitT: 0, approvedBy: null, target: 2 }
     addLog('관제 시작 · AMR 4대 가동, 1대 예비 · 무인 지게차 1대', '')
     setPhase(1)
@@ -257,7 +258,7 @@ export function createSim(hooks = {}) {
       if (d <= rem) { a.x = q.x; a.y = q.y; rem -= d; a.path.shift() } else { a.x += (ddx / d) * rem; a.y += (ddy / d) * rem; rem = 0 }
     }
     if (a.v > 3) { const ta = Math.atan2(uy, ux); let df = ta - a.ang; while (df > Math.PI) df -= 2 * Math.PI; while (df < -Math.PI) df += 2 * Math.PI; a.ang += df * Math.min(1, dt * 9) }
-    a.batt = Math.max(35, a.batt - dt * (a.box ? 0.13 : 0.1))
+    a.batt = Math.max(3, a.batt - dt * (a.box ? 0.13 : 0.1))
   }
   function updOffset(a, dt) {
     // 우측 통행: 이동 방향의 오른쪽 차선으로 비켜서 달린다 (정지 시 중앙)
@@ -270,6 +271,7 @@ export function createSim(hooks = {}) {
   function afterTask(a) {
     if (a.maintFlag) { goTo(a, BAY, 'toMaint'); addLog(a.name + ' 작업 완료 → 정비 스테이션 이동', 'crit'); return }
     if (a.release) { a.release = false; a.role = 'spare'; goTo(a, a.home, 'toHome'); addLog(a.name + ' 대기 위치로 복귀', ''); return }
+    if (a.batt <= S.cfg.chargeAt) { a.needCharge = true; goTo(a, a.home, 'toHome'); addLog(a.name + ' 배터리 ' + Math.round(a.batt) + '% (기준 ' + S.cfg.chargeAt + '%) → 충전소 이동', 'warn'); onEvent('charge', { code: a.name, battery: a.batt }); return }
     const t = assign(a)
     if (t) { a.task = t; goTo(a, t.from, 'toPick') } else goTo(a, a.home, 'toHome')
   }
@@ -369,9 +371,14 @@ export function createSim(hooks = {}) {
     a.ph += dt
     if (a.kind === 'fl') { updFork(a, dt); sensors(a, dt); return }
     switch (a.state) {
+      case 'charge':
+        a.batt = Math.min(100, a.batt + dt * 1.6)
+        if (a.batt >= S.cfg.chargeTo) { a.state = 'idle'; a.needCharge = false; a.wait = 0.4; addLog(a.name + ' 충전 완료 ' + Math.round(a.batt) + '% · 작업 복귀', 'ok') }
+        break
       case 'idle':
         a.batt = Math.min(100, a.batt + dt * 0.8)
         if (a.release) { a.release = false; a.role = 'spare' }
+        if ((a.needCharge || a.batt <= S.cfg.chargeAt) && !a.maintFlag) { a.state = 'charge'; a.needCharge = true; break }
         a.wait -= dt
         if (a.wait <= 0) {
           a.wait = 0.6
@@ -420,16 +427,15 @@ export function createSim(hooks = {}) {
     const T = S.amrs[sc.target]
     if (sc.degrading && T.state !== 'maint') T.deg = Math.min(5.2, T.deg + dt * 0.27)
     if (sc.phase === 1 && T.deg > 1.2) { setPhase(2); addLog(T.name + ' 진동 이상 감지 · 평소 대비 +' + Math.round((T.vib / 1.55 - 1) * 100) + '%', 'warn'); onEvent('maint', { code: T.name, eventType: 'WARN', vibration: T.vib, note: '진동 이상 감지' }) }
-    if (sc.phase === 2 && T.deg > 2.5) {
+    // 남은 수명(시간): 진동이 고장 기준 7.1 mm/s 에 닿기까지 · 이상 감지 뒤 계속 계산
+    if (sc.phase >= 2 && sc.phase <= 3 && T.state !== 'maint') sc.rul = Math.max(1, Math.round(((5.55 - T.deg) / 0.27) * 4))
+    if (sc.phase === 2 && sc.rul != null && sc.rul <= S.cfg.rulAt) {
       sc.slope = Math.max(0.08, slopeOf(T.hist))
-      sc.rul = Math.max(6, Math.round(((7.1 - T.vib) / sc.slope) * 4))
       setPhase(3)
-      addLog('AI 예측 · 베어링 마모(누적 ' + tons(T) + 't 운반), 고장까지 약 ' + sc.rul + '시간', 'crit')
-      sc.await = true; sc.awaitT = sc.t
-      addLog('정비 예약 요청 · 관리자 승인 대기', 'warn')
-      onEvent('maint', { code: T.name, eventType: 'PREDICT', vibration: T.vib, rulHours: sc.rul, slope: sc.slope, cumKg: T.cumKg, note: '고장 예측 · 정비 승인 요청' })
+      addLog('AI 예측 · ' + T.name + ' 남은 수명 약 ' + sc.rul + '시간 (정비 기준 ' + S.cfg.rulAt + '시간 이하)', 'crit')
+      onEvent('maint', { code: T.name, eventType: 'PREDICT', vibration: T.vib, rulHours: sc.rul, slope: sc.slope, cumKg: T.cumKg, note: '고장 예측 · 기준 ' + S.cfg.rulAt + '시간 이하 → 자동 정비 예약' })
+      sc.await = true; approve('자동 (기준 ' + S.cfg.rulAt + '시간 이하)')
     }
-    if (sc.await && autoApproveSec() > 0 && sc.t - sc.awaitT > autoApproveSec()) approve('자동 (응답 없음)')
     if (sc.phase === 3 && sc.rul != null) sc.slope = Math.max(0.08, slopeOf(T.hist) || sc.slope)
     if (sc.phase === 5 && sc.t - sc.start > 9) { setPhase(1); addLog('정상 운영 · 다음 주기 모니터링', '') }
   }
@@ -440,7 +446,13 @@ export function createSim(hooks = {}) {
     for (let i = 0; i < 4; i++) { const a = S.amrs[i]; if (a.role === 'active' && a.state !== 'maint' && a.cumKg > S.amrs[best].cumKg) best = i }
     return best
   }
-  // 관리자 승인 → 정비 예약 확정 · 예비기 투입
+  // 운영 기준 바꾸기 (관리자) — 정비 기준은 6~60시간, 충전 기준은 10~80%
+  function setCfg(c) {
+    if (!c) return
+    if (c.rulAt != null) S.cfg.rulAt = Math.max(6, Math.min(60, Math.round(c.rulAt)))
+    if (c.chargeAt != null) S.cfg.chargeAt = Math.max(10, Math.min(80, Math.round(c.chargeAt)))
+  }
+  // 정비 예약 확정 · 예비기 투입 (기준에 걸리면 자동)
   function approve(by) {
     const sc = S.sc, T = S.amrs[sc.target], SP = S.amrs[4]
     if (!sc.await) return false
@@ -458,7 +470,8 @@ export function createSim(hooks = {}) {
     if (r.code && sc.phase < 3) { const i = S.amrs.findIndex((a) => a.name === r.code); if (i >= 0 && i < 4 && i !== sc.target) { S.amrs[sc.target].deg = 0; sc.target = i } }
     const T = S.amrs[sc.target]
     if ((r.pending || r.approved) && sc.phase < 3 && T.state !== 'maint') {
-      T.deg = Math.max(T.deg, 2.6); sc.degrading = true
+      // 현장(웹)이 이미 정비를 잡았으면 이 화면도 같은 단계로 맞춘다: 남은 수명이 기준 바로 아래가 되게
+      T.deg = Math.max(T.deg, Math.min(5.2, 5.56 - (S.cfg.rulAt * 0.27) / 4)); sc.degrading = true
       if (sc.phase < 2) setPhase(2)
     }
     if (r.approved && sc.await) approve(r.approvedBy || '관리자')
@@ -485,7 +498,7 @@ export function createSim(hooks = {}) {
   }
 
   init()
-  return { S, init, step, locText, approve, follow }
+  return { S, init, step, locText, approve, follow, setCfg }
 }
 
 // 단계 설명 문구 속 로봇 이름을 실제 고장 대상으로 바꿔서 돌려준다

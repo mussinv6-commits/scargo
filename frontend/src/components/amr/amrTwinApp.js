@@ -35,26 +35,31 @@ export function mountAmrTwin(root) {
   }
 
   /* ── DB 연동: 이 화면이 현장(시뮬레이터) 역할 → 센서 · 예측 · 정비 진행을 저장, 승인은 앱 · 웹 어디서든 ── */
-  let maintId = null, remote = null, approveFlash = 0
+  let maintId = null, remote = null, approveFlash = 0, pendingBy = null, lastCfgBy = '', cfgLocalT = 0
   function onSimEvent(type, p) {
+    if (type === 'charge') { amrApi.event(p.code, 'INFO', S.sc.phase, p.code + ' 배터리 ' + Math.round(p.battery) + '% · 기준 ' + S.cfg.chargeAt + '% 이하 → 충전소 이동'); return }
     if (type !== 'maint') return
     if (p.eventType === 'WARN') amrApi.event(p.code, 'WARN', 2, p.code + ' 진동 이상 감지 · ' + (p.vibration || 0).toFixed(1) + ' mm/s')
-    else if (p.eventType === 'PREDICT') amrApi.predict(p).then((m) => { if (m) maintId = m.id })
-    else if (p.eventType === 'APPROVE') { approveFlash = 6; if (maintId) amrApi.approve(maintId, p.by) }
+    else if (p.eventType === 'PREDICT') { pendingBy = null; amrApi.predict(p).then((m) => { if (m) { maintId = m.id; if (pendingBy) amrApi.approve(m.id, pendingBy) } }) }
+    else if (p.eventType === 'APPROVE') { approveFlash = 8; if (maintId) amrApi.approve(maintId, p.by); else pendingBy = p.by }
     else if (p.eventType === 'START') { if (maintId) amrApi.start(maintId) }
     else if (p.eventType === 'DONE') { const id = maintId; maintId = null; if (id) amrApi.done(id) }
   }
-  const sim = createSim({ onLog: renderLog, onPhase: applyPhase, onEvent: onSimEvent, autoApproveSec: () => (amrApi.online ? 60 : 20) })
+  const sim = createSim({ onLog: renderLog, onPhase: applyPhase, onEvent: onSimEvent, autoApproveSec: 0 })
   simRef = sim
   // 2초마다 DB 상태를 읽어서 앱에서 누른 승인을 반영
   async function pollState() {
     const st = await amrApi.state(); if (!st || destroyed) return
     remote = st
-    const a = st.active || st.pending
-    if (a && !maintId && S.sc.await) maintId = a.id
-    if (st.active && st.active.approvedAt && S.sc.await && (!maintId || st.active.id === maintId)) {
-      sim.approve(st.active.approvedBy || '관리자')
-      if (!/웹/.test(st.active.approvedBy || '')) notice('정비 승인됨 · ' + (st.active.approvedBy || '관리자') + ' (DB 연동)', COLORS.green)
+    // 관리자 운영 기준 (앱에서 바꾸면 2초 안에 여기 3D 로봇이 그 기준대로 움직인다)
+    const cs = st.settings
+    if (cs && Date.now() - cfgLocalT > 3000) {
+      const changed = cs.rulThresholdHours !== S.cfg.rulAt || cs.chargeAtPct !== S.cfg.chargeAt
+      sim.setCfg({ rulAt: cs.rulThresholdHours, chargeAt: cs.chargeAtPct })
+      const key = (cs.updatedAt || '') + cs.updatedBy
+      if (changed && key !== lastCfgBy && cs.updatedBy && !/웹/.test(cs.updatedBy)) notice('운영 기준 변경 · ' + cs.updatedBy + ' → 정비 ' + cs.rulThresholdHours + '시간 · 충전 ' + cs.chargeAtPct + '% (DB 연동)', COLORS.cyan)
+      lastCfgBy = key
+      syncCfgInputs()
     }
   }
   /* ── DB 연결 표시 ── */
@@ -321,29 +326,46 @@ export function mountAmrTwin(root) {
     raf = requestAnimationFrame(frame)
   }
 
-  /* ── 정비 승인 카드 (웹에서도 승인 가능 · 앱에서 승인하면 여기 반영) ── */
+  /* ── 관리자 운영 기준 (정비 · 충전) + 자동 정비 상태 ── */
+  const cfgCard = document.createElement('div')
+  cfgCard.className = 'card cfg-card'
+  cfgCard.innerHTML = '<div class="grouphead"><span class="gtitle">운영 기준 · 관리자</span><span class="gmeta cfg-by">-</span></div>'
+    + '<div class="cfg-row"><span>정비 기준 <em>남은 수명</em></span><div class="cfg-step"><button type="button" data-k="rul" data-d="-6">−</button><b class="cfg-rul">24</b><i>시간 이하</i><button type="button" data-k="rul" data-d="6">+</button></div></div>'
+    + '<div class="cfg-row"><span>충전 기준 <em>배터리</em></span><div class="cfg-step"><button type="button" data-k="chg" data-d="-10">−</button><b class="cfg-chg">30</b><i>% 이하</i><button type="button" data-k="chg" data-d="10">+</button></div></div>'
+    + '<p class="cfg-note">기준에 걸리면 정비 예약 · 예비기 투입 · 충전 이동은 자동입니다. 앱에서 바꿔도 여기 반영됩니다.</p>'
   const apCard = document.createElement('div')
-  apCard.className = 'card approve-card'; apCard.hidden = true
-  apCard.innerHTML = '<div class="ap-t"><i>!</i><b class="ap-h"></b></div><p class="ap-p"></p><div class="ap-row"><button type="button" class="ap-btn">정비 승인</button><span class="ap-s"></span></div>'
-  ;(root.querySelector('.side-l') || root).prepend(apCard)
-  apCard.querySelector('.ap-btn').addEventListener('click', () => sim.approve('웹 · 관제'))
+  apCard.className = 'card approve-card done'; apCard.hidden = true
+  apCard.innerHTML = '<div class="ap-t"><i>!</i><b class="ap-h"></b></div><p class="ap-p"></p>'
+  const sideL = root.querySelector('.side-l') || root
+  sideL.prepend(apCard); sideL.prepend(cfgCard)
+  function syncCfgInputs() {
+    cfgCard.querySelector('.cfg-rul').textContent = S.cfg.rulAt
+    cfgCard.querySelector('.cfg-chg').textContent = S.cfg.chargeAt
+    const by = remote && remote.settings && remote.settings.updatedBy
+    cfgCard.querySelector('.cfg-by').textContent = by ? '최근 변경: ' + by : (amrApi.online ? 'DB 저장' : '이 화면만')
+  }
+  let cfgTimer = 0
+  cfgCard.addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-k]'); if (!b) return
+    const d = +b.dataset.d
+    if (b.dataset.k === 'rul') sim.setCfg({ rulAt: S.cfg.rulAt + d }); else sim.setCfg({ chargeAt: S.cfg.chargeAt + d })
+    syncCfgInputs(); cfgLocalT = Date.now()
+    clearTimeout(cfgTimer)
+    cfgTimer = setTimeout(() => amrApi.saveSettings(S.cfg.rulAt, S.cfg.chargeAt, '웹 · 관제').then((v) => { if (v) lastCfgBy = (v.updatedAt || '') + v.updatedBy }), 400)
+  })
   function renderApprove() {
-    const sc = S.sc
-    if (sc.await) {
+    const sc = S.sc, T = S.amrs[sc.target]
+    if (sc.phase === 2 && sc.rul != null) {
       apCard.hidden = false; apCard.classList.remove('done')
-      apCard.querySelector('.ap-h').textContent = 'AI 고장 예측 · 정비 승인 필요'
-      apCard.querySelector('.ap-p').textContent = S.amrs[sc.target].name + ' 구동모터 베어링 · 고장까지 약 ' + (sc.rul || '-') + '시간. 승인하면 예비기 AMR-05가 작업을 이어받고 ' + S.amrs[sc.target].name + '은 정비소로 이동합니다.'
-      apCard.querySelector('.ap-btn').hidden = false
-      const left = Math.max(0, Math.round((amrApi.online ? 60 : 20) - (sc.t - sc.awaitT)))
-      apCard.querySelector('.ap-s').textContent = (amrApi.online ? '앱에서도 승인할 수 있습니다 · ' : '') + left + '초 뒤 자동 승인'
-    } else if (approveFlash > 0 || (sc.phase === 3 && sc.approvedBy)) {
+      apCard.querySelector('.ap-h').textContent = T.name + ' 진동 이상 · 남은 수명 약 ' + sc.rul + '시간'
+      apCard.querySelector('.ap-p').textContent = '정비 기준 ' + S.cfg.rulAt + '시간 이하가 되면 자동으로 정비를 예약하고 예비기 AMR-05를 투입합니다.'
+    } else if (sc.phase === 3 || sc.phase === 4) {
       apCard.hidden = false; apCard.classList.add('done')
-      apCard.querySelector('.ap-h').textContent = '정비 승인 완료'
-      apCard.querySelector('.ap-p').textContent = '승인: ' + (sc.approvedBy || '관리자') + ' · 예비기 AMR-05 투입, ' + S.amrs[sc.target].name + ' 정비소 이동'
-      apCard.querySelector('.ap-btn').hidden = true
-      apCard.querySelector('.ap-s').textContent = amrApi.online ? 'DB에 기록됨' : ''
+      apCard.querySelector('.ap-h').textContent = sc.phase === 3 ? '자동 정비 예약 · ' + T.name : T.name + ' 정비 중'
+      apCard.querySelector('.ap-p').textContent = '기준 ' + S.cfg.rulAt + '시간 이하 → ' + (sc.approvedBy || '자동') + ' · 예비기 AMR-05 투입' + (amrApi.online ? ' · DB 기록' : '')
     } else apCard.hidden = true
   }
+  syncCfgInputs()
 
   // DB: 실제 시간 2초마다 센서 저장 + 상태 읽기 (화면이 느려도 간격 유지)
   const dbTimer = setInterval(() => { if (playing) amrApi.telemetry(S.sc.phase, S.amrs); pollState() }, 2000)
