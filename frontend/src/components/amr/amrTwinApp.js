@@ -114,6 +114,7 @@ export function mountAmrTwin(root) {
   let lastBar = ''
   function updCargo() {
     const c = currentCargo()
+    const cbar = root.querySelector('.cbar'); if (cbar) cbar.style.display = c && c.ean ? '' : 'none'
     if (!c) { $('cId').textContent = '-'; return }
     const h = HUBS[c.hub]
     $('cId').textContent = c.id
