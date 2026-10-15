@@ -83,14 +83,19 @@ export function mountAmrTwin(root) {
   }
   /* ── DB 연결 표시 ── */
   const dbBadge = document.createElement('span')
-  dbBadge.style.cssText = 'margin-left:10px;font-size:12px;font-weight:800;padding:3px 10px;border-radius:999px;border:1px solid;white-space:nowrap'
-  ;(root.querySelector('.twin-head') || root).appendChild(dbBadge)
+  dbBadge.style.cssText = 'font-size:11.5px;font-weight:800;padding:2px 10px;border-radius:999px;border:1px solid;white-space:nowrap;text-align:center'
+  // DB · OCR 표시는 위아래로 묶어서 헤더 버튼 자리를 줄이지 않는다
+  const badgeBox = document.createElement('div')
+  badgeBox.style.cssText = 'display:flex;flex-direction:column;gap:4px;align-items:stretch;flex:none'
+  ;(root.querySelector('.twin-head') || root).appendChild(badgeBox)
+  badgeBox.appendChild(dbBadge)
   const offDb = amrApi.onStatus((on) => { dbBadge.textContent = on ? '● DB 연결 · 앱 연동' : '○ DB 오프라인 · 시뮬레이션만'; dbBadge.style.color = on ? '#4fdc8a' : '#8a9bb0'; dbBadge.style.borderColor = on ? '#4fdc8a' : '#3a4a5c' })
   amrApi.check()
   const ocrBadge = document.createElement('span')
   ocrBadge.style.cssText = dbBadge.style.cssText
-  ;(root.querySelector('.twin-head') || root).appendChild(ocrBadge)
-  setOcr(false, '아직 인식 요청 없음')
+  badgeBox.appendChild(ocrBadge)
+  ocrBadge.textContent = '○ OCR 대기'; ocrBadge.style.color = '#8a9bb0'; ocrBadge.style.borderColor = '#3a4a5c'
+  ocrBadge.title = '트럭이 입구 게이트에 오면 번호판 인식을 요청합니다'
   let dbAcc = 0
   const S = sim.S
   const warm = () => { sim.setVehicleGate(false); for (let i = 0; i < 80; i++) sim.step(0.05); S.packets.length = 0; sim.setVehicleGate(true) }
