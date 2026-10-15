@@ -261,3 +261,10 @@
 .amr-twin .twin-tag-gate{color:#7fd6ff;border-color:rgba(127,214,255,.6);font-size:10px}
 .amr-twin.light .twin-tag-plate{background:rgba(255,255,255,.95)}.amr-twin.light .twin-tag-plate span{color:#3a4a5c}
 .amr-twin .twin-head button{white-space:nowrap}
+
+/* 26.10.15 상자 바코드 */
+.amr-twin .cbar{display:flex;align-items:center;gap:10px;margin:6px 0 4px}
+.amr-twin .cbar canvas{width:150px;height:38px;border-radius:4px;background:#fff;flex:none}
+.amr-twin .cbar span{font:700 .78rem var(--font-data);color:var(--ink)}
+.amr-twin .scans li{grid-template-columns:118px minmax(0,1fr) auto}
+.amr-twin .scans.gates li{grid-template-columns:112px minmax(0,1fr) auto}

@@ -317,7 +317,7 @@ function renderCargo() {
     const c = a.box, h = HUBS[c.hub], cold = c.handle === '냉장'
     return `<div class="mv"><div><div class="id">${c.id}</div><div class="w">${c.cat} ${c.w}kg${c.handle !== '일반' ? ' · ' + c.handle : ''}</div></div><div class="to">${a.name}<br>${sim.locText(c).replace(/^.*?·\s*/, '').replace(a.name + ' 운반 중 ', '')}</div><span class="chip" style="background:${cold ? 'var(--sky)' : h.col}">${cold ? '냉장' : h.name}</span></div>`
   }).join('') : '<div class="empty">지금 옮기는 화물이 없습니다.</div>'
-  $('c-scans').innerHTML = S.scans.length ? S.scans.map((s) => { const c = s.c, h = HUBS[c.hub]; return `<div class="mv"><div><div class="id">${c.id}</div><div class="w">${c.cat} ${c.w}kg${c.handle !== '일반' ? ' · ' + c.handle : ''}</div></div><div class="to">OCR 판독 완료</div><span class="chip" style="background:${h.col}">${h.name}</span></div>` }).join('') : '<div class="empty">입고 도크에서 첫 운송장을 읽는 중입니다.</div>'
+  $('c-scans').innerHTML = S.scans.length ? S.scans.map((s) => { const c = s.c, h = HUBS[c.hub]; return `<div class="mv"><div><div class="id">${c.ean || c.id}</div><div class="w">${c.id} · ${c.cat} ${c.w}kg${c.handle !== '일반' ? ' · ' + c.handle : ''}</div></div><div class="to">바코드 스캔 완료</div><span class="chip" style="background:${h.col}">${h.name}</span></div>` }).join('') : '<div class="empty">입고 도크에서 첫 상자 바코드를 읽는 중입니다.</div>'
 }
 
 /* ── 알림 탭 ── */

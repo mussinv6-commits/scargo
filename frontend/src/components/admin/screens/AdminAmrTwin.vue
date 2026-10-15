@@ -104,6 +104,7 @@
         <div class="card">
           <div class="selhead"><span class="label">Cargo · 화물 정보</span><span class="hubchip" id="tw-cHub">-</span></div>
           <div class="cargo-id" id="tw-cId">-</div>
+          <div class="cbar"><canvas id="tw-cBar" width="230" height="58" aria-label="상자 바코드 EAN-13"></canvas><span id="tw-cBarNo">-</span></div>
           <dl class="kv">
             <dt>품목</dt><dd id="tw-cCat">-</dd>
             <dt>무게</dt><dd id="tw-cW">-</dd>

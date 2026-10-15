@@ -3,7 +3,7 @@
 // 시뮬레이션 + 3D 씬 + 관제 패널(차트·화물·로그)을 하나의 루트 요소에 붙인다.
 // 사용: const app = mountAmrTwin(rootEl)  →  화면을 떠날 때 app.destroy()
 // ─────────────────────────────────────────────────────────────
-import { createSim, HUBS, ZONES, STATE_KO, PHASE_T, CAPTIONS, PIPE_ON, PH_COL, COLORS, status, lvCol, tons, zoneRow, captionOf, fmtPlate } from './amrSim.js'
+import { createSim, HUBS, ZONES, STATE_KO, PHASE_T, CAPTIONS, PIPE_ON, PH_COL, COLORS, status, lvCol, tons, zoneRow, captionOf, fmtPlate, ean13Bits } from './amrSim.js'
 // ZONES: 0 D 냉장 창고 · 1 A 인천 · 2 B 서울 · 3 C 경기
 import { createAmrScene } from './amrScene3d.js'
 import { createAmrSound } from './amrSound.js'
@@ -111,11 +111,19 @@ export function mountAmrTwin(root) {
 
   const cssCol = (l) => (l === 'crit' ? 'var(--red)' : l === 'warn' ? 'var(--amber)' : l === 'spare' ? '#4a5a6b' : 'var(--green)')
   function currentCargo() { if (cargoPin) return cargoPin; const a = S.amrs[selected]; return a.box || a.lastBox || null }
+  let lastBar = ''
   function updCargo() {
     const c = currentCargo()
     if (!c) { $('cId').textContent = '-'; return }
     const h = HUBS[c.hub]
     $('cId').textContent = c.id
+    // 상자 바코드 (EAN-13, 바코드 폴더와 같은 번호 체계)
+    if (c.ean && c.ean !== lastBar) {
+      lastBar = c.ean
+      const cv = $('cBar'), g = cv.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, cv.width, cv.height); g.fillStyle = '#000'
+      ean13Bits(c.ean).forEach((b, i) => { if (b) g.fillRect(20 + i * 2, 4, 2, (i < 3 || (i >= 45 && i < 50) || i >= 92) ? 50 : 44) })
+      $('cBarNo').textContent = c.ean[0] + ' ' + c.ean.slice(1, 7) + ' ' + c.ean.slice(7) + ' · 상품 바코드'
+    }
     const hc = $('cHub'); hc.textContent = '→ ' + h.full; hc.style.background = h.col
     $('cCat').textContent = c.cat
     $('cW').textContent = c.w + ' kg'
