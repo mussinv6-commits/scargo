@@ -433,13 +433,14 @@ let lastVehicleId = 0
 function applyVehicles(list) {
   const fresh = list.filter((v) => v.id > lastVehicleId).reverse() // 오래된 것부터
   if (!list.length) return
-  if (lastVehicleId) fresh.forEach((v) => {
+  const first = !lastVehicleId // 앱을 처음 켰을 때도 도크별 최근 결과를 트럭에 바로 붙인다 (알림은 새 기록만)
+  fresh.forEach((v) => {
     if (v.dock == null) return
     const out = v.lane ? v.lane === 'OUT' : v.kind === 'COURIER'
     const d = (out ? S.outDocks : S.inDocks)[v.dock]; if (!d) return
     if (v.direction === 'EXIT') d.ocr = { st: 'ok', plate: v.plate, photo: v.photoPlate, conf: v.confidence, kind: v.kind, exit: null }
     else d.ocr = { st: v.decision === 'BLOCK' ? 'block' : 'ok', plate: v.plate, photo: v.photoPlate, conf: v.confidence, kind: v.kind, exit: null }
-    if (v.decision === 'BLOCK') toast('미등록 차량 차단 · ' + (fmtPlate(v.plate) || '판독 불가'), '')
+    if (v.decision === 'BLOCK' && !first) toast('미등록 차량 차단 · ' + (fmtPlate(v.plate) || '판독 불가'), '')
   })
   lastVehicleId = Math.max(lastVehicleId, ...list.map((v) => v.id))
   const el = $('v-list'); if (!el) return
