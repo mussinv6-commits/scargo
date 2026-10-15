@@ -88,6 +88,8 @@ export function createSim(hooks = {}) {
   // 입구 · 출구 번호판 OCR 게이트 (웹 관제만 켠다): 트럭이 게이트에서 멈추고 OCR 결과를 기다린다
   let gate = !!hooks.vehicleGate
   const GATE_WAIT = 25 // 초 · 이 안에 결과가 없으면 OCR 응답 없음으로 통과
+  const GATE_OFF = 0.3 // 입구 카메라 앞 정지 위치 (도크 쪽으로 가까이 · 화면에서 보이게)
+  const GATE_MIN = 2.5 // 결과가 빨리 와도 이만큼은 게이트에서 멈춰 '인식' 장면을 보여 준다
   const SAMPLE_IN = ['서울85자6013', '경기90자8118', '인천98바2578'], SAMPLE_OUT = ['부산90배8407', '경남99바4892', '대구80자6850']
   // 관리자 승인: AI 예측 뒤 바로 교대하지 않고 승인을 기다린다. 응답이 없으면 autoApproveSec 뒤 자동 승인
   const autoApproveSec = () => (typeof hooks.autoApproveSec === 'function' ? hooks.autoApproveSec() : hooks.autoApproveSec == null ? 20 : hooks.autoApproveSec)
@@ -233,9 +235,10 @@ export function createSim(hooks = {}) {
   }
   function gateHold(d, dt, side, k) {
     if (!d.ocr || d.ocr.st !== 'scan') return
-    d.off = Math.max(d.off, 0.45) // 입구 게이트 앞에서 멈춰서 인식 결과를 기다린다
+    d.off = Math.max(d.off, GATE_OFF) // 입구 게이트 앞에서 멈춰서 인식 결과를 기다린다
     d.ocr.t += dt
-    if (d.ocr.t > GATE_WAIT) vehicleResult(side, k, null)
+    if (d.ocr.pending && d.ocr.t >= GATE_MIN) { const r = d.ocr.pending; d.ocr.pending = null; applyEntry(side, k, d, r.res) }
+    else if (d.ocr.t > GATE_WAIT) vehicleResult(side, k, null)
   }
   function gateExit(d, side, k, kind, boxes) {
     if (!gate || !d.ocr || !d.ocr.photo) return
@@ -248,6 +251,10 @@ export function createSim(hooks = {}) {
     const d = (side === 'out' ? S.outDocks : S.inDocks)[k]; if (!d || !d.ocr) return
     if (dir === 'EXIT') { d.ocr.exit = r ? { plate: r.plate, ok: r.decision === 'EXIT_OK', conf: r.confidence } : null; return }
     if (d.ocr.st !== 'scan') return
+    if (d.ocr.t < GATE_MIN) { d.ocr.pending = { res: r }; return } // 최소 정지 시간 뒤에 반영
+    applyEntry(side, k, d, r)
+  }
+  function applyEntry(side, k, d, r) {
     const where = side === 'out' ? '출고 D' + (k + 4) : '입고 D' + (k + 1)
     if (!r) {
       const p = (side === 'out' ? SAMPLE_OUT : SAMPLE_IN)[k % 3]
@@ -267,7 +274,7 @@ export function createSim(hooks = {}) {
 
   function updDocks(dt) {
     S.inDocks.forEach((d, k) => {
-      if (d.state === 'docked' && d.cargo.length === 0) { d.state = 'leaving'; gateExit(d, 'in', k, 'CARGO', []) }
+      if (d.state === 'docked' && d.cargo.length === 0) d.state = 'leaving' // 화물차는 입차 때만 인식 (출차 OCR 은 택배차)
       else if (d.state === 'leaving') { d.off += dt / 2.2; if (d.off >= 1) { d.off = 1; d.state = 'empty'; d.timer = 1.5 + rnd() * 2.5 } }
       else if (d.state === 'empty') { d.timer -= dt; if (d.timer <= 0) { d.state = 'arriving'; fillInTruck(d, k, 3 + Math.floor(rnd() * 2)); gateEntry(d, 'in', k, 'CARGO') } }
       else if (d.state === 'arriving') { d.off -= dt / 2.2; gateHold(d, dt, 'in', k); if (d.off <= 0) { d.off = 0; d.state = 'docked' } }

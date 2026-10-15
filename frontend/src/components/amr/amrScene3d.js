@@ -838,21 +838,29 @@ export function createAmrScene(container, sim, opts = {}) {
 
   /* ── 입구 · 출구 번호판 OCR (gate_api.py · YOLO + CRNN) ── */
   // 트럭이 게이트 앞(off = 0.45)에서 멈췄을 때 캡 앞 번호판 위치에 카메라 게이트를 세운다
-  const GATE_OFF = 0.405 * 22 // ease(0.45) * 22
+  const GATE_OFF = 0.18 * 22 // ease(0.3) * 22 — amrSim 의 GATE_OFF(0.3) 와 맞춘다
   function ocrGantry(x, dir, label) {
     const g = new THREE.Group(), z0 = Z(DOCK_Y[0]) - 2.2, z1 = Z(DOCK_Y[2]) + 2.2, zc = (z0 + z1) / 2
     ;[z0, z1].forEach((z) => g.add(mesh(box(0.22, 5.4, 0.22), MAT.steel, 0, 2.7, z)))
     g.add(mesh(box(0.3, 0.32, z1 - z0 + 0.3), MAT.steel, 0, 5.4, zc))
-    DOCK_Y.forEach((y) => {
+    const beams = DOCK_Y.map((y) => {
       g.add(mesh(box(0.42, 0.26, 0.34), MAT.rubber, dir * 0.15, 5.1, Z(y)))
       const lens = new THREE.Mesh(new THREE.CircleGeometry(0.07, 16), new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0x7fd6ff, emissiveIntensity: 1.6 }))
       lens.position.set(dir * 0.37, 5.1, Z(y)); lens.rotation.y = dir * Math.PI / 2; g.add(lens)
+      // 인식 중일 때 번호판 쪽으로 비추는 빛 (스캔 장면)
+      const bm = new THREE.MeshBasicMaterial({ color: 0xffb84d, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending })
+      const beam = new THREE.Mesh(new THREE.ConeGeometry(1.4, 4.4, 24, 1, true), bm)
+      beam.position.set(dir * 1.6, 3.0, Z(y)); beam.rotation.z = dir * (Math.PI / 2 - 0.55); g.add(beam)
+      return { beam, bm }
     })
     const t = tag(label, 'twin-tag twin-tag-gate'); t.position.set(0, 6.3, zc); g.add(t)
     g.position.set(x, 0, 0); world.add(g)
+    return beams
   }
-  ocrGantry(WALL_L - 0.6 - GATE_OFF - 8.2 - 2.1 - 1.2 - 1.4, 1, 'IN GATE · 번호판 OCR')
-  ocrGantry(WALL_R + 0.6 + GATE_OFF + 5.2 + 1.15 + 1.0 + 1.4, -1, 'OUT GATE · 번호판 OCR')
+  const gateBeams = [
+    ocrGantry(WALL_L - 0.6 - GATE_OFF - 8.2 - 2.1 - 1.2 - 1.4, 1, 'IN GATE · 번호판 OCR'),
+    ocrGantry(WALL_R + 0.6 + GATE_OFF + 5.2 + 1.15 + 1.0 + 1.4, -1, 'OUT GATE · 번호판 OCR'),
+  ]
   const KIND_KO = { CARGO: '화물차', COURIER: '택배차', UNKNOWN: '미등록' }
   const plateTags = [inTrucks, outTrucks].map((arr, side) => arr.map((t) => {
     const o = tag('', 'twin-tag twin-tag-plate'); o.position.set(side ? 3 : -6, side ? 4.2 : 5.0, 0); o.visible = false; t.add(o)
@@ -860,10 +868,13 @@ export function createAmrScene(container, sim, opts = {}) {
   }))
   function plateTagUpdate(d, i, side, tr, t) {
     const pt = plateTags[side][i], oc = d.ocr
+    const gb = gateBeams[side][i]
+    const scanning = oc && tr.visible && ((oc.st === 'scan' && d.state === 'arriving') || (oc.exit === 'scan' && d.state === 'leaving'))
+    gb.bm.opacity = scanning ? 0.16 + 0.12 * Math.abs(Math.sin(t * 9)) : 0
     if (!oc || !tr.visible) { pt.o.visible = false; return }
     if (d.state === 'docked') { if (pt.dockedAt < 0) pt.dockedAt = t } else pt.dockedAt = -1
     if (pt.oc !== oc) { pt.oc = oc; pt.changedAt = t } // 앱: 서버 결과가 새로 들어오면 잠깐 보여 준다
-    const showing = d.state !== 'docked' || t - pt.dockedAt < 6 || t - (pt.changedAt || -99) < 6
+    const showing = d.state !== 'docked' || t - pt.dockedAt < 10 || t - (pt.changedAt || -99) < 8
     pt.o.visible = showing
     // 번호판 텍스처를 인식 결과로 바꾼다
     const want = oc.plate ? fmtPlate(oc.plate) : ''
