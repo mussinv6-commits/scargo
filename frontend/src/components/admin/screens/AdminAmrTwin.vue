@@ -67,6 +67,16 @@
             <button type="button" data-view="overview" aria-pressed="false">전체 보기</button>
             <button type="button" data-view="follow" aria-pressed="false">선택 AMR 따라가기</button>
           </div>
+          <div class="twin-presets" aria-label="바로가기">
+            <button type="button" data-preset="overview">부지 전체</button>
+            <button type="button" data-preset="gateIn">입구 OCR</button>
+            <button type="button" data-preset="dockIn">입고 도크</button>
+            <button type="button" data-preset="rack">랙</button>
+            <button type="button" data-preset="dockOut">출고 도크</button>
+            <button type="button" data-preset="gateOut">출구 OCR</button>
+            <button type="button" data-preset="station">충전 · 정비</button>
+            <button type="button" id="tw-autoGate" aria-pressed="false" title="입구 · 출구에서 번호판 인식이 시작되면 그 게이트를 6초 보여 주고 돌아옵니다">게이트 자동</button>
+          </div>
           <div class="capbar">
             <p class="caption" id="tw-caption"></p>
             <div class="pipe" aria-label="데이터 흐름">
@@ -78,7 +88,7 @@
               <span class="node" data-k="5">재배분 · 정비</span>
             </div>
           </div>
-          <div class="twin-help">드래그 회전 · 휠 확대 · 우클릭 드래그 이동 · AMR/박스 클릭 선택</div>
+          <div class="twin-help">드래그 이동 · 우클릭 드래그 회전 · 휠 확대 · AMR/박스 클릭 선택</div>
         </div>
         <div class="legend">
           <span><i style="background:var(--hub0)"></i>인천 권역</span>

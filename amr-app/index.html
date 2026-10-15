@@ -22,11 +22,7 @@
             <div class="kpi"><b id="h-gate">0</b><span>입출차</span></div>
             <div class="kpi"><b class="good" id="h-block">0</b><span>차단</span></div>
           </div>
-          <div class="card alert" id="h-alert" hidden>
-            <div class="t"><i>!</i><span id="h-alert-t"></span></div>
-            <p id="h-alert-p"></p>
-            <div class="act"><button type="button" class="btn p" data-go-robot="2">상세 보기</button><button type="button" class="btn" data-go="3d">3D로 보기</button></div>
-          </div>
+          <div class="todo" id="h-todo"></div>
           <div class="card">
             <div class="row-sb"><span class="lbl">Recent · 최근 알림</span><button type="button" class="btn sm" data-go="alert">전체</button></div>
             <div class="recent" id="h-recent"></div>
@@ -76,6 +72,9 @@
             <button type="button" data-v="overview">전체 보기</button>
             <button type="button" data-v="cold">냉장 창고</button>
             <button type="button" data-v="auto">자동 연출</button>
+          </div>
+          <div class="chips pre" id="v-presets">
+            <button type="button" data-p="overview">부지</button><button type="button" data-p="gateIn">입구</button><button type="button" data-p="dockIn">입고</button><button type="button" data-p="rack">랙</button><button type="button" data-p="dockOut">출고</button><button type="button" data-p="gateOut">출구</button><button type="button" data-p="station">충전</button><button type="button" id="v-autogate" class="ag">게이트 자동</button>
           </div>
         </div>
         <div class="ov-side">

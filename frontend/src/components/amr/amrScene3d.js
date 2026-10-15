@@ -323,9 +323,19 @@ export function createAmrScene(container, sim, opts = {}) {
   controls.target.copy(HOME_TGT)
   controls.enableDamping = true
   controls.dampingFactor = 0.08
-  controls.maxPolarAngle = Math.PI * 0.47
+  // 26.10.15 지도 앱처럼: 한 손가락 · 왼쪽 드래그 = 이동, 두 손가락 · 오른쪽 드래그 = 회전, 핀치 · 휠 = 확대
+  controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE }
+  controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE }
+  controls.screenSpacePanning = false // 바닥을 따라 미끄러지듯 이동
+  controls.zoomToCursor = true
+  // 각도 제한: 기울기 30~65°, 좌우 회전은 기본 방향 ±45° (방향을 잃지 않게)
+  const HOME_AZ = Math.atan2(HOME_POS.x - HOME_TGT.x, HOME_POS.z - HOME_TGT.z)
+  controls.minPolarAngle = Math.PI / 6; controls.maxPolarAngle = Math.PI * 0.36
+  controls.minAzimuthAngle = HOME_AZ - Math.PI / 4; controls.maxAzimuthAngle = HOME_AZ + Math.PI / 4
   controls.minDistance = 6
-  controls.maxDistance = 95
+  controls.maxDistance = 80
+  // 이동 범위: 창고 + 바깥 마당 + 입구 · 출구 게이트까지 (그 밖 빈 바닥으로는 못 나감)
+  const SITE = { x0: -43, x1: 39, z0: -21, z1: 21 }
   let viewMode = 'auto'
   controls.addEventListener('start', () => { if (viewMode !== 'free') { viewMode = 'free'; opts.onViewChange && opts.onViewChange(viewMode) } })
 
@@ -334,7 +344,10 @@ export function createAmrScene(container, sim, opts = {}) {
   cam2.up.set(0, 0, -1); cam2.position.set(0, 90, 0); cam2.lookAt(0, 0, 0)
   const controls2 = new OrbitControls(cam2, renderer.domElement)
   controls2.enableRotate = false; controls2.screenSpacePanning = true; controls2.enableDamping = true; controls2.dampingFactor = 0.1
-  controls2.minZoom = 0.6; controls2.maxZoom = 6; controls2.enabled = false
+  controls2.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }
+  controls2.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN }
+  controls2.zoomToCursor = true
+  controls2.minZoom = 0.5; controls2.maxZoom = 6; controls2.enabled = false
   controls2.addEventListener('start', () => { if (viewMode !== 'free') { viewMode = 'free'; opts.onViewChange && opts.onViewChange(viewMode) } })
   let is2D = false
   const activeCam = () => (is2D ? cam2 : camera)
@@ -1365,7 +1378,43 @@ export function createAmrScene(container, sim, opts = {}) {
   /* ── 카메라 시점 ── */
   const camGoalPos = new THREE.Vector3().copy(HOME_POS), camGoalTgt = new THREE.Vector3().copy(HOME_TGT)
   let followIdx = 2
+  /* ── 바로가기 시점 (부지 전체 · 게이트 · 도크 · 랙 · 충전/정비) ── */
+  const GATE_IN_X = WALL_L - 0.6 - GATE_OFF - 8.2 - 2.1 - 1.2 - 1.4, GATE_OUT_X = WALL_R + 0.6 + GATE_OFF + 5.2 + 1.15 + 1.0 + 1.4
+  const PRESETS = {
+    overview: { tgt: [-2, 0, 0], off: [10, 44, 48], z2: 0.7 },
+    gateIn: { tgt: [GATE_IN_X + 5, 0, 0], off: [9, 19, 21], z2: 1.6 },
+    dockIn: { tgt: [WALL_L + 3, 0, 0], off: [9, 16, 18], z2: 1.9 },
+    rack: { tgt: [0, 0, -1], off: [7, 20, 22], z2: 1.5 },
+    dockOut: { tgt: [WALL_R - 2, 0, 0], off: [9, 16, 18], z2: 1.9 },
+    gateOut: { tgt: [GATE_OUT_X - 4, 0, 0], off: [9, 19, 21], z2: 1.6 },
+    station: { tgt: [X(430), 0, Z(590)], off: [6, 12, 14], z2: 2.4 },
+  }
+  let preset = null, autoGate = false, gateBack = null, gateUntil = 0, gateSeen = new WeakSet()
+  function setPreset(name) {
+    const p = PRESETS[name]; if (!p) return
+    preset = p; viewMode = 'preset'; opts.onViewChange && opts.onViewChange('preset:' + name)
+  }
+  function setAutoGate(on) { autoGate = !!on }
+  // 입구 · 출구에서 인식이 시작되면 그 게이트를 잠깐(6초) 보여 주고 원래 시점으로 돌아간다
+  function autoGateCheck(t) {
+    if (!autoGate) return
+    if (gateUntil && t > gateUntil) { gateUntil = 0; if (viewMode === 'preset' && gateBack) { if (gateBack.mode === 'preset') { preset = gateBack.preset; viewMode = 'preset' } else setView(gateBack.mode, gateBack.idx) } gateBack = null; return }
+    if (gateUntil || !['auto', 'overview', 'preset'].includes(viewMode)) return
+    const hit = [...S.inDocks.map((d) => [d, 'gateIn']), ...S.outDocks.map((d) => [d, 'gateOut'])].find(([d]) => d.ocr && d.ocr.st === 'scan' && !gateSeen.has(d.ocr))
+    if (!hit) return
+    gateSeen.add(hit[0].ocr)
+    gateBack = { mode: viewMode, idx: followIdx, preset }
+    preset = PRESETS[hit[1]]; viewMode = 'preset'; gateUntil = t + 6
+  }
+  // 이동 범위 제한 (목표점을 부지 안으로 · 카메라도 같은 만큼 옮겨 시야 유지)
+  const clampV = new THREE.Vector3()
+  function clampSite(ctl, cam) {
+    const tg = ctl.target
+    clampV.set(Math.min(SITE.x1, Math.max(SITE.x0, tg.x)) - tg.x, 0, Math.min(SITE.z1, Math.max(SITE.z0, tg.z)) - tg.z)
+    if (clampV.x || clampV.z) { tg.add(clampV); cam.position.add(clampV) }
+  }
   function setView(mode, idx) {
+    preset = null
     viewMode = mode
     if (idx != null) followIdx = idx
     opts.onViewChange && opts.onViewChange(viewMode)
@@ -1581,23 +1630,28 @@ export function createAmrScene(container, sim, opts = {}) {
     // 카메라
     if (viewMode !== 'free') {
       let follow = viewMode === 'follow' || (viewMode === 'auto' && ui.phase >= 2 && ui.phase <= 4)
+      if (viewMode === 'preset' && preset) follow = false
       const fi = viewMode === 'follow' ? followIdx : (S.sc.target == null ? 2 : S.sc.target)
       if (follow) {
         const a = S.amrs[fi], [x, z] = amrPos(a)
         camGoalTgt.set(x, 0.6, z)
         camGoalPos.set(x + 9, 11, z + 13)
+      } else if (viewMode === 'preset' && preset) {
+        camGoalTgt.set(...preset.tgt); camGoalPos.set(preset.tgt[0] + preset.off[0], preset.off[1], preset.tgt[2] + preset.off[2])
       } else { camGoalTgt.copy(HOME_TGT); camGoalPos.copy(HOME_POS) }
       const k = Math.min(1, dtReal * 1.6)
       if (is2D) {
-        tmpV.set(follow ? camGoalTgt.x : 0, 0, follow ? camGoalTgt.z : 0)
+        const pz = viewMode === 'preset' && preset
+        tmpV.set(follow || pz ? camGoalTgt.x : -2, 0, follow || pz ? camGoalTgt.z : 0)
         controls2.target.lerp(tmpV, k); cam2.position.set(controls2.target.x, 90, controls2.target.z)
-        const zGoal = follow ? 2.2 : 1; cam2.zoom += (zGoal - cam2.zoom) * k; cam2.updateProjectionMatrix()
+        const zGoal = follow ? 2.2 : pz ? preset.z2 : 0.7; cam2.zoom += (zGoal - cam2.zoom) * k; cam2.updateProjectionMatrix()
       } else {
         controls.target.lerp(camGoalTgt, k)
         camera.position.lerp(camGoalPos, k)
       }
     }
-    if (is2D) controls2.update(); else controls.update()
+    autoGateCheck(t)
+    if (is2D) { clampSite(controls2, cam2); controls2.update() } else { clampSite(controls, camera); controls.update() }
   }
 
   /* ── 화질: 'normal' 일반 / 'low' 저사양 (그림자 · 빛 번짐 · 먼지 · 냉기 끄고 해상도 1배) ── */
@@ -1615,7 +1669,7 @@ export function createAmrScene(container, sim, opts = {}) {
   function set2D(on) {
     is2D = !!on
     controls.enabled = !is2D; controls2.enabled = is2D
-    if (is2D) { controls2.target.set(0, 0, 0); cam2.position.set(0, 90, 0); cam2.zoom = 1 }
+    if (is2D) { controls2.target.set(-2, 0, 0); cam2.position.set(-2, 90, 0); cam2.zoom = 0.7 }
     resize()
   }
   const THEME_BG = { dark: 0x0b1016, light: 0xdfe6ec }
@@ -1686,5 +1740,5 @@ export function createAmrScene(container, sim, opts = {}) {
     labelRenderer.domElement.remove()
   }
 
-  return { update, render, setView, resize, dispose, setQuality, set2D, setTheme, get is2D() { return is2D }, get theme() { return theme }, get quality() { return quality }, camera, controls, renderer, world, toWorld: (x, y) => [X(x), Z(y)], get viewMode() { return viewMode } }
+  return { update, render, setView, setPreset, setAutoGate, get autoGate() { return autoGate }, resize, dispose, setQuality, set2D, setTheme, get is2D() { return is2D }, get theme() { return theme }, get quality() { return quality }, camera, controls, renderer, world, toWorld: (x, y) => [X(x), Z(y)], get viewMode() { return viewMode } }
 }

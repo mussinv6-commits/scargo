@@ -288,3 +288,9 @@
 .amr-twin .kpi-mini div{background:var(--panel2);border:1px solid var(--edge);border-radius:8px;padding:6px 8px}
 .amr-twin .kpi-mini b{display:block;font:800 1rem var(--font-data);color:var(--ink)}
 .amr-twin .kpi-mini span{font-size:.68rem;color:var(--muted)}
+
+/* 26.10.15 바로가기 시점 */
+.amr-twin .twin-presets{position:absolute;right:12px;top:44px;display:flex;gap:4px;z-index:3;flex-wrap:wrap;justify-content:flex-end;max-width:70%}
+.amr-twin .twin-presets button{background:rgba(var(--glass),.72);backdrop-filter:blur(6px);font-size:.7rem;padding:4px 9px;border-radius:999px}
+.amr-twin .twin-presets button[aria-pressed="true"]{background:var(--cyan);color:#081016;border-color:var(--cyan)}
+.amr-twin .twin-presets #tw-autoGate[aria-pressed="true"]{background:var(--amber);border-color:var(--amber);color:#0b0f14}

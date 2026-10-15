@@ -8,6 +8,7 @@
 import { createSim, HUBS, ZONES, STATE_KO, PHASE_T, CAPTIONS, COLORS, status, lvCol, tons, captionOf, fmtPlate } from './twin/amrSim.js'
 import { createAmrScene } from './twin/amrScene3d.js'
 import { amrApi } from './twin/amrApi.js'   // DB 연동: 웹 관제 화면과 같은 서버 · 같은 DB
+import { LocalNotifications } from '@capacitor/local-notifications' // 휴대폰 알림 (차단 · 정비)
 
 const $ = (id) => document.getElementById(id)
 const PH_COL = { 1: COLORS.cyan, 2: COLORS.amber, 3: COLORS.amber, 4: COLORS.red, 5: COLORS.green }
@@ -136,19 +137,8 @@ function renderHome() {
   const blk = kpiCache ? kpiCache.blocks : vehCache.filter((v) => v.decision === 'BLOCK').length
   const hb = $('h-block'); hb.textContent = blk; hb.className = blk ? 'crit' : 'good'
   const T = S.amrs[S.sc.target]
-  // 위험 알림 카드
-  const al = $('h-alert'), [lv] = status(T)
-  al.querySelector('[data-go-robot]').dataset.goRobot = S.sc.target
-  if (S.sc.phase === 2 && S.sc.rul != null && T.state !== 'maint') {
-    al.hidden = false; al.classList.add('amber')
-    $('h-alert-t').textContent = T.name + ' 진동 이상 · 남은 수명 약 ' + S.sc.rul + '시간'
-    $('h-alert-p').textContent = '정비 기준 ' + S.cfg.rulAt + '시간 이하가 되면 자동으로 정비를 예약하고 예비기 AMR-05를 투입합니다. 기준은 아래 "운영 기준"에서 바꿀 수 있습니다.'
-  } else if (lv === 'crit' || lv === 'warn') {
-    al.hidden = false; al.classList.toggle('amber', lv === 'warn')
-    if (T.state === 'maint') { $('h-alert-t').textContent = T.name + ' 정비 중 · 베어링 교체'; $('h-alert-p').textContent = '예비기 AMR-05가 작업을 대신하고 있어 권역 출고는 멈추지 않습니다.' }
-    else if (T.maintFlag) { $('h-alert-t').textContent = T.name + ' 고장 예측 · 약 ' + S.sc.rul + '시간'; $('h-alert-p').textContent = '구동모터 진동 ' + T.vib.toFixed(1) + ' mm/s, 상승 추세 · 누적 운반 ' + tons(T) + 't. 작업 마친 뒤 정비소 이동 · 예비기 AMR-05 투입' }
-    else { $('h-alert-t').textContent = T.name + ' 진동 이상 ' + T.vib.toFixed(1) + ' mm/s'; $('h-alert-p').textContent = '평소 범위(1.2~2.0)를 벗어났습니다. AI가 추세를 보고 고장 시점을 계산하는 중입니다.' }
-  } else al.hidden = true
+  // 지금 확인할 일 (조치가 필요한 것만 · 누르면 해당 화면으로)
+  renderTodo(T)
   // 최근 알림 3줄
   $('h-recent').innerHTML = events.slice(0, 3).map((e) => { const [, , col] = EV_STYLE[e.lv] || EV_STYLE['']; return `<div class="rc"><i style="background:${col}"></i><span>${e.text}</span><em>${clock(e.time)}</em></div>` }).join('') || '<div class="hint">알림이 없습니다</div>'
 }
@@ -426,7 +416,7 @@ async function pollRemote() {
     if (mm && mm.rulHours) S.sc.rul = Math.round(mm.rulHours)   // 남은 수명은 웹(현장)이 계산해 DB에 남긴 값으로 맞춘다
     if (st.settings && Date.now() - cfgLocalT > 3000) sim.setCfg({ rulAt: st.settings.rulThresholdHours, chargeAt: st.settings.chargeAtPct })
     sim.follow({ pending: !!st.pending, approved: !!(act && act.approvedAt), approvedBy: act && act.approvedBy, code: (st.pending || act || {}).robotCode })
-    if (act && act.approvedAt && act.id !== lastApprover) { lastApprover = act.id; toast(act.robotCode + ' 자동 정비 예약 · 예비기 투입 (웹 관제)', 'amber') }
+    if (act && act.approvedAt && act.id !== lastApprover) { lastApprover = act.id; toast(act.robotCode + ' 자동 정비 예약 · 예비기 투입 (웹 관제)', 'amber'); phoneNotify(act.robotCode + ' 자동 정비 예약', '예비기 AMR-05 투입 · 남은 수명 약 ' + Math.round(act.rulHours || 0) + '시간') }
     const a = S.amrs[selected]
     if (tab === 'robot') {
       const h = await amrApi.history(a.name, 5)
@@ -452,7 +442,7 @@ function applyVehicles(list) {
     const d = (out ? S.outDocks : S.inDocks)[v.dock]; if (!d) return
     if (v.direction === 'EXIT') d.ocr = { st: 'ok', plate: v.plate, photo: v.photoPlate, conf: v.confidence, kind: v.kind, exit: null }
     else d.ocr = { st: v.decision === 'BLOCK' ? 'block' : 'ok', plate: v.plate, photo: v.photoPlate, conf: v.confidence, kind: v.kind, exit: null }
-    if (v.decision === 'BLOCK' && !first) toast('미등록 차량 차단 · ' + (fmtPlate(v.plate) || '판독 불가'), '')
+    if (v.decision === 'BLOCK' && !first) { toast('미등록 차량 차단 · ' + (fmtPlate(v.plate) || '판독 불가'), ''); phoneNotify('미등록 차량 진입 차단', (fmtPlate(v.plate) || '판독 불가') + ' · ' + (v.lane === 'OUT' ? '출고' : '입고') + ' 게이트') }
   })
   lastVehicleId = Math.max(lastVehicleId, ...list.map((v) => v.id))
   vehCache = list
@@ -487,6 +477,51 @@ $('c-seg').addEventListener('click', (e) => {
   $('c-seg').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b))
   $('c-gate').hidden = b.dataset.s !== 'gate'; $('c-box').hidden = b.dataset.s !== 'box'
 })
+
+/* ── 지금 확인할 일: 차단 차량 · 정비 · 배터리 부족 ── */
+const ackBlock = new Set()
+function renderTodo(T) {
+  const items = []
+  vehCache.filter((v) => v.decision === 'BLOCK' && !ackBlock.has(v.id) && v.createdAt && Date.now() - new Date(v.createdAt).getTime() < 15 * 60 * 1000).slice(0, 2).forEach((v) =>
+    items.push({ lv: 'r', title: '미등록 차량 진입 차단', body: `<span class="vp">${fmtPlate(v.plate) || '판독 불가'}</span> ${v.lane === 'OUT' ? '출고' : '입고'} D${v.dock + (v.lane === 'OUT' ? 4 : 1)} · ${clock(new Date(v.createdAt))}`, go: 'gate', id: v.id, btn: '기록 보기' }))
+  const [lv] = status(T)
+  if (T.state === 'maint') items.push({ lv: 'a', title: T.name + ' 정비 중 · 베어링 교체', body: '예비기 AMR-05 가 작업을 대신하는 중', robot: S.sc.target, btn: '로봇 보기' })
+  else if (T.maintFlag) items.push({ lv: 'a', title: T.name + ' 자동 정비 예약됨', body: '남은 수명 약 ' + S.sc.rul + '시간 · 기준 ' + S.cfg.rulAt + '시간 · 예비기 투입', robot: S.sc.target, btn: '로봇 보기' })
+  else if (S.sc.phase === 2 && S.sc.rul != null) items.push({ lv: 'a', title: T.name + ' 진동 이상 · 남은 수명 약 ' + S.sc.rul + '시간', body: '정비 기준 ' + S.cfg.rulAt + '시간 이하가 되면 자동 정비', robot: S.sc.target, btn: '로봇 보기' })
+  else if (lv === 'warn' || lv === 'crit') items.push({ lv: 'a', title: T.name + ' 진동 ' + T.vib.toFixed(1) + ' mm/s', body: 'AI 가 추세를 계산하는 중', robot: S.sc.target, btn: '로봇 보기' })
+  S.amrs.forEach((a, i) => { if (a.kind !== 'fl' && a.role === 'active' && a.batt < Math.min(25, S.cfg.chargeAt) && a.state !== 'charge') items.push({ lv: 'a', title: a.name + ' 배터리 ' + Math.round(a.batt) + '%', body: '작업이 끝나면 충전소로 이동', robot: i, btn: '로봇 보기' }) })
+  const el = $('h-todo')
+  if (!items.length) { el.innerHTML = '<div class="todo-ok"><i></i>지금 확인할 일이 없습니다</div>'; return }
+  el.innerHTML = `<div class="lbl" style="margin:0 2px 6px">지금 확인할 일 · ${items.length}</div>` + items.slice(0, 3).map((it) => `<div class="tcard ${it.lv}"><div><b>${it.title}</b><p>${it.body}</p></div><button type="button" class="btn sm" ${it.go ? `data-todo-gate="${it.id}"` : `data-go-robot="${it.robot}"`}>${it.btn}</button></div>`).join('')
+}
+$('h-todo').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-todo-gate]'); if (!b) return
+  ackBlock.add(+b.dataset.todoGate)
+  setTab('cargo'); vFilter = 'BLOCK'; $('v-filter').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x.dataset.f === 'BLOCK')); renderVehicles()
+})
+
+/* ── 3D 바로가기 시점 · 게이트 자동 따라가기 ── */
+$('v-presets').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b || !scene) return
+  if (b.id === 'v-autogate') { scene.setAutoGate(!scene.autoGate); b.classList.toggle('on', scene.autoGate); store.set('amr_app_autogate', scene.autoGate ? '1' : '0'); toast(scene.autoGate ? '게이트 자동: 번호판 인식이 시작되면 그 게이트를 6초 보여 줍니다' : '게이트 자동 끔', 'ok'); return }
+  scene.setPreset(b.dataset.p); coldView = ''
+  $('v-presets').querySelectorAll('button[data-p]').forEach((x) => x.classList.toggle('on', x === b))
+  document.querySelectorAll('#v-chips button').forEach((x) => x.classList.remove('on'))
+})
+if (scene && store.get('amr_app_autogate') === '1') { scene.setAutoGate(true); $('v-autogate').classList.add('on') }
+
+/* ── 휴대폰 알림 (차단 차량 · 정비 예약만) ── */
+let notifyOk = false, notifySeq = 1
+;(async () => {
+  try {
+    const st = await LocalNotifications.checkPermissions()
+    notifyOk = st.display === 'granted' || (await LocalNotifications.requestPermissions()).display === 'granted'
+  } catch { notifyOk = false }
+})()
+function phoneNotify(title, body) {
+  if (!notifyOk) return
+  try { LocalNotifications.schedule({ notifications: [{ id: notifySeq++, title, body }] }) } catch { /* 무시 */ }
+}
 
 /* ── 통계 탭: DB 집계 KPI (10초마다 · 통계 탭을 열면 바로) ── */
 async function pollKpi() {

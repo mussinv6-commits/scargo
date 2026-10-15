@@ -264,7 +264,7 @@ export function mountAmrTwin(root) {
   /* ── 3D 씬 ── */
   const viewport = $('viewport')
   const viewBtns = root.querySelectorAll('[data-view]')
-  const syncViewBtns = (mode) => viewBtns.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.view === mode)))
+  const syncViewBtns = (mode) => { viewBtns.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.view === mode))); if (!String(mode).startsWith('preset')) root.querySelectorAll('[data-preset]').forEach((x) => x.setAttribute('aria-pressed', 'false')) }
   try {
     scene = createAmrScene(viewport, sim, {
       onPick: (hit) => {
@@ -279,6 +279,11 @@ export function mountAmrTwin(root) {
     viewport.appendChild(fb)
   }
   viewBtns.forEach((b) => b.addEventListener('click', () => { if (scene) scene.setView(b.dataset.view, selected) }))
+  // 바로가기 시점 · 게이트 자동 따라가기
+  const presetBtns = root.querySelectorAll('[data-preset]')
+  presetBtns.forEach((b) => b.addEventListener('click', () => { if (!scene) return; scene.setPreset(b.dataset.preset); presetBtns.forEach((x) => x.setAttribute('aria-pressed', String(x === b))) }))
+  const agBtn = $('autoGate')
+  if (agBtn) agBtn.addEventListener('click', () => { if (!scene) return; scene.setAutoGate(!scene.autoGate); agBtn.setAttribute('aria-pressed', String(scene.autoGate)) })
 
   /* ── 음향 ── */
   const SOUND_KEY = 'scargo_twin_sound'
