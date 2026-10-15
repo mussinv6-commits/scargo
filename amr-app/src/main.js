@@ -1,7 +1,8 @@
 // ─────────────────────────────────────────────────────────────
 // S카고 AMR 관제 앱 (관리자용 · 로그인 없음)
 // 웹 관제 화면과 같은 시뮬레이션 · 3D 모듈을 휴대폰 화면 5탭으로 보여준다.
-//   홈 · 로봇(예지보전) · 3D · 화물 · 알림
+//   홈(요약) · 통계(KPI) · 3D · 물류(입출차 · 상자) · 로봇(예지보전)   + 🔔 알림 · ⚙ 설정
+// 26.10.15 관리자가 보기 편하게 정리: 홈은 한 화면 요약만, 자세한 건 각 탭으로
 // 서버가 없으면 앱만으로 돌아가고, 서버(DB)에 연결되면 웹 관제 화면과 상태 · 정비 승인을 함께 쓴다.
 // ─────────────────────────────────────────────────────────────
 import { createSim, HUBS, ZONES, STATE_KO, PHASE_T, CAPTIONS, COLORS, status, lvCol, tons, captionOf, fmtPlate } from './twin/amrSim.js'
@@ -18,6 +19,7 @@ const store = { get(k) { try { return localStorage.getItem(k) } catch { return n
 
 /* ── 상태 ── */
 let tab = 'home', selected = 2, speed = 1, playing = true, cargoFilter = 'all', alertFilter = 'all'
+let kpiCache = null, vehCache = [], vFilter = 'all', vPick = null // 통계(KPI) · 입출차 기록 (DB)
 const events = [] // { time, text, lv, cat, read }
 const phaseAt = {} // 단계별 시작 시각(실제 시계)
 let lastLogKey = ''
@@ -100,6 +102,7 @@ function setTab(t) {
   document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('on', b.dataset.tab === t))
   placeHost()
   if (t === 'alert') { events.forEach((e) => (e.read = true)); renderBadge() }
+  if (t === 'stats') pollKpi()
   renderAll()
 }
 document.querySelectorAll('.tab').forEach((b) => b.addEventListener('click', () => setTab(b.dataset.tab)))
@@ -127,9 +130,12 @@ function renderHome() {
   $('h-cap').textContent = captionOf(S)
   const amrs = S.amrs.filter((a) => a.kind !== 'fl')
   $('h-act').textContent = amrs.filter((a) => a.role === 'active' && !a.maintFlag && a.state !== 'maint').length + '/' + amrs.length
-  $('h-thru').textContent = S.thru
-  const T = S.amrs[S.sc.target], maintN = S.amrs.filter((a) => a.maintFlag || a.state === 'maint').length
-  const hm = $('h-maint'); hm.textContent = maintN; hm.className = maintN ? 'crit' : ''
+  // 오늘 처리 · 입출차 · 차단: DB 집계(KPI)가 있으면 그 값, 없으면 이 휴대폰 시뮬레이션 값
+  $('h-thru').textContent = kpiCache ? kpiCache.today : S.thru
+  $('h-gate').textContent = kpiCache ? kpiCache.entries + kpiCache.exits : vehCache.length
+  const blk = kpiCache ? kpiCache.blocks : vehCache.filter((v) => v.decision === 'BLOCK').length
+  const hb = $('h-block'); hb.textContent = blk; hb.className = blk ? 'crit' : 'good'
+  const T = S.amrs[S.sc.target]
   // 위험 알림 카드
   const al = $('h-alert'), [lv] = status(T)
   al.querySelector('[data-go-robot]').dataset.goRobot = S.sc.target
@@ -143,6 +149,10 @@ function renderHome() {
     else if (T.maintFlag) { $('h-alert-t').textContent = T.name + ' 고장 예측 · 약 ' + S.sc.rul + '시간'; $('h-alert-p').textContent = '구동모터 진동 ' + T.vib.toFixed(1) + ' mm/s, 상승 추세 · 누적 운반 ' + tons(T) + 't. 작업 마친 뒤 정비소 이동 · 예비기 AMR-05 투입' }
     else { $('h-alert-t').textContent = T.name + ' 진동 이상 ' + T.vib.toFixed(1) + ' mm/s'; $('h-alert-p').textContent = '평소 범위(1.2~2.0)를 벗어났습니다. AI가 추세를 보고 고장 시점을 계산하는 중입니다.' }
   } else al.hidden = true
+  // 최근 알림 3줄
+  $('h-recent').innerHTML = events.slice(0, 3).map((e) => { const [, , col] = EV_STYLE[e.lv] || EV_STYLE['']; return `<div class="rc"><i style="background:${col}"></i><span>${e.text}</span><em>${clock(e.time)}</em></div>` }).join('') || '<div class="hint">알림이 없습니다</div>'
+}
+function renderFleet() {
   $('h-fleet').innerHTML = S.amrs.map((a, i) => {
     const [l, t] = status(a), c = a.kind === 'fl' ? 'var(--yel)' : cssLv(l)
     return `<button type="button" class="fr ${l === 'crit' ? 'crit' : ''}" data-go-robot="${i}"><span class="d" style="background:${c};box-shadow:0 0 8px ${c}"></span><span class="n">${a.name}</span><span class="s" style="${l === 'crit' ? 'color:var(--red)' : ''}">${l === 'crit' ? t : robotStateText(a)}</span><span class="bar"><i style="width:${Math.round(a.health)}%;background:${c}"></i></span><span class="h" style="color:${l === 'crit' ? 'var(--red)' : 'var(--ink)'}">${Math.round(a.health)}</span></button>`
@@ -230,6 +240,7 @@ function renderRobot() {
   setMet($('r-state'), a.kind === 'fl' ? (STATE_KO[a.state] || a.state) : a.role === 'spare' && a.state === 'idle' ? '예비' : STATE_KO[a.state], '')
   renderTimeline(a)
   drawChart()
+  renderFleet()
 }
 function renderTimeline(a) {
   const card = $('r-maint-card')
@@ -352,6 +363,7 @@ function renderAll() {
   if (tab === 'robot') renderRobot()
   if (tab === 'cargo') renderCargo()
   if (tab === 'alert') renderAlerts()
+  if (tab === 'settings') renderDb()
 }
 let last = performance.now(), acc = 0
 function frame(now) {
@@ -443,16 +455,67 @@ function applyVehicles(list) {
     if (v.decision === 'BLOCK' && !first) toast('미등록 차량 차단 · ' + (fmtPlate(v.plate) || '판독 불가'), '')
   })
   lastVehicleId = Math.max(lastVehicleId, ...list.map((v) => v.id))
-  const el = $('v-list'); if (!el) return
-  el.innerHTML = list.slice(0, 5).map((v) => {
-    const [dl, c] = VDEC[v.decision] || [v.decision, 'a']
-    return `<li><b class="vp">${fmtPlate(v.plate) || '판독불가'}</b><span>${VKIND[v.kind] || ''}${v.confidence != null ? ' · ' + v.confidence + '%' : ''}</span><i class="vd ${c}">${v.direction === 'EXIT' ? '출차' : dl}</i></li>`
-  }).join('')
+  vehCache = list
+  renderVehicles()
 }
+// 물류 탭 · 입출차 목록 (필터 · 누르면 인식 사진)
+function photoUrl(u) {
+  // OCR 서버가 준 주소(localhost:8001)는 휴대폰에서 안 열리므로 노트북 주소로 바꾼다
+  try { const x = new URL(u), b = new URL(amrApi.base); x.hostname = b.hostname; return x.href } catch { return u }
+}
+function renderVehicles() {
+  const el = $('v-list'); if (!el) return
+  const list = vehCache.filter((v) => vFilter === 'all' || (vFilter === 'BLOCK' ? v.decision === 'BLOCK' : v.direction === vFilter && v.decision !== 'BLOCK'))
+  el.innerHTML = list.length ? list.map((v) => {
+    const [dl, c] = VDEC[v.decision] || [v.decision, 'a']
+    const t = v.createdAt ? clock(new Date(v.createdAt)) : ''
+    const to = v.decision === 'BLOCK' ? '미등록 · 진입 차단' : v.direction === 'EXIT' ? (VKIND[v.kind] || '') + (v.destHub ? ' · ' + v.destHub + '행' : '') + (v.boxCount ? ' ' + v.boxCount + '건' : '') : (VKIND[v.kind] || '') + ' → ' + (v.lane === 'OUT' ? '출고 D' + (v.dock + 4) : '입고 D' + (v.dock + 1))
+    return `<li data-id="${v.id}" class="${vPick === v.id ? 'on' : ''}"><b class="vp">${fmtPlate(v.plate) || '판독불가'}</b><span><strong>${to}</strong>${t}${v.confidence != null ? ' · 인식 ' + v.confidence + '%' : ''}</span><i class="vd ${c}">${v.direction === 'EXIT' ? (v.decision === 'EXIT_OK' ? '출차' : dl) : dl}</i></li>`
+  }).join('') : '<li><span>해당 기록이 없습니다</span></li>'
+}
+$('v-filter').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; vFilter = b.dataset.f; $('v-filter').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b)); renderVehicles() })
+$('v-list').addEventListener('click', (e) => {
+  const li = e.target.closest('li[data-id]'); if (!li) return
+  const v = vehCache.find((x) => String(x.id) === li.dataset.id); if (!v) return
+  vPick = v.id
+  const ph = $('v-photo')
+  if (v.imageUrl) { $('v-img').src = photoUrl(v.imageUrl); $('v-cap').textContent = '사진 ' + (fmtPlate(v.photoPlate) || '') + ' → 인식 ' + (fmtPlate(v.plate) || '판독 불가'); ph.hidden = false } else ph.hidden = true
+  renderVehicles()
+})
+$('c-seg').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return
+  $('c-seg').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b))
+  $('c-gate').hidden = b.dataset.s !== 'gate'; $('c-box').hidden = b.dataset.s !== 'box'
+})
+
+/* ── 통계 탭: DB 집계 KPI (10초마다 · 통계 탭을 열면 바로) ── */
+async function pollKpi() {
+  const k = await amrApi.kpi(); if (!k) { if (tab === 'stats') $('k-note').textContent = '서버(DB)에 연결되면 오늘 지표가 나옵니다 · ⚙ 설정에서 노트북 주소 확인'; return }
+  kpiCache = k
+  if (tab === 'stats') renderStats()
+}
+function renderStats() {
+  const k = kpiCache; if (!k) return
+  $('k-today').textContent = k.today
+  const d = $('k-delta')
+  if (k.yesterdaySameTime > 0) { const pct = Math.round((k.today / k.yesterdaySameTime - 1) * 100); d.textContent = (pct >= 0 ? '▲ ' : '▼ ') + Math.abs(pct) + '% 어제 대비'; d.className = pct >= 0 ? 'up' : 'down' } else { d.textContent = ''; d.className = '' }
+  const mx = Math.max(1, ...k.hourly.map((h) => h.count))
+  $('k-bars').innerHTML = k.hourly.map((h, i) => `<div><i class="${i === k.hourly.length - 1 ? 'now' : ''}" style="height:${Math.max(4, (h.count / mx) * 100)}%"></i><span>${i === 0 || i === 5 || i === k.hourly.length - 1 ? (i === k.hourly.length - 1 ? '지금' : h.hour) : ''}</span></div>`).join('')
+  $('k-util').innerHTML = k.utilization.map((u) => `<div><span>${u.code}</span><i><em style="width:${u.pct}%;background:${u.code.startsWith('FL') ? 'var(--yel)' : u.pct < 70 ? 'var(--amber)' : 'var(--cyan)'}"></em></i><b>${u.pct}%</b></div>`).join('') || '<div class="hint">최근 1시간 센서 기록이 쌓이면 나옵니다</div>'
+  $('k-dur').textContent = k.avgTransportSec != null ? k.avgTransportSec + '초' : '-'
+  $('k-wait').textContent = (k.avgInterWaitSec != null ? k.avgInterWaitSec : 0) + '초'
+  $('k-gate').textContent = (k.entries + k.exits) + ' / ' + k.blocks
+  $('k-ocr').textContent = k.avgOcrConfidence != null ? k.avgOcrConfidence + '%' : '-'
+  const t = new Date(k.at); $('k-at').textContent = clock(t) + ' 기준'
+  $('k-note').textContent = '교차로 대기 ' + k.interWaits + '회 · 웹 관제 화면이 켜져 있는 동안 기록이 쌓입니다'
+}
+setInterval(pollKpi, 10000); setTimeout(pollKpi, 1200)
 
 /* ── 관리자 운영 기준 (정비 · 충전): 앱에서 바꾸면 DB → 웹 관제 3D 로봇이 바로 그 기준으로 움직인다 ── */
 let cfgTimer = 0, cfgLocalT = 0
+$('cfg-toggle').addEventListener('click', () => { const b = $('cfg-body'); b.hidden = !b.hidden; $('cfg-toggle').textContent = b.hidden ? '변경' : '닫기' })
 function renderCfg() {
+  $('cfg-sum-rul').textContent = S.cfg.rulAt; $('cfg-sum-chg').textContent = S.cfg.chargeAt
   $('cfg-rul').textContent = S.cfg.rulAt
   $('cfg-chg').textContent = S.cfg.chargeAt
   const st = remote && remote.settings
@@ -487,4 +550,4 @@ $('db-save').addEventListener('click', async () => {
   toast('서버 주소 저장: ' + amrApi.base, 'ok')
   await pollRemote()
 })
-$('db-chip').addEventListener('click', () => { setTab('home'); const c = $('db-card'); if (c) c.scrollIntoView({ behavior: 'smooth', block: 'center' }) })
+$('db-chip').addEventListener('click', () => setTab('settings'))

@@ -3,6 +3,7 @@ package com.scargo.amr.controller;
 import com.scargo.amr.dto.AmrDtos.*;
 import com.scargo.amr.service.AmrService;
 import com.scargo.amr.service.HubVehicleService;
+import com.scargo.amr.service.AmrKpiService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -20,6 +21,7 @@ public class AmrController {
 
     private final AmrService service;
     private final HubVehicleService vehicles;
+    private final AmrKpiService kpi;
 
     @GetMapping("/health")
     public Map<String, Object> health() { return Map.of("ok", true); }
@@ -70,4 +72,11 @@ public class AmrController {
 
     @GetMapping("/vehicles/registry")
     public List<RegistryView> registry() { return vehicles.registry(); }
+
+    // ── 26.10.15 KPI ──
+    @PostMapping("/tasks")
+    public Map<String, Object> task(@RequestBody TaskRequest req) { return kpi.saveTask(req); }
+
+    @GetMapping("/kpi")
+    public KpiView kpi() { return kpi.kpi(); }
 }

@@ -68,4 +68,10 @@ export const amrApi = {
     } catch (e) { return { error: '서버 연결 실패' } } finally { clearTimeout(t) }
   },
   vehicles(limit = 20) { return req('GET', '/api/amr/vehicles?limit=' + limit) },
+  // 26.10.15 KPI: 운반 1건 기록 · 오늘 지표
+  task(p) {
+    return req('POST', '/api/amr/tasks', { code: p.code, taskType: p.taskType, waybillNo: p.waybillNo, barcode: p.barcode, hub: p.hub, handleType: p.handleType,
+      weightKg: p.weightKg, fromLoc: p.fromLoc, toLoc: p.toLoc, interWaitSec: p.interWaitSec, startedAt: p.startedAt, finishedAt: p.finishedAt })
+  },
+  kpi() { return req('GET', '/api/amr/kpi', null, 5000) },
 }

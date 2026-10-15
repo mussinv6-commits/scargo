@@ -92,6 +92,18 @@
         </div>
       </div>
       <div class="panel side side-r">
+        <div class="card kpi-card">
+          <div class="grouphead"><span class="gtitle">KPI · 오늘 (DB)</span><span class="gmeta" id="tw-kpiAt">서버 연결 시 표시</span></div>
+          <div class="kpi-big"><b id="tw-kpiToday">-</b><span>건 처리</span><em id="tw-kpiDelta"></em></div>
+          <div class="kpi-bars" id="tw-kpiBars"></div>
+          <div class="kpi-util" id="tw-kpiUtil"></div>
+          <div class="kpi-mini">
+            <div><b id="tw-kpiDur">-</b><span>평균 운반</span></div>
+            <div><b id="tw-kpiWait">-</b><span>교차로 대기</span></div>
+            <div><b id="tw-kpiGate">-</b><span>입출차 / 차단</span></div>
+            <div><b id="tw-kpiOcr">-</b><span>OCR 신뢰도</span></div>
+          </div>
+        </div>
         <div class="card">
           <div class="grouphead"><span class="gtitle">화물 처리</span><span class="gmeta">처리 <b id="tw-kThru">0</b>건</span></div>
           <div class="hubcount" id="tw-hubcount"></div>

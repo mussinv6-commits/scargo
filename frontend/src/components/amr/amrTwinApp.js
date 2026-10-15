@@ -55,6 +55,7 @@ export function mountAmrTwin(root) {
   }
   function onSimEvent(type, p) {
     if (type === 'vehicle') { onVehicle(p); return }
+    if (type === 'move') { amrApi.task(p); return }
     if (type === 'charge') { amrApi.event(p.code, 'INFO', S.sc.phase, p.code + ' 배터리 ' + Math.round(p.battery) + '% · 기준 ' + S.cfg.chargeAt + '% 이하 → 충전소 이동'); return }
     if (type !== 'maint') return
     if (p.eventType === 'WARN') amrApi.event(p.code, 'WARN', 2, p.code + ' 진동 이상 감지 · ' + (p.vibration || 0).toFixed(1) + ' mm/s')
@@ -149,6 +150,22 @@ export function mountAmrTwin(root) {
       return `<li><span class="sid">${fmtPlate(v.plate) || '판독불가'}</span><span class="sd">${KIND[v.kind] || ''}${v.confidence != null ? ' · ' + v.confidence + '%' : ''}${v.boxCount ? ' · ' + v.boxCount + '건' : ''}</span><span class="hubchip" style="background:${col}">${dl}</span></li>`
     }).join('')
   }
+  // KPI · 오늘 (DB 집계, 10초마다)
+  async function pollKpi() {
+    const k = await amrApi.kpi(); if (!k || destroyed) return
+    $('kpiToday').textContent = k.today
+    const d = $('kpiDelta')
+    if (k.yesterdaySameTime > 0) { const pct = Math.round((k.today / k.yesterdaySameTime - 1) * 100); d.textContent = (pct >= 0 ? '▲ ' : '▼ ') + Math.abs(pct) + '% 어제 이 시간 대비'; d.style.color = pct >= 0 ? '#4fdc8a' : '#ff5a5f' } else d.textContent = ''
+    const mx = Math.max(1, ...k.hourly.map((h) => h.count))
+    $('kpiBars').innerHTML = k.hourly.map((h, i) => `<div title="${h.hour} · ${h.count}건"><i style="height:${Math.max(4, (h.count / mx) * 100)}%;${i === k.hourly.length - 1 ? 'background:var(--cyan)' : ''}"></i><span>${i % 3 === 0 || i === k.hourly.length - 1 ? h.hour : ''}</span></div>`).join('')
+    $('kpiUtil').innerHTML = k.utilization.map((u) => `<div><span>${u.code}</span><i><em style="width:${u.pct}%;background:${u.code.startsWith('FL') ? '#f2b705' : u.pct < 70 ? 'var(--amber)' : 'var(--cyan)'}"></em></i><b>${u.pct}%</b></div>`).join('') || '<div class="hint">최근 1시간 센서 기록이 쌓이면 가동률이 나옵니다</div>'
+    $('kpiDur').textContent = k.avgTransportSec != null ? k.avgTransportSec + '초' : '-'
+    $('kpiWait').textContent = k.avgInterWaitSec != null ? k.avgInterWaitSec + '초' : '0초'
+    $('kpiGate').textContent = (k.entries + k.exits) + ' / ' + k.blocks
+    $('kpiOcr').textContent = k.avgOcrConfidence != null ? k.avgOcrConfidence + '%' : '-'
+    const t = new Date(k.at); $('kpiAt').textContent = String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0') + ':' + String(t.getSeconds()).padStart(2, '0') + ' 기준'
+  }
+  const kpiTimer = setInterval(pollKpi, 10000); setTimeout(pollKpi, 1500)
   function renderScans() {
     if (S.scanVer === lastScanVer) return
     lastScanVer = S.scanVer
@@ -431,7 +448,7 @@ export function mountAmrTwin(root) {
     destroy() {
       destroyed = true
       offDb()
-      clearInterval(dbTimer)
+      clearInterval(dbTimer); clearInterval(kpiTimer)
       cancelAnimationFrame(raf)
       clearTimeout(bannerTimer)
       chartRO.disconnect()

@@ -56,4 +56,22 @@ export const amrApi = {
   saveSettings(rulThresholdHours, chargeAtPct, by) { return req('PUT', '/api/amr/settings', { rulThresholdHours, chargeAtPct, by }) },
   history(code, minutes = 5) { return req('GET', '/api/amr/robots/' + encodeURIComponent(code) + '/telemetry?minutes=' + minutes) },
   maintenanceList(limit = 10) { return req('GET', '/api/amr/maintenance?limit=' + limit) },
+  // 26.10.15 입구 · 출구 번호판 OCR: 서버가 gate_api.py(YOLO + CRNN)를 불러 인식하고 DB로 차종 판정
+  //  인식에 몇 초 걸릴 수 있어 따로 기다리고, OCR 서버만 꺼져 있어도 DB 연결 표시는 바꾸지 않는다
+  async vehicleScan(body) {
+    const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 25000)
+    try {
+      const r = await fetch(base + '/api/amr/vehicles/scan', { method: 'POST', signal: ctl.signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      const txt = await r.text(); let j = null; try { j = txt ? JSON.parse(txt) : null } catch { /* 무시 */ }
+      if (!r.ok) return { error: (j && (j.message || j.error)) || 'HTTP ' + r.status, status: r.status }
+      setOnline(true); return { data: j }
+    } catch (e) { return { error: '서버 연결 실패' } } finally { clearTimeout(t) }
+  },
+  vehicles(limit = 20) { return req('GET', '/api/amr/vehicles?limit=' + limit) },
+  // 26.10.15 KPI: 운반 1건 기록 · 오늘 지표
+  task(p) {
+    return req('POST', '/api/amr/tasks', { code: p.code, taskType: p.taskType, waybillNo: p.waybillNo, barcode: p.barcode, hub: p.hub, handleType: p.handleType,
+      weightKg: p.weightKg, fromLoc: p.fromLoc, toLoc: p.toLoc, interWaitSec: p.interWaitSec, startedAt: p.startedAt, finishedAt: p.finishedAt })
+  },
+  kpi() { return req('GET', '/api/amr/kpi', null, 5000) },
 }

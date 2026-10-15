@@ -69,6 +69,10 @@ export function ean13Bits(code) {
 // 번호판 표시: 서울85자6013 → 서울 85자 6013
 export const fmtPlate = (p) => (p ? String(p).replace(/\s/g, '').replace(/^(\D*)(\d{2,3})(\D)(\d{4})$/, (m, a, b, c, d) => (a ? a + ' ' : '') + b + c + ' ' + d) : '')
 
+// 교차로: 통로(가로) × 간선(세로)이 만나는 10곳 — 한 번에 한 대만 지나간다 (예약)
+export const INTER_NODES = [HXL, HXR].flatMap((x) => AISLES.map((y) => ({ x, y, key: x + ':' + y })))
+export const INTER_R = 14 // 교차로 칸 반지름 (px, 0.7m)
+
 export const zoneRow = (c) => (c.handle === '냉장' ? COLD_ROW : c.hub + 1)
 export const tons = (a) => (a.cumKg / 1000).toFixed(2)
 
@@ -152,6 +156,8 @@ export function createSim(hooks = {}) {
       v: 0, blocked: 0, dirx: 0, diry: -1, pktAcc: 0.4, cumKg: 5300, vib: 1.1, temp: 41, batt: 82, health: 97, hist: [], maintFlag: false, release: false, deg: 0, ph: 1,
       forkH: 0, reach: 0, fw: null, fx: 0, fy: 0,
     })
+    S.inter = {}; INTER_NODES.forEach((n) => (S.inter[n.key] = { owner: 0, waiters: 0 }))
+    S.istats = { n: 0, total: 0, max: 0 }
     S.cfg = S.cfg || { rulAt: 24, chargeAt: 30, chargeTo: 90 }   // 관리자 운영 기준 (앱 · 웹에서 바꾸면 DB로 공유)
     S.sc = { phase: 1, t: 0, start: 0, degrading: false, rul: null, slope: 0, await: false, awaitT: 0, approvedBy: null, target: 2 }
     addLog('관제 시작 · AMR 4대 가동, 1대 예비 · 무인 지게차 1대', '')
@@ -213,7 +219,7 @@ export function createSim(hooks = {}) {
     const t = a.task, c = t.box
     if (t.type === 'in') { t.dock.cargo.splice(t.dock.cargo.indexOf(c), 1); S.scans.unshift({ t: S.simT, c }); S.scans = S.scans.slice(0, 4); S.scanVer++ }
     else { const s = slotAt(t.slot); s.st = 0; s.box = null }
-    c.loc = { type: 'amr', a }; a.box = c; a.lastBox = c; a.pickedAt = new Date().toISOString()
+    c.loc = { type: 'amr', a }; a.box = c; a.lastBox = c; a.pickedAt = new Date().toISOString(); a.taskWait = 0
   }
   function doDrop(a) {
     const t = a.task, c = t.box
@@ -222,7 +228,7 @@ export function createSim(hooks = {}) {
     a.cumKg += c.w; a.box = null; S.thru++
     onEvent('move', { code: a.name, waybillNo: c.id, taskType: t.type === 'in' ? 'IN' : 'OUT',
       fromLoc: t.type === 'in' ? '입고 D' + (t.dk + 1) : slotName(t.slot), toLoc: t.type === 'in' ? slotName(t.slot) : '출고 D' + (t.dock.hub + 4),
-      hub: c.handle === '냉장' ? '냉장' : (HUBS[c.hub] ? HUBS[c.hub].name : null), handleType: c.handle, weightKg: c.w, startedAt: a.pickedAt, finishedAt: new Date().toISOString() })
+      hub: c.handle === '냉장' ? '냉장' : (HUBS[c.hub] ? HUBS[c.hub].name : null), handleType: c.handle, weightKg: c.w, barcode: c.ean, interWaitSec: Math.round((a.taskWait || 0) * 10) / 10, startedAt: a.pickedAt, finishedAt: new Date().toISOString() })
   }
 
   // ── 도크 ──
@@ -307,6 +313,55 @@ export function createSim(hooks = {}) {
     }
     return false
   }
+  // ── 교차로 예약 ──
+  // 경로 앞쪽 LOOK 안에 교차로가 있으면 예약을 요청한다. 다른 로봇이 쓰고 있으면 교차로 앞(대기선)에서 멈춘다.
+  // 먼저 온 순서대로 · 3.5초 넘게 막혔는데 상대도 서 있으면(서로 막힘) 양보받고 지나간다.
+  const LOOK = 44, HOLD_R = INTER_R + 6
+  function nextNode(a) {
+    let px = a.x, py = a.y, acc = 0
+    for (const q of a.path) {
+      const seg = Math.hypot(q.x - px, q.y - py)
+      let best = null
+      for (const n of INTER_NODES) {
+        // 선분이 교차로 칸(반지름 INTER_R)을 스치기만 해도 지나가는 것으로 본다
+        const vx = q.x - px, vy = q.y - py, L2 = vx * vx + vy * vy || 1e-6
+        const tt = Math.max(0, Math.min(1, ((n.x - px) * vx + (n.y - py) * vy) / L2))
+        const cxp = px + vx * tt, cyp = py + vy * tt
+        if (Math.hypot(n.x - cxp, n.y - cyp) >= INTER_R) continue
+        if (n === a.iHold && Math.hypot(a.x - n.x, a.y - n.y) < HOLD_R) continue // 이미 들어와 있는 교차로
+        const d = acc + Math.max(0, Math.hypot(cxp - px, cyp - py) - INTER_R)
+        if (d <= LOOK && (!best || d < best.d)) best = { n, d }
+      }
+      if (best) return best
+      acc += seg; px = q.x; py = q.y
+      if (acc > LOOK) break
+    }
+    return null
+  }
+  function interGate(a, dt) {
+    // 지나간 교차로 해제
+    if (a.iHold) { const n = a.iHold; if (Math.hypot(a.x - n.x, a.y - n.y) > HOLD_R) { if (S.inter[n.key].owner === a.id) S.inter[n.key].owner = 0; a.iHold = null } }
+    const nx = a.path.length ? nextNode(a) : null
+    if (!nx) { endWait(a); return Infinity }
+    const slot = S.inter[nx.n.key]
+    if (!slot.owner || slot.owner === a.id) {
+      if (a.iHold && a.iHold !== nx.n && S.inter[a.iHold.key].owner === a.id) S.inter[a.iHold.key].owner = 0
+      slot.owner = a.id; a.iHold = nx.n; endWait(a); return Infinity
+    }
+    // 다른 로봇이 쓰는 중: 교차로 칸 바로 앞(대기선)에 서도록 미리 감속한다
+    const lim = Math.sqrt(2 * ACC * 1.6 * Math.max(0, nx.d - 3))
+    if (nx.d > 4 && (a.v || 0) > 4) return lim
+    // 대기
+    if (!a.iWaitNode) { a.iWaitNode = nx.n; a.iwait = 0 }
+    a.iwait += dt; a.taskWait = (a.taskWait || 0) + dt
+    const owner = S.amrs.find((b) => b.id === slot.owner)
+    if (!owner || (a.iwait > 3.5 && (owner.v || 0) < 1)) { slot.owner = a.id; a.iHold = nx.n; a.iYield = true; endWait(a); return Infinity }
+    return 0
+  }
+  function endWait(a) {
+    if (a.iWaitNode && a.iwait > 0.2) { S.istats.n++; S.istats.total += a.iwait; S.istats.max = Math.max(S.istats.max, a.iwait); a.lastWait = a.iwait; a.lastWaitT = S.simT }
+    a.iWaitNode = null; a.iwait = 0
+  }
   function move(a, dt) {
     if (!a.path.length) { a.v = 0; return }
     const p = a.path[0], dx = p.x - a.x, dy = p.y - a.y, dist = Math.hypot(dx, dy) || 1e-6
@@ -320,7 +375,9 @@ export function createSim(hooks = {}) {
     const remain = a.path.reduce((s, q, i, arr) => s + (i === 0 ? dist : Math.hypot(q.x - arr[i - 1].x, q.y - arr[i - 1].y)), 0)
     if (last || remain < 40) target = Math.min(target, Math.max(14, remain * 2.2))
     if (!last && dist < 22) target = Math.min(target, 38)
-    if (blockedAhead(a, ux, uy)) { target = 0; a.blocked += dt } else a.blocked = Math.max(0, a.blocked - dt * 2)
+    const iLim = interGate(a, dt)
+    if (iLim < target) target = iLim
+    if (iLim === 0) { /* 교차로 대기 */ } else if (blockedAhead(a, ux, uy)) { target = 0; a.blocked += dt } else a.blocked = Math.max(0, a.blocked - dt * 2)
     a.v += Math.max(-ACC * 1.6 * dt, Math.min(ACC * dt, target - a.v))
     if (a.v < 0) a.v = 0
     let rem = a.v * dt

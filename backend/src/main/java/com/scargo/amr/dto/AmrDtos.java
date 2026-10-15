@@ -15,6 +15,10 @@ public class AmrDtos {
     public record EventRequest(String code, String level, Integer phase, String message) {}
     public record SettingsRequest(Integer rulThresholdHours, Integer chargeAtPct, String by) {}
     // 26.10.15 허브 입출차 OCR: direction ENTRY/EXIT, kind = 들어오는 차 쪽 카메라 폴더(CARGO/COURIER, 판정은 DB가 함)
+    // 26.10.15 KPI: AMR 운반 1건 기록 (웹 관제가 운반 끝날 때마다 보냄)
+    public record TaskRequest(String code, String taskType, String waybillNo, String barcode, String hub, String handleType,
+                              Double weightKg, String fromLoc, String toLoc, Double interWaitSec,
+                              OffsetDateTime startedAt, OffsetDateTime finishedAt) {}
     public record VehicleScanRequest(String direction, String kind, Integer dock, String vehicleNo,
                                      Integer boxCount, List<String> barcodes, String destHub) {}
 
@@ -29,6 +33,11 @@ public class AmrDtos {
     public record VehicleView(Long id, String direction, String plate, String photoPlate, String kind, String decision,
                               String lane, Integer dock, Double confidence, String engine, String imageUrl, Integer boxCount,
                               String destHub, OffsetDateTime createdAt) {}
+    public record HourCount(String hour, long count) {}
+    public record RobotUtil(String code, int pct) {}
+    public record KpiView(long today, long yesterdaySameTime, List<HourCount> hourly, Double avgTransportSec,
+                          Double avgInterWaitSec, long interWaits, List<RobotUtil> utilization,
+                          long entries, long exits, long blocks, Double avgOcrConfidence, OffsetDateTime at) {}
     public record RegistryView(String plate, String kind, String carrier, String memo) {}
     public record StateView(boolean producerLive, OffsetDateTime producerAt, Integer phase, List<RobotView> robots,
                             MaintView pending, MaintView active, List<EventView> events, SettingsView settings,

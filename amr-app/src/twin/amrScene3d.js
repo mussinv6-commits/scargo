@@ -12,7 +12,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js'
-import { AISLES, ROWS, NS, SX, DOCK_Y, HXL, HXR, STATION_Y, CHARGERS, BAY, GW, HUBS, ZONES, COLORS, status, lvCol, COLD_ROW, COLD_ROOM, LEVEL_H, FL_HOME, sideOn, ean13Bits, fmtPlate } from './amrSim.js'
+import { AISLES, ROWS, NS, SX, DOCK_Y, HXL, HXR, STATION_Y, CHARGERS, BAY, GW, HUBS, ZONES, COLORS, status, lvCol, COLD_ROW, COLD_ROOM, LEVEL_H, FL_HOME, sideOn, ean13Bits, fmtPlate, INTER_NODES, INTER_R } from './amrSim.js'
 
 const M = 0.05
 const X = (x) => (x - 500) * M
@@ -1235,6 +1235,38 @@ export function createAmrScene(container, sim, opts = {}) {
     return { g, body, ledMat, fanMat, ring, ringMat, sel, selMat, mRing, mMat, label, lidarRing, lift, liftK: 0 }
   })
 
+  /* ── 교차로 예약 표시: 바닥 칸(예약 = 청록) · 대기선(대기 = 주황) · 대기 말풍선 ── */
+  const IW = INTER_R * 2 * M
+  const tileGeo = new THREE.PlaneGeometry(IW, IW), edgeGeo = new THREE.EdgesGeometry(tileGeo); disposables.push(tileGeo, edgeGeo)
+  const interTiles = INTER_NODES.map((n) => {
+    const m = new THREE.MeshBasicMaterial({ color: 0x3fe0cc, transparent: true, opacity: 0, depthWrite: false, toneMapped: false })
+    const tile = new THREE.Mesh(tileGeo, m); tile.rotation.x = -Math.PI / 2; tile.position.set(X(n.x), 0.03, Z(n.y)); tile.renderOrder = 2; world.add(tile)
+    const em = new THREE.LineBasicMaterial({ color: 0xffb84d, transparent: true, opacity: 0, toneMapped: false })
+    const edge = new THREE.LineSegments(edgeGeo, em); edge.rotation.x = -Math.PI / 2; edge.position.set(X(n.x), 0.04, Z(n.y)); world.add(edge)
+    return { n, m, em }
+  })
+  const waitTags = S.amrs.map(() => { const o = tag('', 'twin-tag twin-tag-wait'); o.visible = false; world.add(o); return o })
+  function interUpdate(t) {
+    interTiles.forEach((it) => {
+      const slot = S.inter && S.inter[it.n.key]
+      const waiting = S.amrs.some((a) => a.iWaitNode === it.n)
+      it.m.opacity = slot && slot.owner ? 0.22 : 0
+      it.em.opacity = waiting ? 0.55 + 0.4 * Math.abs(Math.sin(t * 6)) : 0
+    })
+    S.amrs.forEach((a, i) => {
+      const o = waitTags[i], g = amrs3[i].g
+      let txt = ''
+      if (a.iWaitNode && a.iwait > 0.3) txt = '교차로 대기 ' + a.iwait.toFixed(1) + '초'
+      else if (a.lastWaitT != null && S.simT - a.lastWaitT < 1.2) txt = '대기 ' + a.lastWait.toFixed(1) + '초 → 통과'
+      o.visible = !!txt
+      if (!txt) return
+      o.position.set(g.position.x, 2.15, g.position.z)
+      if (o.element.textContent !== txt) o.element.textContent = txt
+      const cls = 'twin-tag twin-tag-wait' + (a.iWaitNode ? '' : ' is-go')
+      if (o.element.className !== cls) o.element.className = cls
+    })
+  }
+
   // 실내라 반사 환경광을 낮춘다 (밝은 흰 방 환경맵이 모든 면을 하얗게 띄우는 것 방지)
   const envTune = (m) => { if (m && m.isMeshStandardMaterial && m.envMapIntensity === 1) m.envMapIntensity = 0.55 }
   scene.traverse((o) => { if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(envTune) })
@@ -1485,6 +1517,8 @@ export function createAmrScene(container, sim, opts = {}) {
       s.lbl.element.className = 'twin-tag twin-tag-ocr' + (done ? ' is-done' : '')
       s.lbl.element.style.setProperty('--hub', HUBS[c.hub].col)
     })
+
+    interUpdate(t)
 
     // 센서 패킷 → 게이트웨이
     const pk = S.packets
