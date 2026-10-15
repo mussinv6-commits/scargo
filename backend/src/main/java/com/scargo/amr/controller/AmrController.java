@@ -2,6 +2,7 @@ package com.scargo.amr.controller;
 
 import com.scargo.amr.dto.AmrDtos.*;
 import com.scargo.amr.service.AmrService;
+import com.scargo.amr.service.HubVehicleService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -18,6 +19,7 @@ import java.util.Map;
 public class AmrController {
 
     private final AmrService service;
+    private final HubVehicleService vehicles;
 
     @GetMapping("/health")
     public Map<String, Object> health() { return Map.of("ok", true); }
@@ -58,4 +60,14 @@ public class AmrController {
     public List<SensorPoint> history(@PathVariable("code") String code, @RequestParam(name = "minutes", defaultValue = "5") int minutes) {
         return service.history(code, minutes);
     }
+
+    // ── 26.10.15 허브 입출차 번호판 OCR ──
+    @PostMapping("/vehicles/scan")
+    public VehicleView scanVehicle(@RequestBody VehicleScanRequest req) { return vehicles.scan(req); }
+
+    @GetMapping("/vehicles")
+    public List<VehicleView> vehicleLogs(@RequestParam(name = "limit", defaultValue = "20") int limit) { return vehicles.recent(limit); }
+
+    @GetMapping("/vehicles/registry")
+    public List<RegistryView> registry() { return vehicles.registry(); }
 }

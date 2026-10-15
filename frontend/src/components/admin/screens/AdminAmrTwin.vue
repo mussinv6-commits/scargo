@@ -115,7 +115,11 @@
           <div class="hint" id="tw-cHint">선택한 AMR이 운반 중인 화물을 따라갑니다. 랙의 박스를 클릭하면 그 화물로 고정됩니다.</div>
         </div>
         <div class="card">
-          <span class="label">Inbound Scan · 운송장 OCR</span>
+          <span class="label">Gate OCR · 입출차 번호판</span>
+          <ul class="scans gates" id="tw-gates"><li><span class="sd">트럭이 입구 · 출구 게이트에 오면 번호판을 인식합니다</span></li></ul>
+        </div>
+        <div class="card">
+          <span class="label">Inbound Scan · 상자 바코드 (EAN-13)</span>
           <ul class="scans" id="tw-scans"></ul>
         </div>
       </div>
@@ -141,7 +145,7 @@
             <tr><td>품목</td><td>화면 표시용 (분류에는 사용 안 함)</td></tr>
           </tbody>
         </table></div>
-        <p class="foot">입고 시 운송장 OCR로 읽어 들입니다. 1차의 번호판 OCR과 같은 파이프라인입니다.</p>
+        <p class="foot">입고 시 상자 바코드(EAN-13)로 읽어 들입니다. 차량은 입구 · 출구 게이트에서 1차 번호판 OCR(YOLO + CRNN)로 인식하고, DB 등록 정보로 화물차 · 택배차 · 미등록을 판정합니다.</p>
       </div>
       <div class="card">
         <h2>센서로 잡아내는 고장</h2>

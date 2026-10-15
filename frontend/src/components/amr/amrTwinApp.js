@@ -3,7 +3,7 @@
 // 시뮬레이션 + 3D 씬 + 관제 패널(차트·화물·로그)을 하나의 루트 요소에 붙인다.
 // 사용: const app = mountAmrTwin(rootEl)  →  화면을 떠날 때 app.destroy()
 // ─────────────────────────────────────────────────────────────
-import { createSim, HUBS, ZONES, STATE_KO, PHASE_T, CAPTIONS, PIPE_ON, PH_COL, COLORS, status, lvCol, tons, zoneRow, captionOf } from './amrSim.js'
+import { createSim, HUBS, ZONES, STATE_KO, PHASE_T, CAPTIONS, PIPE_ON, PH_COL, COLORS, status, lvCol, tons, zoneRow, captionOf, fmtPlate } from './amrSim.js'
 // ZONES: 0 D 냉장 창고 · 1 A 인천 · 2 B 서울 · 3 C 경기
 import { createAmrScene } from './amrScene3d.js'
 import { createAmrSound } from './amrSound.js'
@@ -36,7 +36,25 @@ export function mountAmrTwin(root) {
 
   /* ── DB 연동: 이 화면이 현장(시뮬레이터) 역할 → 센서 · 예측 · 정비 진행을 저장, 승인은 앱 · 웹 어디서든 ── */
   let maintId = null, remote = null, approveFlash = 0, pendingBy = null, lastCfgBy = '', cfgLocalT = 0
+  // 입구 · 출구 번호판 OCR: 트럭이 게이트에 오면 서버(→ gate_api.py)로 인식 요청, 결과로 3D 트럭이 들어오거나 돌아간다
+  let ocrOk = null
+  function setOcr(ok, msg) {
+    if (ok === ocrOk && ok) return
+    ocrOk = ok
+    ocrBadge.textContent = ok ? '● OCR 연결' : '○ OCR 오프라인'
+    ocrBadge.title = ok ? '번호판 인식 서버(gate_api.py :8001) 연결됨' : (msg || '') + ' · python 폴더에서 gate_api.py 실행 (uvicorn gate_api:app --port 8001)'
+    ocrBadge.style.color = ok ? '#4fdc8a' : '#8a9bb0'; ocrBadge.style.borderColor = ok ? '#4fdc8a' : '#3a4a5c'
+  }
+  function onVehicle(p) {
+    amrApi.vehicleScan({ direction: p.dir, kind: p.kind, dock: p.dock, vehicleNo: p.vehicleNo, boxCount: p.boxCount, barcodes: p.barcodes, destHub: p.destHub })
+      .then((res) => {
+        if (destroyed || !simRef) return
+        if (res.data) { setOcr(true); simRef.vehicleResult(p.side, p.dock, res.data, p.dir) }
+        else { setOcr(false, res.error); simRef.vehicleResult(p.side, p.dock, null, p.dir) }
+      })
+  }
   function onSimEvent(type, p) {
+    if (type === 'vehicle') { onVehicle(p); return }
     if (type === 'charge') { amrApi.event(p.code, 'INFO', S.sc.phase, p.code + ' 배터리 ' + Math.round(p.battery) + '% · 기준 ' + S.cfg.chargeAt + '% 이하 → 충전소 이동'); return }
     if (type !== 'maint') return
     if (p.eventType === 'WARN') amrApi.event(p.code, 'WARN', 2, p.code + ' 진동 이상 감지 · ' + (p.vibration || 0).toFixed(1) + ' mm/s')
@@ -51,6 +69,7 @@ export function mountAmrTwin(root) {
   async function pollState() {
     const st = await amrApi.state(); if (!st || destroyed) return
     remote = st
+    renderGates(st.vehicles)
     // 관리자 운영 기준 (앱에서 바꾸면 2초 안에 여기 3D 로봇이 그 기준대로 움직인다)
     const cs = st.settings
     if (cs && Date.now() - cfgLocalT > 3000) {
@@ -68,9 +87,13 @@ export function mountAmrTwin(root) {
   ;(root.querySelector('.twin-head') || root).appendChild(dbBadge)
   const offDb = amrApi.onStatus((on) => { dbBadge.textContent = on ? '● DB 연결 · 앱 연동' : '○ DB 오프라인 · 시뮬레이션만'; dbBadge.style.color = on ? '#4fdc8a' : '#8a9bb0'; dbBadge.style.borderColor = on ? '#4fdc8a' : '#3a4a5c' })
   amrApi.check()
+  const ocrBadge = document.createElement('span')
+  ocrBadge.style.cssText = dbBadge.style.cssText
+  ;(root.querySelector('.twin-head') || root).appendChild(ocrBadge)
+  setOcr(false, '아직 인식 요청 없음')
   let dbAcc = 0
   const S = sim.S
-  const warm = () => { for (let i = 0; i < 80; i++) sim.step(0.05); S.packets.length = 0 }
+  const warm = () => { sim.setVehicleGate(false); for (let i = 0; i < 80; i++) sim.step(0.05); S.packets.length = 0; sim.setVehicleGate(true) }
   warm()
 
   /* ── 패널 ── */
@@ -98,11 +121,25 @@ export function mountAmrTwin(root) {
     $('cLoc').textContent = '현재 위치 · ' + sim.locText(c)
     $('cHint').textContent = cargoPin ? '고른 화물을 따라가는 중입니다. 로봇을 클릭하면 해제됩니다.' : '선택한 로봇이 옮기는 화물을 따라갑니다. 랙의 박스(위 단 포함)를 클릭하면 그 화물로 고정됩니다.'
   }
+  // 입출차 OCR 기록 (DB)
+  const KIND = { CARGO: '화물차', COURIER: '택배차', UNKNOWN: '미등록' }
+  const DEC = { ALLOW: ['입차', '#4fdc8a'], BLOCK: ['차단', '#ff5a5f'], EXIT_OK: ['출차', '#3fe0cc'], MISMATCH: ['불일치', '#ffb84d'] }
+  let lastGateKey = ''
+  function renderGates(list) {
+    if (!list || !list.length) return
+    const key = list.map((v) => v.id).join(',')
+    if (key === lastGateKey) return
+    lastGateKey = key
+    $('gates').innerHTML = list.slice(0, 6).map((v) => {
+      const [dl, col] = DEC[v.decision] || [v.decision, '#8597aa']
+      return `<li><span class="sid">${fmtPlate(v.plate) || '판독불가'}</span><span class="sd">${KIND[v.kind] || ''}${v.confidence != null ? ' · ' + v.confidence + '%' : ''}${v.boxCount ? ' · ' + v.boxCount + '건' : ''}</span><span class="hubchip" style="background:${col}">${dl}</span></li>`
+    }).join('')
+  }
   function renderScans() {
     if (S.scanVer === lastScanVer) return
     lastScanVer = S.scanVer
     $('scans').innerHTML = S.scans.length
-      ? S.scans.map((s) => { const c = s.c, h = HUBS[c.hub]; return `<li><span class="sid">${c.id}</span><span class="sd">${c.cat} · ${c.w}kg${c.handle !== '일반' ? ' · ' + c.handle : ''}</span><span class="hubchip" style="background:${h.col}">${h.name}</span></li>` }).join('')
+      ? S.scans.map((s) => { const c = s.c, h = HUBS[c.hub]; return `<li><span class="sid">${c.ean || c.id}</span><span class="sd">${c.id} · ${c.cat} · ${c.w}kg${c.handle !== '일반' ? ' · ' + c.handle : ''}</span><span class="hubchip" style="background:${h.col}">${h.name}</span></li>` }).join('')
       : '<li><span class="sd" style="grid-column:1/-1">입고 도크에서 첫 운송장을 읽는 중입니다.</span></li>'
   }
   // 보관 현황: 구역별 바닥 칸(AMR) · 위 단(무인 지게차) 채움

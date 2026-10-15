@@ -49,3 +49,6 @@ ai-ocr/build/
 ai-ocr/dist/
 ai-ocr/crash_log.txt
 ai-ocr/게이트_수신함/
+
+# ===== 허브 입출차 OCR 테스트 사진 (실제 번호판이라 올리지 않음) =====
+ai-ocr/허브_수신함/

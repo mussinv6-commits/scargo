@@ -248,3 +248,15 @@
 .amr-twin .cfg-card .cfg-step b{min-width:34px;text-align:center;font:700 1.15rem var(--font-data);color:var(--cyan)}
 .amr-twin .cfg-card .cfg-step i{font-style:normal;font-size:.72rem;color:var(--muted);min-width:44px}
 .amr-twin .cfg-card .cfg-note{margin:8px 0 0;font-size:.74rem;color:var(--dim);line-height:1.5}
+
+/* 26.10.15 입구 · 출구 번호판 OCR 말풍선 */
+.amr-twin .twin-tag-plate{font-family:var(--font-ui);background:rgba(8,13,20,.92);border:2px solid var(--cyan);border-radius:10px;padding:6px 11px;line-height:1.25;text-align:left;white-space:nowrap}
+.amr-twin .twin-tag-plate i{display:block;font-style:normal;font-size:11px;font-weight:700;color:var(--cyan)}
+.amr-twin .twin-tag-plate b{display:inline-block;margin:3px 0 2px;padding:2px 9px;border-radius:5px;background:#f2c200;color:#111;border:2px solid #111;font-size:17px;font-weight:900;letter-spacing:.02em}
+.amr-twin .twin-tag-plate span{display:block;font-size:11px;font-weight:600;color:#c9d5e1}
+.amr-twin .twin-tag-plate.is-scan{border-color:var(--amber)}.amr-twin .twin-tag-plate.is-scan i{color:var(--amber)}
+.amr-twin .twin-tag-plate.is-block{border-color:var(--red)}.amr-twin .twin-tag-plate.is-block i{color:var(--red)}
+.amr-twin .twin-tag-plate.is-out{border-color:var(--green)}.amr-twin .twin-tag-plate.is-out i{color:var(--green)}
+.amr-twin .twin-tag-plate.is-off{border-color:#5d6c7c}.amr-twin .twin-tag-plate.is-off i{color:#9aabbd}
+.amr-twin .twin-tag-gate{color:#7fd6ff;border-color:rgba(127,214,255,.6);font-size:10px}
+.amr-twin.light .twin-tag-plate{background:rgba(255,255,255,.95)}.amr-twin.light .twin-tag-plate span{color:#3a4a5c}

@@ -4,7 +4,7 @@
 //   홈 · 로봇(예지보전) · 3D · 화물 · 알림
 // 서버가 없으면 앱만으로 돌아가고, 서버(DB)에 연결되면 웹 관제 화면과 상태 · 정비 승인을 함께 쓴다.
 // ─────────────────────────────────────────────────────────────
-import { createSim, HUBS, ZONES, STATE_KO, PHASE_T, CAPTIONS, COLORS, status, lvCol, tons, captionOf } from './twin/amrSim.js'
+import { createSim, HUBS, ZONES, STATE_KO, PHASE_T, CAPTIONS, COLORS, status, lvCol, tons, captionOf, fmtPlate } from './twin/amrSim.js'
 import { createAmrScene } from './twin/amrScene3d.js'
 import { amrApi } from './twin/amrApi.js'   // DB 연동: 웹 관제 화면과 같은 서버 · 같은 DB
 
@@ -421,9 +421,33 @@ async function pollRemote() {
       if (h) dbHist = { code: a.name, v: h.slice(-150).map((p) => (p.state === 'MAINT' ? null : p.vibration)) }
     }
   }
+  if (st && st.vehicles) applyVehicles(st.vehicles)
   renderDb(); renderCfg()
 }
 setInterval(pollRemote, 2000); pollRemote()
+
+/* ── 26.10.15 입구 · 출구 번호판 OCR: 웹(현장)이 인식해 DB에 남긴 결과를 앱 3D 트럭 위에 띄운다 ── */
+const VKIND = { CARGO: '화물차', COURIER: '택배차', UNKNOWN: '미등록' }
+const VDEC = { ALLOW: ['입차', 'g'], BLOCK: ['차단', 'r'], EXIT_OK: ['출차', 'c'], MISMATCH: ['불일치', 'a'] }
+let lastVehicleId = 0
+function applyVehicles(list) {
+  const fresh = list.filter((v) => v.id > lastVehicleId).reverse() // 오래된 것부터
+  if (!list.length) return
+  if (lastVehicleId) fresh.forEach((v) => {
+    if (v.dock == null) return
+    const out = v.lane ? v.lane === 'OUT' : v.kind === 'COURIER'
+    const d = (out ? S.outDocks : S.inDocks)[v.dock]; if (!d) return
+    if (v.direction === 'EXIT') d.ocr = { st: 'ok', plate: v.plate, photo: v.photoPlate, conf: v.confidence, kind: v.kind, exit: null }
+    else d.ocr = { st: v.decision === 'BLOCK' ? 'block' : 'ok', plate: v.plate, photo: v.photoPlate, conf: v.confidence, kind: v.kind, exit: null }
+    if (v.decision === 'BLOCK') toast('미등록 차량 차단 · ' + (fmtPlate(v.plate) || '판독 불가'), '')
+  })
+  lastVehicleId = Math.max(lastVehicleId, ...list.map((v) => v.id))
+  const el = $('v-list'); if (!el) return
+  el.innerHTML = list.slice(0, 5).map((v) => {
+    const [dl, c] = VDEC[v.decision] || [v.decision, 'a']
+    return `<li><b class="vp">${fmtPlate(v.plate) || '판독불가'}</b><span>${VKIND[v.kind] || ''}${v.confidence != null ? ' · ' + v.confidence + '%' : ''}</span><i class="vd ${c}">${v.direction === 'EXIT' ? '출차' : dl}</i></li>`
+  }).join('')
+}
 
 /* ── 관리자 운영 기준 (정비 · 충전): 앱에서 바꾸면 DB → 웹 관제 3D 로봇이 바로 그 기준으로 움직인다 ── */
 let cfgTimer = 0, cfgLocalT = 0

@@ -159,7 +159,7 @@ app.add_middleware(
     CORSMiddleware,
     # scargo_vue_0922 프론트엔드(localhost:5173)에서 바로 fetch할 수 있게 허용.
     # 발표용 데모라 와일드카드 대신 알려진 개발 서버 주소만 명시함.
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:5175", "http://127.0.0.1:5175"],  # 5175: 허브 AMR 관제(2026-10-15)
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -170,6 +170,15 @@ DEFAULT_WATCH_DIR.mkdir(parents=True, exist_ok=True)
 (DEFAULT_WATCH_DIR / "processed").mkdir(parents=True, exist_ok=True)
 (DEFAULT_WATCH_DIR / "failed").mkdir(parents=True, exist_ok=True)
 app.mount("/images", StaticFiles(directory=str(DEFAULT_WATCH_DIR)), name="images")
+# 2026-10-15 추가 (허브 AMR): 허브 입구 · 출구 카메라용 사진 폴더.
+# 1차 게이트(게이트_수신함)와 분리해서, 허브 스캔이 1차 사진을 옮기거나 gate_logs 를 남기지 않게 한다.
+#   허브_수신함/화물차  - 입고하러 들어오는 화물차 사진 (파일명 = 번호판)
+#   허브_수신함/택배차  - 권역 출고용 택배차 사진 (파일명 = 번호판)
+HUB_DIR = APP_DIR / "허브_수신함"
+HUB_KIND_DIR = {"CARGO": "화물차", "COURIER": "택배차"}
+for _k in HUB_KIND_DIR.values():
+    (HUB_DIR / _k).mkdir(parents=True, exist_ok=True)
+app.mount("/hub-images", StaticFiles(directory=str(HUB_DIR)), name="hub-images")
 # 아래 전역 상태는 FastAPI startup 이벤트에서 한 번만 초기화됨(요청마다 모델을
 # 새로 로드하면 몇 초씩 걸려 데모에 못 씀).
 _state = {
@@ -563,6 +572,69 @@ def startup():
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+class HubScanResult(BaseModel):
+    direction: str
+    kind: str
+    fileName: str
+    photoPlate: str                      # 사진 파일명(= 실제 번호판) - 인식 정확도 확인용
+    recognizedPlate: Optional[str] = None
+    engine: Optional[str] = None
+    detConfidence: Optional[float] = None
+    ocrConfidence: Optional[float] = None
+    imageUrl: Optional[str] = None
+
+
+@app.post("/hub/scan", response_model=HubScanResult)
+def hub_scan(direction: ScanType = ScanType.ENTRY, kind: str = "CARGO",
+             vehicleNo: Optional[str] = None, exclude: Optional[str] = None):
+    """2026-10-15 추가 (허브 AMR): 허브 입구 · 출구 번호판 인식.
+    - 1차 /scan 과 같은 recognize_one(YOLO + CRNN)을 그대로 쓴다.
+    - 판정(등록 차량 · 차종)은 여기서 하지 않고 Spring(/api/amr/vehicles/scan)이 DB로 한다.
+    - 사진을 옮기지 않고, gate_logs 도 남기지 않는다 (1차 게이트 흐름과 분리).
+    ENTRY: kind 폴더에서 한 장 무작위 (exclude=이미 허브 안에 있는 번호판들, 쉼표 구분)
+    EXIT : vehicleNo 와 같은 이름의 사진을 다시 인식 (1차 EXIT 방식과 같음)"""
+    kind = (kind or "CARGO").upper()
+    if kind not in HUB_KIND_DIR:
+        raise HTTPException(status_code=400, detail="kind 는 CARGO 또는 COURIER")
+    if direction == ScanType.EXIT:
+        if not vehicleNo:
+            raise HTTPException(status_code=400, detail="EXIT 에는 vehicleNo 가 필요합니다")
+        key = vehicleNo.replace(" ", "")
+        path = None
+        for k in HUB_KIND_DIR.values():
+            for p in (HUB_DIR / k).iterdir():
+                if p.is_file() and p.suffix.lower() in IMAGE_SUFFIXES and p.stem.replace(" ", "") == key:
+                    path = p
+                    break
+            if path:
+                break
+        if path is None:
+            raise HTTPException(status_code=404, detail=f"허브_수신함에 {vehicleNo} 사진이 없습니다")
+    else:
+        skip = {x.replace(" ", "") for x in (exclude or "").split(",") if x.strip()}
+        folder = HUB_DIR / HUB_KIND_DIR[kind]
+        cands = [p for p in folder.iterdir() if p.is_file() and p.suffix.lower() in IMAGE_SUFFIXES]
+        if not cands:
+            raise HTTPException(status_code=404, detail=f"{folder} 에 사진이 없습니다")
+        free = [p for p in cands if p.stem.replace(" ", "") not in skip]
+        path = random.choice(free or cands)
+    try:
+        result = recognize_one(path)
+    except Exception:
+        logger.exception(f"[HUB {direction.value}] 인식 중 예외: {path.name}")
+        raise HTTPException(status_code=500, detail=f"인식 중 오류: {path.name}")
+    if result is None:
+        raise HTTPException(status_code=500, detail=f"이미지를 못 읽음: {path.name}")
+    rel = path.relative_to(HUB_DIR).as_posix()
+    logger.info(f"[HUB {direction.value}] {path.name} -> {result['pred'] or '(판독불가)'}")
+    return HubScanResult(
+        direction=direction.value, kind=kind, fileName=path.name, photoPlate=path.stem,
+        recognizedPlate=result["pred"] or None, engine=result["engine"] or None,
+        detConfidence=result["det_conf"], ocrConfidence=result["ocr_conf"],
+        imageUrl=f"{GATE_PUBLIC_BASE}/hub-images/{rel}",
+    )
 
 
 @app.post("/scan", response_model=ScanResult)

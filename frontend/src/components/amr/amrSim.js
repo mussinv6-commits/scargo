@@ -51,6 +51,24 @@ export const CAPTIONS = {
 export const PIPE_ON = { 1: [0, 1, 2], 2: [2, 3], 3: [3, 4], 4: [4, 5], 5: [4] }
 export const PH_COL = { 1: COLORS.cyan, 2: COLORS.amber, 3: COLORS.amber, 4: COLORS.red, 5: COLORS.green }
 
+// 상품 바코드 (EAN-13) — 최종파일/Scargo_바코드_EAN13버전 과 같은 번호 체계
+//   880(국가) 2610(업체) 14 + 그룹 1~5(100~500번대) + 00~20 + 검증숫자
+export function eanCheck(d12) { let s = 0; for (let i = 0; i < 12; i++) s += +d12[i] * (i % 2 ? 3 : 1); return String((10 - (s % 10)) % 10) }
+export const EAN_LIST = (() => { const o = []; for (let g = 1; g <= 5; g++) for (let n = 0; n <= 20; n++) { const d = '880261014' + g + String(n).padStart(2, '0'); o.push(d + eanCheck(d)) } return o })()
+const EAN_L = ['0001101', '0011001', '0010011', '0111101', '0100011', '0110001', '0101111', '0111011', '0110111', '0001011']
+const EAN_G = ['0100111', '0110011', '0011011', '0100001', '0011101', '0111001', '0000101', '0010001', '0001001', '0010111']
+const EAN_R = ['1110010', '1100110', '1101100', '1000010', '1011100', '1001110', '1010000', '1000100', '1001000', '1110100']
+const EAN_P = ['LLLLLL', 'LLGLGG', 'LLGGLG', 'LLGGGL', 'LGLLGG', 'LGGLLG', 'LGGGLL', 'LGLGLG', 'LGLGGL', 'LGGLGL']
+// 95칸 막대 패턴 (true = 검은 막대)
+export function ean13Bits(code) {
+  const d = String(code).split('').map(Number), par = EAN_P[d[0]]; let b = '101'
+  for (let i = 1; i <= 6; i++) b += (par[i - 1] === 'L' ? EAN_L : EAN_G)[d[i]]
+  b += '01010'; for (let i = 7; i <= 12; i++) b += EAN_R[d[i]]; b += '101'
+  return b.split('').map((x) => x === '1')
+}
+// 번호판 표시: 서울85자6013 → 서울 85자 6013
+export const fmtPlate = (p) => (p ? String(p).replace(/\s/g, '').replace(/^(\D*)(\d{2,3})(\D)(\d{4})$/, (m, a, b, c, d) => (a ? a + ' ' : '') + b + c + ' ' + d) : '')
+
 export const zoneRow = (c) => (c.handle === '냉장' ? COLD_ROW : c.hub + 1)
 export const tons = (a) => (a.cumKg / 1000).toFixed(2)
 
@@ -66,7 +84,11 @@ export const lvCol = (lv) => (lv === 'crit' ? COLORS.red : lv === 'warn' ? COLOR
 export function createSim(hooks = {}) {
   const onLog = hooks.onLog || (() => {})
   const onPhase = hooks.onPhase || (() => {})
-  const onEvent = hooks.onEvent || (() => {})   // DB 저장용: ('move' | 'maint', 내용)
+  const onEvent = hooks.onEvent || (() => {})   // DB 저장용: ('move' | 'maint' | 'vehicle', 내용)
+  // 입구 · 출구 번호판 OCR 게이트 (웹 관제만 켠다): 트럭이 게이트에서 멈추고 OCR 결과를 기다린다
+  let gate = !!hooks.vehicleGate
+  const GATE_WAIT = 25 // 초 · 이 안에 결과가 없으면 OCR 응답 없음으로 통과
+  const SAMPLE_IN = ['서울85자6013', '경기90자8118', '인천98바2578'], SAMPLE_OUT = ['부산90배8407', '경남99바4892', '대구80자6850']
   // 관리자 승인: AI 예측 뒤 바로 교대하지 않고 승인을 기다린다. 응답이 없으면 autoApproveSec 뒤 자동 승인
   const autoApproveSec = () => (typeof hooks.autoApproveSec === 'function' ? hooks.autoApproveSec() : hooks.autoApproveSec == null ? 20 : hooks.autoApproveSec)
   const slotName = (sl) => (sl ? 'R' + (sl.r + 1) + '-' + (sl.s ? 'B' : 'A') + (sl.i + 1) : '')
@@ -90,7 +112,7 @@ export function createSim(hooks = {}) {
     // 취급 표시: 파손주의 · 취급주의 · 냉장 · 중량물(20kg 이상) · 일반 → 박스 스티커와 운반 속도에 쓰인다
     let handle = c.h()
     if (handle === '일반' && w >= 20) handle = '중량물'
-    return { id, hub: h, cat: c.n, w, size: w < 6 ? 'S' : w < 15 ? 'M' : 'L', handle, loc: null, res: false }
+    return { id, hub: h, cat: c.n, w, size: w < 6 ? 'S' : w < 15 ? 'M' : 'L', handle, loc: null, res: false, ean: EAN_LIST[Math.floor(rnd() * EAN_LIST.length)] }
   }
   function mkCargoForRow(r) { let c; do { c = mkCargo(r === COLD_ROW ? null : r - 1) } while ((r === COLD_ROW) !== (c.handle === '냉장')); return c }
   function fillInTruck(dk, d, n) { dk.cargo = []; for (let k = 0; k < n; k++) { const c = mkCargo(); c.loc = { type: 'inTruck', d }; dk.cargo.push(c) } }
@@ -202,23 +224,65 @@ export function createSim(hooks = {}) {
   }
 
   // ── 도크 ──
+  // ── 입구 · 출구 번호판 OCR ──
+  // d.ocr = { st: 'scan' | 'ok' | 'block' | 'off', plate, photo, conf, kind, exit: null | 'scan' | {plate, ok, conf} }
+  function gateEntry(d, side, k, kind) {
+    if (!gate) { d.ocr = null; return }
+    d.ocr = { st: 'scan', t: 0, exit: null }
+    onEvent('vehicle', { dir: 'ENTRY', side, dock: k, kind })
+  }
+  function gateHold(d, dt, side, k) {
+    if (!d.ocr || d.ocr.st !== 'scan') return
+    d.off = Math.max(d.off, 0.45) // 입구 게이트 앞에서 멈춰서 인식 결과를 기다린다
+    d.ocr.t += dt
+    if (d.ocr.t > GATE_WAIT) vehicleResult(side, k, null)
+  }
+  function gateExit(d, side, k, kind, boxes) {
+    if (!gate || !d.ocr || !d.ocr.photo) return
+    d.ocr.exit = 'scan'
+    onEvent('vehicle', { dir: 'EXIT', side, dock: k, kind, vehicleNo: d.ocr.photo, boxCount: boxes.length,
+      barcodes: boxes.map((c) => c.ean), destHub: side === 'out' ? HUBS[d.hub].name : null })
+  }
+  // 서버 판정 결과 반영 (r = null 이면 OCR 서버 응답 없음 → 예시 번호로 통과)
+  function vehicleResult(side, k, r, dir = 'ENTRY') {
+    const d = (side === 'out' ? S.outDocks : S.inDocks)[k]; if (!d || !d.ocr) return
+    if (dir === 'EXIT') { d.ocr.exit = r ? { plate: r.plate, ok: r.decision === 'EXIT_OK', conf: r.confidence } : null; return }
+    if (d.ocr.st !== 'scan') return
+    const where = side === 'out' ? '출고 D' + (k + 4) : '입고 D' + (k + 1)
+    if (!r) {
+      const p = (side === 'out' ? SAMPLE_OUT : SAMPLE_IN)[k % 3]
+      d.ocr = { st: 'off', plate: p, photo: null, conf: null, kind: side === 'out' ? 'COURIER' : 'CARGO', exit: null }
+      return
+    }
+    if (r.decision === 'BLOCK') {
+      d.ocr = { st: 'block', plate: r.plate, photo: r.photoPlate, conf: r.confidence, kind: r.kind, exit: null }
+      if (side === 'in') d.cargo = []; else d.boxes = []
+      d.state = 'leaving'
+      addLog((r.plate ? '미등록 차량 ' + fmtPlate(r.plate) : '번호판 판독 불가') + ' · ' + where + ' 진입 차단', 'crit')
+      return
+    }
+    d.ocr = { st: 'ok', plate: r.plate, photo: r.photoPlate, conf: r.confidence, kind: r.kind, exit: null }
+    addLog('입차 OCR ' + fmtPlate(r.plate) + (r.confidence != null ? ' (' + r.confidence + '%)' : '') + ' · ' + (r.kind === 'COURIER' ? '택배차' : '화물차') + ' → ' + where, '')
+  }
+
   function updDocks(dt) {
     S.inDocks.forEach((d, k) => {
-      if (d.state === 'docked' && d.cargo.length === 0) d.state = 'leaving'
+      if (d.state === 'docked' && d.cargo.length === 0) { d.state = 'leaving'; gateExit(d, 'in', k, 'CARGO', []) }
       else if (d.state === 'leaving') { d.off += dt / 2.2; if (d.off >= 1) { d.off = 1; d.state = 'empty'; d.timer = 1.5 + rnd() * 2.5 } }
-      else if (d.state === 'empty') { d.timer -= dt; if (d.timer <= 0) { d.state = 'arriving'; fillInTruck(d, k, 3 + Math.floor(rnd() * 2)) } }
-      else if (d.state === 'arriving') { d.off -= dt / 2.2; if (d.off <= 0) { d.off = 0; d.state = 'docked' } }
+      else if (d.state === 'empty') { d.timer -= dt; if (d.timer <= 0) { d.state = 'arriving'; fillInTruck(d, k, 3 + Math.floor(rnd() * 2)); gateEntry(d, 'in', k, 'CARGO') } }
+      else if (d.state === 'arriving') { d.off -= dt / 2.2; gateHold(d, dt, 'in', k); if (d.off <= 0) { d.off = 0; d.state = 'docked' } }
     })
-    S.outDocks.forEach((d) => {
+    S.outDocks.forEach((d, k) => {
       if (d.state === 'docked' && d.boxes.length >= d.cap && d.res === 0) {
         d.state = 'leaving'
+        gateExit(d, 'out', k, 'COURIER', d.boxes)
         const kg = d.boxes.reduce((s, c) => s + c.w, 0)
         d.boxes.forEach((c) => (c.loc = { type: 'gone', hub: d.hub }))
         S.hubSent[d.hub] += d.boxes.length
         addLog('D' + (d.hub + 4) + ' ' + HUBS[d.hub].name + '행 택배차 출발 · ' + d.boxes.length + '건 ' + kg + 'kg', 'hub')
       } else if (d.state === 'leaving') { d.off += dt / 2.2; if (d.off >= 1) { d.off = 1; d.state = 'empty'; d.timer = 1.2 + rnd() * 2 } }
-      else if (d.state === 'empty') { d.timer -= dt; if (d.timer <= 0) { d.state = 'arriving'; d.boxes = [] } }
-      else if (d.state === 'arriving') { d.off -= dt / 2.2; if (d.off <= 0) { d.off = 0; d.state = 'docked' } }
+      else if (d.state === 'empty') { d.timer -= dt; if (d.timer <= 0) { d.state = 'arriving'; d.boxes = []; gateEntry(d, 'out', k, 'COURIER') } }
+      else if (d.state === 'arriving') { d.off -= dt / 2.2; gateHold(d, dt, 'out', k); if (d.off <= 0) { d.off = 0; d.state = 'docked' } }
     })
   }
 
@@ -498,7 +562,7 @@ export function createSim(hooks = {}) {
   }
 
   init()
-  return { S, init, step, locText, approve, follow, setCfg }
+  return { S, init, step, locText, approve, follow, setCfg, vehicleResult, setVehicleGate: (v) => { gate = !!v } }
 }
 
 // 단계 설명 문구 속 로봇 이름을 실제 고장 대상으로 바꿔서 돌려준다

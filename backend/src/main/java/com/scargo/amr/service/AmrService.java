@@ -45,13 +45,14 @@ public class AmrService {
     private final AmrMaintenanceRepository maintRepo;
     private final HubEventRepository eventRepo;
     private final AmrSettingRepository settingRepo;
+    private final HubVehicleLogRepository vehicleLogRepo;
 
     // 시뮬레이터가 마지막으로 보낸 값 (진동 · 온도는 amr_robots 에 컬럼이 없어 메모리에 둔다)
     private final Map<String, TelemetryItem> latest = new ConcurrentHashMap<>();
     private volatile OffsetDateTime producerAt;
     private volatile Integer phase = 1;
 
-    private Long hubId() {
+    Long hubId() {
         return hubRepo.findByHubCode(HUB_CODE).map(Hub::getHubId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
                         "허브 기본 데이터가 없습니다. backend/scargo/manual_merge_amr_hub_261014.sql 을 먼저 실행하세요."));
@@ -72,7 +73,7 @@ public class AmrService {
         return STATES.contains(v) ? v : "IDLE";
     }
 
-    private void event(Long robotId, String level, String message) {
+    void event(Long robotId, String level, String message) {
         HubEvent e = new HubEvent();
         e.setHubId(hubId()); e.setRobotId(robotId); e.setEventLevel(level); e.setPhaseNo(phase);
         e.setMessage(message); e.setCreatedAt(OffsetDateTime.now());
@@ -203,7 +204,9 @@ public class AmrService {
                 .map(e -> new EventView(e.getEventId(), codeOf(e.getRobotId()), e.getEventLevel(), e.getPhaseNo(), e.getMessage(), e.getCreatedAt()))
                 .toList();
         boolean live = producerAt != null && producerAt.isAfter(OffsetDateTime.now().minusSeconds(10));
-        return new StateView(live, producerAt, phase, robots, pending, active, events, settingsView(hub));
+        List<VehicleView> vehicles = vehicleLogRepo.findByHubIdOrderByLogIdDesc(hub, PageRequest.of(0, 8)).stream()
+                .map(HubVehicleService::view).toList();
+        return new StateView(live, producerAt, phase, robots, pending, active, events, settingsView(hub), vehicles);
     }
 
     // ── 관리자 운영 기준 (앱 · 웹 어디서 바꿔도 DB 한 곳) ──

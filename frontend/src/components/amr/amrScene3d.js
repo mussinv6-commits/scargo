@@ -12,7 +12,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js'
-import { AISLES, ROWS, NS, SX, DOCK_Y, HXL, HXR, STATION_Y, CHARGERS, BAY, GW, HUBS, ZONES, COLORS, status, lvCol, COLD_ROW, COLD_ROOM, LEVEL_H, FL_HOME, sideOn } from './amrSim.js'
+import { AISLES, ROWS, NS, SX, DOCK_Y, HXL, HXR, STATION_Y, CHARGERS, BAY, GW, HUBS, ZONES, COLORS, status, lvCol, COLD_ROW, COLD_ROOM, LEVEL_H, FL_HOME, sideOn, ean13Bits, fmtPlate } from './amrSim.js'
 
 const M = 0.05
 const X = (x) => (x - 500) * M
@@ -250,10 +250,12 @@ function waybillTex(c) {
     g.font = `800 21px ${FONT}`; g.fillText(c.id, 10, 66)
     g.font = `600 14px ${FONT}`; g.fillStyle = '#333'
     g.fillText(c.w + 'kg · ' + c.size + ' · ' + c.handle, 10, 88)
+    // 상품 바코드 EAN-13 (바코드 폴더와 같은 번호 체계 · 95칸을 2px씩)
     g.fillStyle = '#0b0f14'
-    let seed = 0; for (const ch of c.id) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0
-    for (let x = 10; x < w - 10; x += 3) { seed = (seed * 1103515245 + 12345) >>> 0; if (seed % 10 < 6) g.fillRect(x, 102, (seed >> 8) % 3 === 0 ? 2 : 1, 44) }
-    g.font = `500 11px ${FONT}`; g.fillText('S CARGO 운송장 · ' + h.full, 10, 158)
+    const code = c.ean || '8802610141003'
+    ean13Bits(code).forEach((b, i) => { if (b) g.fillRect(14 + i * 2, 98, 2, (i < 3 || (i >= 45 && i < 50) || i >= 92) ? 50 : 44) })
+    g.font = `600 13px ${FONT}`; g.fillText(code[0] + '  ' + code.slice(1, 7) + '   ' + code.slice(7), 12, 162)
+    g.font = `500 10px ${FONT}`; g.textAlign = 'right'; g.fillText('S CARGO', w - 8, 162); g.textAlign = 'left'
     g.strokeStyle = 'rgba(0,0,0,0.15)'; g.strokeRect(0.5, 0.5, w - 1, hh - 1)
   })
 }
@@ -758,11 +760,24 @@ export function createAmrScene(container, sim, opts = {}) {
   const chevTex = canvasTex(256, 32, (g, w, h) => { for (let x = -h, k = 0; x < w + h; x += 24, k++) { g.fillStyle = k % 2 ? '#d61f1f' : '#f4f4f0'; g.beginPath(); g.moveTo(x, 0); g.lineTo(x + 24, 0); g.lineTo(x + 24 - h, h); g.lineTo(x - h, h); g.fill() } })
   const chevMat = new THREE.MeshStandardMaterial({ map: chevTex, roughness: 0.4, emissive: 0xffffff, emissiveMap: chevTex, emissiveIntensity: 0.15 })
   disposables.push(chevTex)
-  function truckRear(g, x, dir, y, Wd, text) {
-    const pt = canvasTex(256, 56, (cg, w, h) => {
+  // 번호판 텍스처: OCR 결과가 오면 같은 텍스처를 다시 그린다 (앞 · 뒤 번호판이 같이 바뀜)
+  function plateTex(text) {
+    let t = null
+    const draw = (txt) => {
+      const cv = t ? t.image : null, cg = cv.getContext('2d'), w = cv.width, h = cv.height
       cg.fillStyle = '#f2c200'; cg.fillRect(0, 0, w, h); cg.strokeStyle = '#1a1a1a'; cg.lineWidth = 4; cg.strokeRect(3, 3, w - 6, h - 6)
-      cg.fillStyle = '#121212'; cg.font = `800 34px ${FONT}`; cg.textAlign = 'center'; cg.textBaseline = 'middle'; cg.fillText(text, w / 2, h / 2 + 2)
-    })
+      cg.fillStyle = '#121212'; cg.font = `800 ${txt.length > 11 ? 30 : 34}px ${FONT}`; cg.textAlign = 'center'; cg.textBaseline = 'middle'; cg.fillText(txt, w / 2, h / 2 + 2)
+      t.needsUpdate = true
+    }
+    t = canvasTex(256, 56, () => {}); t.userData.draw = draw; draw(text); disposables.push(t)
+    return t
+  }
+  function plateMesh(g, x, dir, y, pt) {
+    const pl = new THREE.Mesh(plateGeo, new THREE.MeshStandardMaterial({ map: pt, roughness: 0.35, metalness: 0.2 }))
+    pl.position.set(x + dir * 0.06, y, 0); pl.rotation.y = dir > 0 ? Math.PI / 2 : -Math.PI / 2; g.add(pl)
+  }
+  function truckRear(g, x, dir, y, Wd, text) {
+    const pt = plateTex(text); g.userData.plateTex = pt
     const pm = new THREE.MeshStandardMaterial({ map: pt, roughness: 0.35, metalness: 0.2 })
     const pl = new THREE.Mesh(plateGeo, pm); pl.position.set(x + dir * 0.06, y, 0); pl.rotation.y = dir > 0 ? Math.PI / 2 : -Math.PI / 2; g.add(pl)
     ;[-1, 1].forEach((s) => { const tl = new THREE.Mesh(tailGeo, tailMat); tl.position.set(x + dir * 0.04, y + 0.1, s * (Wd / 2 - 0.25)); g.add(tl) })
@@ -787,6 +802,7 @@ export function createAmrScene(container, sim, opts = {}) {
     g.add(mesh(box(2.6, 0.5, 2.3), MAT.steel, cabX + 0.5, 0.75, 0))
     ;[[-1.2, 0.5], [-L + 1.3, 0.5], [-L + 2.5, 0.5], [cabX - 0.6, 0.5], [cabX + 1.0, 0.5]].forEach(([wx, r]) => { wheel(g, wx, Wd / 2 - 0.1, r); wheel(g, wx, -Wd / 2 + 0.1, r) })
     truckRear(g, 0.02, 1, 0.75, Wd, plateText('in'))
+    plateMesh(g, cabX - 1.24, -1, 0.85, g.userData.plateTex) // 캡 앞 번호판 (입구 카메라가 읽는 쪽)
     ;[-1, 1].forEach((s) => g.add(mesh(box(0.08, 0.32, 0.05), MAT.steel, cabX - 0.9, 2.5, s * 1.38, false)))
     return g
   }
@@ -813,11 +829,63 @@ export function createAmrScene(container, sim, opts = {}) {
     g.add(mesh(box(2.05, 0.18, 2.24), new THREE.MeshStandardMaterial({ color: new THREE.Color(h.col), roughness: 0.4 }), cabX, 0.75, 0))
     ;[[1.0, 0.45], [L - 0.9, 0.45], [cabX + 0.3, 0.45]].forEach(([wx, r]) => { wheel(g, wx, Wd / 2 - 0.1, r); wheel(g, wx, -Wd / 2 + 0.1, r) })
     truckRear(g, -0.02, -1, 0.62, Wd, plateText('out'))
+    plateMesh(g, cabX + 1.02, 1, 0.62, g.userData.plateTex) // 캡 앞 번호판
     ;[-1, 1].forEach((s) => g.add(mesh(box(0.08, 0.3, 0.05), MAT.steel, cabX + 0.7, 2.0, s * 1.25, false)))
     return g
   }
   const inTrucks = DOCK_Y.map((y) => { const t = makeTrailerTruck(); t.position.set(WALL_L - 0.6, 0, Z(y)); world.add(t); return t })
   const outTrucks = DOCK_Y.map((y, i) => { const t = makeCourierTruck(i); t.position.set(WALL_R + 0.6, 0, Z(y)); world.add(t); return t })
+
+  /* ── 입구 · 출구 번호판 OCR (gate_api.py · YOLO + CRNN) ── */
+  // 트럭이 게이트 앞(off = 0.45)에서 멈췄을 때 캡 앞 번호판 위치에 카메라 게이트를 세운다
+  const GATE_OFF = 0.405 * 22 // ease(0.45) * 22
+  function ocrGantry(x, dir, label) {
+    const g = new THREE.Group(), z0 = Z(DOCK_Y[0]) - 2.2, z1 = Z(DOCK_Y[2]) + 2.2, zc = (z0 + z1) / 2
+    ;[z0, z1].forEach((z) => g.add(mesh(box(0.22, 5.4, 0.22), MAT.steel, 0, 2.7, z)))
+    g.add(mesh(box(0.3, 0.32, z1 - z0 + 0.3), MAT.steel, 0, 5.4, zc))
+    DOCK_Y.forEach((y) => {
+      g.add(mesh(box(0.42, 0.26, 0.34), MAT.rubber, dir * 0.15, 5.1, Z(y)))
+      const lens = new THREE.Mesh(new THREE.CircleGeometry(0.07, 16), new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0x7fd6ff, emissiveIntensity: 1.6 }))
+      lens.position.set(dir * 0.37, 5.1, Z(y)); lens.rotation.y = dir * Math.PI / 2; g.add(lens)
+    })
+    const t = tag(label, 'twin-tag twin-tag-gate'); t.position.set(0, 6.3, zc); g.add(t)
+    g.position.set(x, 0, 0); world.add(g)
+  }
+  ocrGantry(WALL_L - 0.6 - GATE_OFF - 8.2 - 2.1 - 1.2 - 1.4, 1, 'IN GATE · 번호판 OCR')
+  ocrGantry(WALL_R + 0.6 + GATE_OFF + 5.2 + 1.15 + 1.0 + 1.4, -1, 'OUT GATE · 번호판 OCR')
+  const KIND_KO = { CARGO: '화물차', COURIER: '택배차', UNKNOWN: '미등록' }
+  const plateTags = [inTrucks, outTrucks].map((arr, side) => arr.map((t) => {
+    const o = tag('', 'twin-tag twin-tag-plate'); o.position.set(side ? 3 : -6, side ? 4.2 : 5.0, 0); o.visible = false; t.add(o)
+    return { o, key: '', plate: '', dockedAt: -1 }
+  }))
+  function plateTagUpdate(d, i, side, tr, t) {
+    const pt = plateTags[side][i], oc = d.ocr
+    if (!oc || !tr.visible) { pt.o.visible = false; return }
+    if (d.state === 'docked') { if (pt.dockedAt < 0) pt.dockedAt = t } else pt.dockedAt = -1
+    if (pt.oc !== oc) { pt.oc = oc; pt.changedAt = t } // 앱: 서버 결과가 새로 들어오면 잠깐 보여 준다
+    const showing = d.state !== 'docked' || t - pt.dockedAt < 6 || t - (pt.changedAt || -99) < 6
+    pt.o.visible = showing
+    // 번호판 텍스처를 인식 결과로 바꾼다
+    const want = oc.plate ? fmtPlate(oc.plate) : ''
+    if (want && want !== pt.plate) { pt.plate = want; tr.userData.plateTex.userData.draw(want) }
+    if (!showing) return
+    const where = side ? '출고 D' + (i + 4) : '입고 D' + (i + 1)
+    let cls = '', head = '', body = '', foot = ''
+    const conf = (c) => (c != null ? ' ' + c + '%' : '')
+    if (d.state === 'leaving' && oc.exit) {
+      cls = ' is-out'
+      if (oc.exit === 'scan') { head = '출차 OCR · 인식 중…'; body = fmtPlate(oc.plate) }
+      else { head = (oc.exit.ok ? '출차 OCR ✓' : '출차 번호 불일치') + conf(oc.exit.conf); body = fmtPlate(oc.exit.plate) || '판독 불가'; foot = side ? HUBS[d.hub].name + '행 · ' + d.boxes.length + '건 출고 기록' : '하차 완료 · 출차 기록'; if (!oc.exit.ok) cls = ' is-block' }
+    } else if (oc.st === 'scan') { cls = ' is-scan'; head = '입차 OCR · 번호판 인식 중…'; body = '· · · · ·' }
+    else if (oc.st === 'block') { cls = ' is-block'; head = '미등록 차량 · 진입 차단' + conf(oc.conf); body = fmtPlate(oc.plate) || '판독 불가'; foot = 'DB 등록 차량 아님 → 회차' }
+    else if (oc.st === 'off') { cls = ' is-off'; head = 'OCR 서버 응답 없음'; body = fmtPlate(oc.plate); foot = '예시 번호 · gate_api.py 확인' }
+    else { head = '입차 OCR ✓' + conf(oc.conf); body = fmtPlate(oc.plate); foot = (KIND_KO[oc.kind] || '') + ' · 등록 차량 → ' + where }
+    const key = cls + head + body + foot
+    if (key === pt.key) return
+    pt.key = key
+    pt.o.element.className = 'twin-tag twin-tag-plate' + cls
+    pt.o.element.innerHTML = '<i>' + head + '</i><b>' + body + '</b>' + (foot ? '<span>' + foot + '</span>' : '')
+  }
 
   /* ── 현장 소품: 볼라드 · 소화기 · 도크 실 · 롤테이너 · 안전 표지 ── */
   {
@@ -1270,6 +1338,7 @@ export function createAmrScene(container, sim, opts = {}) {
       const tr = inTrucks[i]
       tr.visible = d.state !== 'empty'
       tr.position.x = WALL_L - 0.6 - ease(d.off) * 22
+      plateTagUpdate(d, i, 0, tr, t)
       const dd = dockDoors.in[i]; const want = d.state === 'docked' ? 1 : 0
       dd.open += (want - dd.open) * Math.min(1, dtReal * 2.5)
       dd.door.scale.y = Math.max(0.05, 1 - dd.open * 0.95); dd.door.position.y = DOOR_H - (DOOR_H * dd.door.scale.y) / 2
@@ -1279,6 +1348,7 @@ export function createAmrScene(container, sim, opts = {}) {
       const tr = outTrucks[i]
       tr.visible = d.state !== 'empty'
       tr.position.x = WALL_R + 0.6 + ease(d.off) * 22
+      plateTagUpdate(d, i, 1, tr, t)
       const dd = dockDoors.out[i]; const want = d.state === 'docked' ? 1 : 0
       dd.open += (want - dd.open) * Math.min(1, dtReal * 2.5)
       dd.door.scale.y = Math.max(0.05, 1 - dd.open * 0.95); dd.door.position.y = DOOR_H - (DOOR_H * dd.door.scale.y) / 2
@@ -1400,7 +1470,7 @@ export function createAmrScene(container, sim, opts = {}) {
       s.beamMat.opacity = done ? 0.22 : 0.12 + 0.12 * Math.abs(Math.sin(t * 14))
       s.beam.position.x = done ? 0.05 : 0.05 + Math.sin(t * 9) * 0.25
       s.lbl.visible = true
-      s.lbl.element.textContent = done ? 'OCR ✓ ' + c.id + ' → ' + HUBS[c.hub].name + (c.handle === '냉장' ? ' · 냉장' : '') : '운송장 스캔 중…'
+      s.lbl.element.textContent = done ? '바코드 ✓ ' + (c.ean || c.id) + ' → ' + HUBS[c.hub].name + (c.handle === '냉장' ? ' · 냉장' : '') : '바코드 스캔 중…'
       s.lbl.element.className = 'twin-tag twin-tag-ocr' + (done ? ' is-done' : '')
       s.lbl.element.style.setProperty('--hub', HUBS[c.hub].col)
     })
