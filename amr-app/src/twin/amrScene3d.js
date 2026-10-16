@@ -1389,22 +1389,38 @@ export function createAmrScene(container, sim, opts = {}) {
     gateOut: { tgt: [GATE_OUT_X - 4, 0, 0], off: [9, 19, 21], z2: 1.6 },
     station: { tgt: [X(430), 0, Z(590)], off: [6, 12, 14], z2: 2.4 },
   }
-  let preset = null, autoGate = false, gateBack = null, gateUntil = 0, gateSeen = new WeakSet()
+  let preset = null, autoGate = false, gateBack = null, gateUntil = 0, gateSeen = new WeakSet(), exitSeen = new WeakSet()
+  const backTgt = new THREE.Vector3(), backPos = new THREE.Vector3(); let backZoom = 1, backUntil = 0
   function setPreset(name) {
     const p = PRESETS[name]; if (!p) return
     preset = p; viewMode = 'preset'; opts.onViewChange && opts.onViewChange('preset:' + name)
   }
   function setAutoGate(on) { autoGate = !!on }
-  // 입구 · 출구에서 인식이 시작되면 그 게이트를 잠깐(6초) 보여 주고 원래 시점으로 돌아간다
+  // 26.10.16 입구 · 출구에서 인식이 시작되면 그 게이트를 잠깐(6초) 보여 주고 원래 보던 자리로 돌아간다
+  //  - 손으로 움직인 자유 시점 · 로봇 따라가기에서도 동작 (예전엔 자동 · 전체 · 바로가기 시점에서만 동작)
+  //  - 들어올 때(입구 OCR) + 택배차가 나갈 때(출구 OCR) 모두
   function autoGateCheck(t) {
     if (!autoGate) return
-    if (gateUntil && t > gateUntil) { gateUntil = 0; if (viewMode === 'preset' && gateBack) { if (gateBack.mode === 'preset') { preset = gateBack.preset; viewMode = 'preset' } else setView(gateBack.mode, gateBack.idx) } gateBack = null; return }
-    if (gateUntil || !['auto', 'overview', 'preset'].includes(viewMode)) return
-    const hit = [...S.inDocks.map((d) => [d, 'gateIn']), ...S.outDocks.map((d) => [d, 'gateOut'])].find(([d]) => d.ocr && d.ocr.st === 'scan' && !gateSeen.has(d.ocr))
+    if (gateUntil && t > gateUntil) {
+      gateUntil = 0
+      if (viewMode === 'preset' && gateBack) { // 게이트를 보는 사이 사용자가 직접 움직였으면 그대로 둔다
+        if (gateBack.mode === 'preset') { preset = gateBack.preset; viewMode = 'preset' }
+        else if (gateBack.mode === 'free') { preset = null; viewMode = 'back'; backUntil = t + 2.5 }
+        else setView(gateBack.mode, gateBack.idx)
+      }
+      gateBack = null; return
+    }
+    if (gateUntil || viewMode === 'back') return
+    const hit = [...S.inDocks.map((d) => [d, 'gateIn']), ...S.outDocks.map((d) => [d, 'gateOut'])].find(([d]) => d.ocr && ((d.ocr.st === 'scan' && !gateSeen.has(d.ocr)) || (d.ocr.exit === 'scan' && !exitSeen.has(d.ocr))))
     if (!hit) return
-    gateSeen.add(hit[0].ocr)
+    const o = hit[0].ocr
+    if (o.exit === 'scan') exitSeen.add(o); else gateSeen.add(o)
     gateBack = { mode: viewMode, idx: followIdx, preset }
+    if (viewMode === 'free') { // 자유 시점: 지금 카메라 자리를 기억
+      if (is2D) { backTgt.copy(controls2.target); backZoom = cam2.zoom } else { backTgt.copy(controls.target); backPos.copy(camera.position) }
+    }
     preset = PRESETS[hit[1]]; viewMode = 'preset'; gateUntil = t + 6
+    opts.onViewChange && opts.onViewChange('preset:' + hit[1])
   }
   // 이동 범위 제한 (목표점을 부지 안으로 · 카메라도 같은 만큼 옮겨 시야 유지)
   const clampV = new THREE.Vector3()
@@ -1628,7 +1644,16 @@ export function createAmrScene(container, sim, opts = {}) {
     } else callout.visible = false
 
     // 카메라
-    if (viewMode !== 'free') {
+    if (viewMode === 'back') { // 게이트를 보여 준 뒤 자유 시점의 원래 자리로 부드럽게 복귀
+      const k = Math.min(1, dtReal * 2.2)
+      if (is2D) { controls2.target.lerp(backTgt, k); cam2.position.set(controls2.target.x, 90, controls2.target.z); cam2.zoom += (backZoom - cam2.zoom) * k; cam2.updateProjectionMatrix() }
+      else { controls.target.lerp(backTgt, k); camera.position.lerp(backPos, k) }
+      const near = is2D ? controls2.target.distanceTo(backTgt) < 0.05 && Math.abs(cam2.zoom - backZoom) < 0.01 : controls.target.distanceTo(backTgt) < 0.05 && camera.position.distanceTo(backPos) < 0.05
+      if (near || t > backUntil) { // 다 왔거나 시간이 지나면 원래 자리에 정확히 맞추고 자유 시점으로
+        if (is2D) { controls2.target.copy(backTgt); cam2.position.set(backTgt.x, 90, backTgt.z); cam2.zoom = backZoom; cam2.updateProjectionMatrix() } else { controls.target.copy(backTgt); camera.position.copy(backPos) }
+        viewMode = 'free'; opts.onViewChange && opts.onViewChange('free')
+      }
+    } else if (viewMode !== 'free') {
       let follow = viewMode === 'follow' || (viewMode === 'auto' && ui.phase >= 2 && ui.phase <= 4)
       if (viewMode === 'preset' && preset) follow = false
       const fi = viewMode === 'follow' ? followIdx : (S.sc.target == null ? 2 : S.sc.target)

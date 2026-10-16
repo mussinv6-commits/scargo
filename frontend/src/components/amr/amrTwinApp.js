@@ -310,7 +310,11 @@ export function mountAmrTwin(root) {
   /* ── 3D 씬 ── */
   const viewport = $('viewport')
   const viewBtns = root.querySelectorAll('[data-view]')
-  const syncViewBtns = (mode) => { viewBtns.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.view === mode))); if (!String(mode).startsWith('preset')) root.querySelectorAll('[data-preset]').forEach((x) => x.setAttribute('aria-pressed', 'false')) }
+  const syncViewBtns = (mode) => {
+    viewBtns.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.view === mode)))
+    const pm = String(mode).startsWith('preset:') ? String(mode).slice(7) : null // 게이트 자동으로 이동해도 해당 버튼에 불이 들어오게
+    if (pm || !String(mode).startsWith('preset')) root.querySelectorAll('[data-preset]').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.preset === pm)))
+  }
   try {
     scene = createAmrScene(viewport, sim, {
       onPick: (hit) => {
