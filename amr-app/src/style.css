@@ -102,7 +102,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .chips{display:flex;gap:6px;margin-top:10px;overflow-x:auto;scrollbar-width:none}
 .chips button,.chips2 button,.mini-chips button{font-size:12px;font-weight:800;padding:6px 12px;border-radius:999px;background:rgba(var(--glass),.78);border:1px solid var(--edge2);white-space:nowrap}
 .chips button.on,.chips2 button.on,.mini-chips button.on{background:var(--cyan);color:#06221e;border-color:var(--cyan)}
-.ov-side{position:absolute;right:12px;top:calc(var(--st) + 128px);display:flex;flex-direction:column;gap:8px}
+.ov-side{position:absolute;right:12px;top:calc(var(--st) + 146px);display:flex;flex-direction:column;gap:8px}
 .ov-side button{min-width:46px;height:40px;padding:0 6px;border-radius:12px;background:rgba(var(--glass),.82);border:1px solid var(--edge2);font-size:11.5px;font-weight:800}
 .sheet{position:absolute;left:10px;right:10px;bottom:10px;border-radius:20px;background:rgba(var(--glass),.95);border:1px solid var(--edge2);padding:10px 14px 12px;backdrop-filter:blur(8px)}
 .sheet.crit{border-color:rgba(255,90,95,.55)}.sheet.warn{border-color:rgba(255,184,77,.55)}

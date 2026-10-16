@@ -400,7 +400,7 @@ function applyTheme(t) {
   const light = t === 'light'
   document.documentElement.dataset.theme = light ? 'light' : 'dark'
   const meta = document.querySelector('meta[name="theme-color"]'); if (meta) meta.content = light ? '#f2f5f8' : '#070b10'
-  document.querySelectorAll('[data-theme-toggle]').forEach((b) => { b.textContent = b.classList.contains('theme-btn') ? (light ? '다크 모드' : '라이트 모드') : (light ? '다크' : '라이트') })
+  document.querySelectorAll('[data-theme-toggle]').forEach((b) => { b.textContent = light ? '다크 모드' : '라이트 모드' }) // 웹과 같은 문구
   if (scene) scene.setTheme(light ? 'light' : 'dark')
   store.set('amr_app_theme', light ? 'light' : 'dark')
 }
@@ -518,7 +518,7 @@ $('h-todo').addEventListener('click', (e) => {
 /* ── 3D 바로가기 시점 · 게이트 자동 따라가기 ── */
 $('v-presets').addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b || !scene) return
-  if (b.id === 'v-autogate') { scene.setAutoGate(!scene.autoGate); b.classList.toggle('on', scene.autoGate); store.set('amr_app_autogate', scene.autoGate ? '1' : '0'); toast(scene.autoGate ? '게이트 자동: 번호판 인식이 시작되면 그 게이트를 6초 보여 줍니다' : '게이트 자동 끔', 'ok'); return }
+  if (b.id === 'v-autogate') { scene.setAutoGate(!scene.autoGate); b.classList.toggle('on', scene.autoGate); store.set('amr_app_autogate', scene.autoGate ? '1' : '0'); toast(scene.autoGate ? '게이트 자동 켜짐 · 다음 트럭이 입구 · 출구 OCR에 오면 그 게이트를 6초 보여 줍니다' : '게이트 자동 꺼짐', 'ok'); return }
   scene.setPreset(b.dataset.p); coldView = ''
   $('v-presets').querySelectorAll('button[data-p]').forEach((x) => x.classList.toggle('on', x === b))
   document.querySelectorAll('#v-chips button').forEach((x) => x.classList.remove('on'))
@@ -529,7 +529,7 @@ let agTxt = ''
 setInterval(() => {
   if (!scene) return
   const side = scene.autoGateSide
-  const t = !scene.autoGate ? '게이트 자동' : side ? '▶ ' + (side === 'in' ? '입구' : '출구') + ' 보는 중' : '게이트 자동 ● 대기'
+  const t = !scene.autoGate ? '게이트 자동' : side ? '게이트 자동 ▶ ' + (side === 'in' ? '입구 보는 중' : '출구 보는 중') : '게이트 자동 ● 대기' // 웹과 같은 문구
   if (t !== agTxt) { agTxt = t; $('v-autogate').textContent = t }
 }, 400)
 
