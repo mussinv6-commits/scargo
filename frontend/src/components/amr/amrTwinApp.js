@@ -336,7 +336,24 @@ export function mountAmrTwin(root) {
   const presetBtns = root.querySelectorAll('[data-preset]')
   presetBtns.forEach((b) => b.addEventListener('click', () => { if (!scene) return; scene.setPreset(b.dataset.preset); presetBtns.forEach((x) => x.setAttribute('aria-pressed', String(x === b))) }))
   const agBtn = $('autoGate')
-  if (agBtn) agBtn.addEventListener('click', () => { if (!scene) return; scene.setAutoGate(!scene.autoGate); agBtn.setAttribute('aria-pressed', String(scene.autoGate)) })
+  // 26.10.16 게이트 자동: 켜졌는지 · 기다리는 중인지 · 지금 보는 중인지 버튼에 바로 보이게
+  const agNotice = (text, col) => { const b = $('banner'); b.style.setProperty('--c', col); b.querySelector('span').textContent = text; b.classList.add('show'); clearTimeout(bannerTimer); bannerTimer = setTimeout(() => b.classList.remove('show'), 3500) }
+  let agShown = ''
+  const syncAg = () => {
+    if (!agBtn || !scene) return
+    const side = scene.autoGateSide
+    const txt = !scene.autoGate ? '게이트 자동' : side ? '게이트 자동 ▶ ' + (side === 'in' ? '입구 보는 중' : '출구 보는 중') : '게이트 자동 ● 대기'
+    if (txt === agShown) return
+    agShown = txt; agBtn.textContent = txt
+    agBtn.classList.toggle('wait', scene.autoGate && !side)
+    agBtn.setAttribute('aria-pressed', String(scene.autoGate))
+  }
+  if (agBtn) agBtn.addEventListener('click', () => {
+    if (!scene) return
+    scene.setAutoGate(!scene.autoGate); syncAg()
+    agNotice(scene.autoGate ? '게이트 자동 켜짐 · 다음 트럭이 입구 · 출구 OCR에 오면 그 게이트를 6초 보여 줍니다' : '게이트 자동 꺼짐', scene.autoGate ? '#ffb84d' : '#8a9bb0')
+  })
+  const agTimer = setInterval(syncAg, 300)
 
   /* ── 음향 ── */
   const SOUND_KEY = 'scargo_twin_sound'
@@ -506,7 +523,7 @@ export function mountAmrTwin(root) {
     destroy() {
       destroyed = true
       offDb()
-      clearInterval(dbTimer); clearInterval(kpiTimer); clearInterval(authTimer)
+      clearInterval(dbTimer); clearInterval(kpiTimer); clearInterval(authTimer); clearInterval(agTimer)
       offAuth(); document.removeEventListener('click', onDocClick); window.removeEventListener('resize', placePop); window.removeEventListener('scroll', placePop, true)
       cancelAnimationFrame(raf)
       clearTimeout(bannerTimer)

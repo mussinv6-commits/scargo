@@ -524,6 +524,14 @@ $('v-presets').addEventListener('click', (e) => {
   document.querySelectorAll('#v-chips button').forEach((x) => x.classList.remove('on'))
 })
 if (scene && store.get('amr_app_autogate') === '1') { scene.setAutoGate(true); $('v-autogate').classList.add('on') }
+// 26.10.16 게이트 자동 상태를 버튼에 (대기 중 · 입구/출구 보는 중)
+let agTxt = ''
+setInterval(() => {
+  if (!scene) return
+  const side = scene.autoGateSide
+  const t = !scene.autoGate ? '게이트 자동' : side ? '▶ ' + (side === 'in' ? '입구' : '출구') + ' 보는 중' : '게이트 자동 ● 대기'
+  if (t !== agTxt) { agTxt = t; $('v-autogate').textContent = t }
+}, 400)
 
 /* ── 휴대폰 알림 (차단 차량 · 정비 예약만) ── */
 let notifyOk = false, notifySeq = 1

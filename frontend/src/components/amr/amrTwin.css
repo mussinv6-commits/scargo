@@ -313,3 +313,7 @@
 .amr-twin .tw-linkHelp b{color:var(--ink)}
 .amr-twin .tw-linkSrv{font-size:11px;color:var(--dim);margin:0 0 10px;font-family:var(--font-data)}
 .amr-twin .tw-linkOut{width:100%;padding:7px;border-radius:8px;border:1px solid var(--edge2);background:transparent;color:var(--red);font-size:12px;cursor:pointer;font-family:inherit}
+
+/* 26.10.16 게이트 자동: 기다리는 중이면 점이 깜빡임 */
+.amr-twin .twin-presets #tw-autoGate.wait{animation:agWait 1.6s ease-in-out infinite}
+@keyframes agWait{50%{box-shadow:0 0 0 3px rgba(255,184,77,.35)}}

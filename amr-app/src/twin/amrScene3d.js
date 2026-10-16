@@ -1389,20 +1389,21 @@ export function createAmrScene(container, sim, opts = {}) {
     gateOut: { tgt: [GATE_OUT_X - 4, 0, 0], off: [9, 19, 21], z2: 1.6 },
     station: { tgt: [X(430), 0, Z(590)], off: [6, 12, 14], z2: 2.4 },
   }
+  let gateSide = null // 지금 자동으로 보고 있는 게이트 ('in' | 'out')
   let preset = null, autoGate = false, gateBack = null, gateUntil = 0, gateSeen = new WeakSet(), exitSeen = new WeakSet()
   const backTgt = new THREE.Vector3(), backPos = new THREE.Vector3(); let backZoom = 1, backUntil = 0
   function setPreset(name) {
     const p = PRESETS[name]; if (!p) return
     preset = p; viewMode = 'preset'; opts.onViewChange && opts.onViewChange('preset:' + name)
   }
-  function setAutoGate(on) { autoGate = !!on }
+  function setAutoGate(on) { autoGate = !!on; if (!autoGate) gateSide = null }
   // 26.10.16 입구 · 출구에서 인식이 시작되면 그 게이트를 잠깐(6초) 보여 주고 원래 보던 자리로 돌아간다
   //  - 손으로 움직인 자유 시점 · 로봇 따라가기에서도 동작 (예전엔 자동 · 전체 · 바로가기 시점에서만 동작)
   //  - 들어올 때(입구 OCR) + 택배차가 나갈 때(출구 OCR) 모두
   function autoGateCheck(t) {
     if (!autoGate) return
     if (gateUntil && t > gateUntil) {
-      gateUntil = 0
+      gateUntil = 0; gateSide = null
       if (viewMode === 'preset' && gateBack) { // 게이트를 보는 사이 사용자가 직접 움직였으면 그대로 둔다
         if (gateBack.mode === 'preset') { preset = gateBack.preset; viewMode = 'preset' }
         else if (gateBack.mode === 'free') { preset = null; viewMode = 'back'; backUntil = t + 2.5 }
@@ -1419,7 +1420,7 @@ export function createAmrScene(container, sim, opts = {}) {
     if (viewMode === 'free') { // 자유 시점: 지금 카메라 자리를 기억
       if (is2D) { backTgt.copy(controls2.target); backZoom = cam2.zoom } else { backTgt.copy(controls.target); backPos.copy(camera.position) }
     }
-    preset = PRESETS[hit[1]]; viewMode = 'preset'; gateUntil = t + 6
+    preset = PRESETS[hit[1]]; viewMode = 'preset'; gateUntil = t + 6; gateSide = hit[1] === 'gateIn' ? 'in' : 'out'
     opts.onViewChange && opts.onViewChange('preset:' + hit[1])
   }
   // 이동 범위 제한 (목표점을 부지 안으로 · 카메라도 같은 만큼 옮겨 시야 유지)
@@ -1765,5 +1766,5 @@ export function createAmrScene(container, sim, opts = {}) {
     labelRenderer.domElement.remove()
   }
 
-  return { update, render, setView, setPreset, setAutoGate, get autoGate() { return autoGate }, resize, dispose, setQuality, set2D, setTheme, get is2D() { return is2D }, get theme() { return theme }, get quality() { return quality }, camera, controls, renderer, world, toWorld: (x, y) => [X(x), Z(y)], get viewMode() { return viewMode } }
+  return { update, render, setView, setPreset, setAutoGate, get autoGate() { return autoGate }, get autoGateSide() { return gateSide }, resize, dispose, setQuality, set2D, setTheme, get is2D() { return is2D }, get theme() { return theme }, get quality() { return quality }, camera, controls, renderer, world, toWorld: (x, y) => [X(x), Z(y)], get viewMode() { return viewMode } }
 }
