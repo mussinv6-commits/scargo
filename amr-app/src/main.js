@@ -23,6 +23,16 @@ const store = { get(k) { try { return localStorage.getItem(k) } catch { return n
 /* ── 상태 ── */
 let tab = 'home', selected = 2, speed = 1, playing = true, cargoFilter = 'all', alertFilter = 'all'
 let gate = null // 26.10.16 OTP 잠금 화면 (아래에서 붙임)
+// 26.10.16 알림 우선순위: crit 긴급만(기본) · warn 긴급 + 주의 · all 전부 — 고른 단계만 휴대폰 알림 · 팝업, 나머지는 알림 탭에만
+let notifyLevel = store.get('amr_app_notify') || 'crit'
+const NOTIFY_RANK = { crit: 3, warn: 2, info: 1 }, NOTIFY_NEED = { crit: 3, warn: 2, all: 1 }
+const allowAlert = (lv) => NOTIFY_RANK[lv] >= NOTIFY_NEED[notifyLevel]
+function alertLevel(text, lv) {
+  if (/차단|판독 불가|연결 끊김/.test(text)) return 'crit'              // 긴급: 미등록 차량 · 서버 끊김
+  if (/AI 예측|진동 이상|자동 정비 예약|배터리 부족/.test(text)) return 'warn' // 주의: 고장 예측 · 진동 · 배터리
+  if (/정비|충전|기준 변경|완료|복귀/.test(text)) return 'info'           // 정보: 정비 진행 · 충전 · 기준
+  return lv === 'crit' || lv === 'warn' ? 'warn' : 'info'
+}
 let kpiCache = null, vehCache = [], vFilter = 'all', vPick = null // 통계(KPI) · 입출차 기록 (DB)
 const events = [] // { time, text, lv, cat, read }
 const phaseAt = {} // 단계별 시작 시각(실제 시계)
@@ -52,7 +62,8 @@ function onLog(items) {
     const cat = classify(it.text)
     const lv = cat === 'fl' && !it.lv ? 'fl' : it.lv
     events.unshift({ time: new Date(), text: it.text, lv, cat, read: tab === 'alert' })
-    if (it.lv === 'crit' || it.lv === 'warn') toast(it.text, it.lv === 'crit' ? '' : 'amber')
+    const al = alertLevel(it.text, it.lv)
+    if (al !== 'info' && allowAlert(al)) toast(it.text, al === 'crit' ? '' : 'amber')
   })
   if (events.length > 80) events.length = 80
   renderAlerts(); renderBadge()
@@ -420,7 +431,7 @@ async function pollRemote() {
     if (mm && mm.rulHours) S.sc.rul = Math.round(mm.rulHours)   // 남은 수명은 웹(현장)이 계산해 DB에 남긴 값으로 맞춘다
     if (st.settings && Date.now() - cfgLocalT > 3000) sim.setCfg({ rulAt: st.settings.rulThresholdHours, chargeAt: st.settings.chargeAtPct })
     sim.follow({ pending: !!st.pending, approved: !!(act && act.approvedAt), approvedBy: act && act.approvedBy, code: (st.pending || act || {}).robotCode })
-    if (act && act.approvedAt && act.id !== lastApprover) { lastApprover = act.id; toast(act.robotCode + ' 자동 정비 예약 · 예비기 투입 (웹 관제)', 'amber'); phoneNotify(act.robotCode + ' 자동 정비 예약', '예비기 AMR-05 투입 · 남은 수명 약 ' + Math.round(act.rulHours || 0) + '시간') }
+    if (act && act.approvedAt && act.id !== lastApprover) { lastApprover = act.id; if (allowAlert('warn')) toast(act.robotCode + ' 자동 정비 예약 · 예비기 투입 (웹 관제)', 'amber'); phoneNotify(act.robotCode + ' 자동 정비 예약', '예비기 AMR-05 투입 · 남은 수명 약 ' + Math.round(act.rulHours || 0) + '시간', 'warn') }
     const a = S.amrs[selected]
     if (tab === 'robot') {
       const h = await amrApi.history(a.name, 5)
@@ -446,7 +457,7 @@ function applyVehicles(list) {
     const d = (out ? S.outDocks : S.inDocks)[v.dock]; if (!d) return
     if (v.direction === 'EXIT') d.ocr = { st: 'ok', plate: v.plate, photo: v.photoPlate, conf: v.confidence, kind: v.kind, exit: null }
     else d.ocr = { st: v.decision === 'BLOCK' ? 'block' : 'ok', plate: v.plate, photo: v.photoPlate, conf: v.confidence, kind: v.kind, exit: null }
-    if (v.decision === 'BLOCK' && !first) { toast('미등록 차량 차단 · ' + (fmtPlate(v.plate) || '판독 불가'), ''); phoneNotify('미등록 차량 진입 차단', (fmtPlate(v.plate) || '판독 불가') + ' · ' + (v.lane === 'OUT' ? '출고' : '입고') + ' 게이트') }
+    if (v.decision === 'BLOCK' && !first) { toast('미등록 차량 차단 · ' + (fmtPlate(v.plate) || '판독 불가'), ''); phoneNotify('미등록 차량 진입 차단', (fmtPlate(v.plate) || '판독 불가') + ' · ' + (v.lane === 'OUT' ? '출고' : '입고') + ' 게이트', 'crit') }
   })
   lastVehicleId = Math.max(lastVehicleId, ...list.map((v) => v.id))
   vehCache = list
@@ -522,8 +533,8 @@ let notifyOk = false, notifySeq = 1
     notifyOk = st.display === 'granted' || (await LocalNotifications.requestPermissions()).display === 'granted'
   } catch { notifyOk = false }
 })()
-function phoneNotify(title, body) {
-  if (!notifyOk) return
+function phoneNotify(title, body, lv = 'crit') {
+  if (!notifyOk || !allowAlert(lv)) return
   try { LocalNotifications.schedule({ notifications: [{ id: notifySeq++, title, body }] }) } catch { /* 무시 */ }
 }
 
@@ -624,3 +635,24 @@ gate = mountAuthGate(document.body, {
 })
 $('au-out').addEventListener('click', async () => { await gate.logout(); renderAuth() })
 renderAuth(); setInterval(renderAuth, 60000)
+
+/* ── 26.10.16 알림 설정: 어떤 단계까지 휴대폰에 알릴지 ── */
+function renderNotify() { $('nt-seg').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.n === notifyLevel)) }
+$('nt-seg').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-n]'); if (!b) return
+  notifyLevel = b.dataset.n; store.set('amr_app_notify', notifyLevel); renderNotify()
+  toast('휴대폰 알림: ' + b.textContent, 'ok')
+})
+renderNotify()
+// 서버가 15초 넘게 끊기면 긴급 알림 (잠깐 끊긴 건 무시)
+let offTimer = 0, offNotified = false, wasOnline = false
+amrApi.onStatus((on) => {
+  if (on) { wasOnline = true; clearTimeout(offTimer); offTimer = 0; if (offNotified) { offNotified = false; toast('서버 다시 연결됨', 'ok') } return }
+  if (!wasOnline || offTimer || offNotified) return
+  offTimer = setTimeout(() => {
+    offTimer = 0; if (amrApi.online) return
+    offNotified = true
+    events.unshift({ time: new Date(), text: '노트북 서버 연결 끊김 · 웹 관제 · DB 확인', lv: 'crit', cat: '', read: tab === 'alert' }); renderAlerts(); renderBadge()
+    toast('노트북 서버 연결 끊김', ''); phoneNotify('AMR 서버 연결 끊김', '노트북 서버(웹 관제 · DB)가 15초 넘게 응답하지 않습니다', 'crit')
+  }, 15000)
+})

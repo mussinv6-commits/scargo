@@ -269,3 +269,13 @@ canvas.chart{display:block;width:100%;height:150px;margin-top:6px}
 .todo-ok i{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green)}
 .chips.pre{margin-top:6px}.chips.pre button{font-size:11.5px;padding:5px 10px}
 .chips.pre button.ag.on{background:var(--amber);border-color:var(--amber);color:#0b0f14}
+
+/* 26.10.16 알림 설정 */
+.seg3{display:flex;margin:10px 0 12px;background:var(--bg2);border:1px solid var(--edge);border-radius:12px;padding:3px}
+.seg3 button{flex:1;padding:9px 0;border-radius:9px;font-size:13px;font-weight:800;color:var(--muted)}
+.seg3 button.on{background:var(--cyan);color:#05211d}
+.nt-list{list-style:none;margin:0 0 6px;padding:0;display:flex;flex-direction:column;gap:8px}
+.nt-list li{display:grid;grid-template-columns:10px 34px 1fr;align-items:center;gap:8px;font-size:12.5px}
+.nt-list i{width:8px;height:8px;border-radius:50%}
+.nt-list i.r{background:var(--red)}.nt-list i.a{background:var(--amber)}.nt-list i.g{background:var(--dim)}
+.nt-list b{color:var(--ink)}.nt-list span{color:var(--muted)}

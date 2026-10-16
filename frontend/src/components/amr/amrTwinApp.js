@@ -107,7 +107,7 @@ export function mountAmrTwin(root) {
   /* ── 26.10.16 앱 연결: 웹(팀 관리자 로그인)에 30초마다 바뀌는 6자리 + QR → 앱이 찍거나 입력하면 24시간 로그인 ── */
   amrApi.useCookieAuth()
   const linkWrap = document.createElement('div'); linkWrap.className = 'tw-link'
-  linkWrap.innerHTML = '<button type="button" class="tw-linkChip" aria-expanded="false">📱 앱 연결</button>' +
+  linkWrap.innerHTML = '<button type="button" class="tw-linkChip" aria-expanded="false" title="눌러서 앱 연결 QR 보기">📱 앱 연결 QR ▾</button>' +
     '<div class="tw-linkPop" hidden><div class="tw-linkHd">관리자 앱 연결</div>' +
     '<div class="tw-linkBody"><canvas class="tw-linkQr"></canvas><div class="tw-linkSide"><div class="tw-linkCode">------</div><div class="tw-linkBar"><i></i></div><div class="tw-linkSec"></div></div></div>' +
     '<p class="tw-linkHelp">앱에서 <b>QR 찍기</b> 또는 6자리 입력 → 24시간 로그인<br>QR에는 이 노트북 주소도 들어 있어 주소 입력이 필요 없어요</p>' +
@@ -120,10 +120,10 @@ export function mountAmrTwin(root) {
     linkFetching = true
     const r = await amrApi.appCode(); linkFetching = false
     if (destroyed) return
-    if (!r.data) { link = null; linkChip.textContent = r.status === 403 ? '📱 앱 연결 · 관리자 로그인 필요' : '📱 앱 연결'; linkChip.classList.remove('ok'); linkWrap.querySelector('.tw-linkCode').textContent = '------'; linkWrap.querySelector('.tw-linkSec').textContent = r.error || ''; return }
+    if (!r.data) { link = null; linkChip.textContent = r.status === 403 ? '📱 앱 연결 · 관리자 로그인 필요' : '📱 앱 연결 QR ▾'; linkChip.classList.remove('ok'); linkWrap.querySelector('.tw-linkCode').textContent = '------'; linkWrap.querySelector('.tw-linkSec').textContent = r.error || ''; return }
     link = r.data; linkAt = Date.now()
     const code = link.code.slice(0, 3) + ' ' + link.code.slice(3)
-    linkChip.textContent = '📱 앱 연결 ' + code; linkChip.classList.add('ok')
+    linkChip.textContent = '📱 QR · ' + code + ' ▾'; linkChip.classList.add('ok')
     linkWrap.querySelector('.tw-linkCode').textContent = code
     const server = link.lanBase || amrApi.base
     linkWrap.querySelector('.tw-linkSrv').textContent = '노트북 주소 ' + server.replace(/^https?:\/\//, '') + (link.lanBase ? '' : ' (와이파이 IP를 못 찾음 · 앱에서 직접 입력)')
@@ -136,7 +136,10 @@ export function mountAmrTwin(root) {
     linkWrap.querySelector('.tw-linkSec').textContent = Math.ceil(left) + '초 뒤 바뀜'
     if (left <= 0) { link.secondsLeft = 9999; setTimeout(fetchCode, 400) }
   }
-  linkChip.addEventListener('click', () => { linkPop.hidden = !linkPop.hidden; linkChip.setAttribute('aria-expanded', String(!linkPop.hidden)); if (!linkPop.hidden) fetchCode() })
+  // 창은 화면 맨 위 층(fixed)에 띄워 다른 패널 · 관리자 레이아웃에 가려지지 않게
+  const placePop = () => { const r = linkChip.getBoundingClientRect(); linkPop.style.top = Math.round(r.bottom + 8) + 'px'; linkPop.style.right = Math.max(8, Math.round(window.innerWidth - r.right)) + 'px' }
+  linkChip.addEventListener('click', () => { linkPop.hidden = !linkPop.hidden; linkChip.setAttribute('aria-expanded', String(!linkPop.hidden)); if (!linkPop.hidden) { placePop(); fetchCode() } })
+  window.addEventListener('resize', placePop); window.addEventListener('scroll', placePop, true)
   linkWrap.querySelector('.tw-linkOut').addEventListener('click', async () => { const r = await amrApi.rotate(); if (r.data) { fetchCode(); linkWrap.querySelector('.tw-linkSec').textContent = '모든 앱 로그아웃 완료 · 새 코드' } })
   const onDocClick = (e) => { if (!linkPop.hidden && !e.target.closest('.tw-link')) { linkPop.hidden = true; linkChip.setAttribute('aria-expanded', 'false') } }
   document.addEventListener('click', onDocClick)
@@ -504,7 +507,7 @@ export function mountAmrTwin(root) {
       destroyed = true
       offDb()
       clearInterval(dbTimer); clearInterval(kpiTimer); clearInterval(authTimer)
-      offAuth(); document.removeEventListener('click', onDocClick)
+      offAuth(); document.removeEventListener('click', onDocClick); window.removeEventListener('resize', placePop); window.removeEventListener('scroll', placePop, true)
       cancelAnimationFrame(raf)
       clearTimeout(bannerTimer)
       chartRO.disconnect()
