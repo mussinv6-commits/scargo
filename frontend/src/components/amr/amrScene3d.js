@@ -1416,12 +1416,20 @@ export function createAmrScene(container, sim, opts = {}) {
     if (!hit) return
     const o = hit[0].ocr
     if (o.exit === 'scan') exitSeen.add(o); else gateSeen.add(o)
+    goGate(hit[1], t)
+  }
+  function goGate(key, t) {
     gateBack = { mode: viewMode, idx: followIdx, preset }
     if (viewMode === 'free') { // 자유 시점: 지금 카메라 자리를 기억
       if (is2D) { backTgt.copy(controls2.target); backZoom = cam2.zoom } else { backTgt.copy(controls.target); backPos.copy(camera.position) }
     }
-    preset = PRESETS[hit[1]]; viewMode = 'preset'; gateUntil = t + 6; gateSide = hit[1] === 'gateIn' ? 'in' : 'out'
-    opts.onViewChange && opts.onViewChange('preset:' + hit[1])
+    preset = PRESETS[key]; viewMode = 'preset'; gateUntil = t + 6; gateSide = key === 'gateIn' ? 'in' : 'out'
+    opts.onViewChange && opts.onViewChange('preset:' + key)
+  }
+  // 앱용: 앱은 인식을 직접 하지 않고 웹이 끝낸 결과만 받으므로, 새 결과가 오면 그 게이트로 바로 이동
+  function focusGate(side) {
+    if (!autoGate || gateUntil || viewMode === 'back') return
+    goGate(side === 'out' ? 'gateOut' : 'gateIn', performance.now() / 1000)
   }
   // 이동 범위 제한 (목표점을 부지 안으로 · 카메라도 같은 만큼 옮겨 시야 유지)
   const clampV = new THREE.Vector3()
@@ -1766,5 +1774,5 @@ export function createAmrScene(container, sim, opts = {}) {
     labelRenderer.domElement.remove()
   }
 
-  return { update, render, setView, setPreset, setAutoGate, get autoGate() { return autoGate }, get autoGateSide() { return gateSide }, resize, dispose, setQuality, set2D, setTheme, get is2D() { return is2D }, get theme() { return theme }, get quality() { return quality }, camera, controls, renderer, world, toWorld: (x, y) => [X(x), Z(y)], get viewMode() { return viewMode } }
+  return { update, render, setView, setPreset, setAutoGate, get autoGate() { return autoGate }, get autoGateSide() { return gateSide }, focusGate, resize, dispose, setQuality, set2D, setTheme, get is2D() { return is2D }, get theme() { return theme }, get quality() { return quality }, camera, controls, renderer, world, toWorld: (x, y) => [X(x), Z(y)], get viewMode() { return viewMode } }
 }

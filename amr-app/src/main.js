@@ -33,6 +33,7 @@ function alertLevel(text, lv) {
   if (/정비|충전|기준 변경|완료|복귀/.test(text)) return 'info'           // 정보: 정비 진행 · 충전 · 기준
   return lv === 'crit' || lv === 'warn' ? 'warn' : 'info'
 }
+let vehInit = false // 입출차 기록을 한 번이라도 받았는지
 let kpiCache = null, vehCache = [], vFilter = 'all', vPick = null // 통계(KPI) · 입출차 기록 (DB)
 const events = [] // { time, text, lv, cat, read }
 const phaseAt = {} // 단계별 시작 시각(실제 시계)
@@ -449,14 +450,15 @@ const VDEC = { ALLOW: ['입차', 'g'], BLOCK: ['차단', 'r'], EXIT_OK: ['출차
 let lastVehicleId = 0
 function applyVehicles(list) {
   const fresh = list.filter((v) => v.id > lastVehicleId).reverse() // 오래된 것부터
-  if (!list.length) return
-  const first = !lastVehicleId // 앱을 처음 켰을 때도 도크별 최근 결과를 트럭에 바로 붙인다 (알림은 새 기록만)
+  const first = !vehInit; vehInit = true // 첫 응답(기록이 0건이어도)까지만 '처음'으로 본다
+  if (!list.length) return // 앱을 처음 켰을 때도 도크별 최근 결과를 트럭에 바로 붙인다 (알림은 새 기록만)
   fresh.forEach((v) => {
     if (v.dock == null) return
     const out = v.lane ? v.lane === 'OUT' : v.kind === 'COURIER'
     const d = (out ? S.outDocks : S.inDocks)[v.dock]; if (!d) return
     if (v.direction === 'EXIT') d.ocr = { st: 'ok', plate: v.plate, photo: v.photoPlate, conf: v.confidence, kind: v.kind, exit: null }
     else d.ocr = { st: v.decision === 'BLOCK' ? 'block' : 'ok', plate: v.plate, photo: v.photoPlate, conf: v.confidence, kind: v.kind, exit: null }
+    if (!first && scene) scene.focusGate(out ? 'out' : 'in') // 게이트 자동이 켜져 있으면 새 결과가 온 게이트를 6초 보여 줌
     if (v.decision === 'BLOCK' && !first) { toast('미등록 차량 차단 · ' + (fmtPlate(v.plate) || '판독 불가'), ''); phoneNotify('미등록 차량 진입 차단', (fmtPlate(v.plate) || '판독 불가') + ' · ' + (v.lane === 'OUT' ? '출고' : '입고') + ' 게이트', 'crit') }
   })
   lastVehicleId = Math.max(lastVehicleId, ...list.map((v) => v.id))
