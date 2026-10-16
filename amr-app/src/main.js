@@ -9,6 +9,7 @@ import { createSim, HUBS, ZONES, STATE_KO, PHASE_T, CAPTIONS, COLORS, status, lv
 import { createAmrScene } from './twin/amrScene3d.js'
 import { amrApi } from './twin/amrApi.js'   // DB 연동: 웹 관제 화면과 같은 서버 · 같은 DB
 import { LocalNotifications } from '@capacitor/local-notifications' // 휴대폰 알림 (차단 · 정비)
+import { mountAuthGate, hoursLeft } from './twin/amrAuthGate.js' // 26.10.16 관리자 OTP 잠금 화면
 
 const $ = (id) => document.getElementById(id)
 const PH_COL = { 1: COLORS.cyan, 2: COLORS.amber, 3: COLORS.amber, 4: COLORS.red, 5: COLORS.green }
@@ -20,6 +21,7 @@ const store = { get(k) { try { return localStorage.getItem(k) } catch { return n
 
 /* ── 상태 ── */
 let tab = 'home', selected = 2, speed = 1, playing = true, cargoFilter = 'all', alertFilter = 'all'
+let gate = null // 26.10.16 OTP 잠금 화면 (아래에서 붙임)
 let kpiCache = null, vehCache = [], vFilter = 'all', vPick = null // 통계(KPI) · 입출차 기록 (DB)
 const events = [] // { time, text, lv, cat, read }
 const phaseAt = {} // 단계별 시작 시각(실제 시계)
@@ -104,6 +106,7 @@ function setTab(t) {
   placeHost()
   if (t === 'alert') { events.forEach((e) => (e.read = true)); renderBadge() }
   if (t === 'stats') pollKpi()
+  if (t !== 'settings' && gate && !amrApi.authed) gate.refresh() // 서버 설정만 보고 나오면 다시 잠금
   renderAll()
 }
 document.querySelectorAll('.tab').forEach((b) => b.addEventListener('click', () => setTab(b.dataset.tab)))
@@ -583,6 +586,22 @@ $('db-save').addEventListener('click', async () => {
   amrApi.setBase($('db-url').value)
   $('db-url').value = amrApi.base
   toast('서버 주소 저장: ' + amrApi.base, 'ok')
+  if (!amrApi.authed) { gate.refresh(); return }
   await pollRemote()
 })
 $('db-chip').addEventListener('click', () => setTab('settings'))
+
+/* ── 26.10.16 관리자 OTP: 앱을 켜면 6자리부터 (통과하면 24시간 유지) ── */
+function renderAuth() {
+  const ok = amrApi.authed
+  $('au-status').textContent = ok ? '● 인증됨 · ' + hoursLeft() + '시간 남음' : '○ 인증 필요'
+  $('au-status').style.color = ok ? 'var(--green)' : 'var(--amber)'
+  $('au-out').hidden = !ok
+}
+gate = mountAuthGate(document.body, {
+  client: 'APP', keypad: true, blockOffline: true,
+  onSettings: () => { gate.el.hidden = true; setTab('settings'); toast('서버 주소를 바꾸고 [연결]을 누르면 인증 화면으로 돌아갑니다', 'amber') },
+  onChange: () => renderAuth(),
+})
+$('au-out').addEventListener('click', async () => { await gate.logout(); renderAuth() })
+renderAuth(); setInterval(renderAuth, 60000)

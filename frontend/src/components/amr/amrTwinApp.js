@@ -8,6 +8,7 @@ import { createSim, HUBS, ZONES, STATE_KO, PHASE_T, CAPTIONS, PIPE_ON, PH_COL, C
 import { createAmrScene } from './amrScene3d.js'
 import { createAmrSound } from './amrSound.js'
 import { amrApi } from './amrApi.js'   // DB 연동 (서버가 꺼져 있으면 시뮬레이션만으로 동작)
+import { mountAuthGate, hoursLeft } from './amrAuthGate.js' // 26.10.16 AMR 관리자 OTP
 
 export function mountAmrTwin(root) {
   const $ = (id) => root.querySelector('#tw-' + id)
@@ -97,6 +98,26 @@ export function mountAmrTwin(root) {
   badgeBox.appendChild(ocrBadge)
   ocrBadge.textContent = '○ OCR 대기'; ocrBadge.style.color = '#8a9bb0'; ocrBadge.style.borderColor = '#3a4a5c'
   ocrBadge.title = '트럭이 입구 게이트에 오면 번호판 인식을 요청합니다'
+
+  /* ── 26.10.16 AMR 관리자 OTP: 잠금 화면 + 헤더 인증 표시(누르면 로그아웃 · 다시 등록) ── */
+  const gate = mountAuthGate(root, { client: 'WEB', onChange: () => syncAuth() })
+  const authWrap = document.createElement('div'); authWrap.className = 'tw-auth'
+  authWrap.innerHTML = '<button type="button" class="tw-authChip" aria-expanded="false"></button><div class="tw-authMenu" hidden><button type="button" data-a="out">로그아웃</button><button type="button" data-a="reg">OTP 다시 등록</button></div>'
+  badgeBox.appendChild(authWrap)
+  const authChip = authWrap.querySelector('.tw-authChip'), authMenu = authWrap.querySelector('.tw-authMenu')
+  function syncAuth() {
+    const ok = amrApi.authed
+    authChip.textContent = ok ? '🔒 OTP 인증 · ' + hoursLeft() + '시간' : '🔓 OTP 인증 필요'
+    authChip.classList.toggle('ok', ok)
+  }
+  authChip.addEventListener('click', () => { if (!amrApi.authed) { gate.refresh(); return } authMenu.hidden = !authMenu.hidden; authChip.setAttribute('aria-expanded', String(!authMenu.hidden)) })
+  authMenu.addEventListener('click', (e) => {
+    const a = e.target.closest('[data-a]'); if (!a) return
+    authMenu.hidden = true
+    if (a.dataset.a === 'out') gate.logout(); else gate.openRegister()
+  })
+  syncAuth()
+  const authTimer = setInterval(syncAuth, 60000)
   let dbAcc = 0
   const S = sim.S
   const warm = () => { sim.setVehicleGate(false); for (let i = 0; i < 80; i++) sim.step(0.05); S.packets.length = 0; sim.setVehicleGate(true) }
@@ -453,7 +474,8 @@ export function mountAmrTwin(root) {
     destroy() {
       destroyed = true
       offDb()
-      clearInterval(dbTimer); clearInterval(kpiTimer)
+      clearInterval(dbTimer); clearInterval(kpiTimer); clearInterval(authTimer)
+      gate.destroy()
       cancelAnimationFrame(raf)
       clearTimeout(bannerTimer)
       chartRO.disconnect()

@@ -294,3 +294,14 @@
 .amr-twin .twin-presets button{background:rgba(var(--glass),.72);backdrop-filter:blur(6px);font-size:.7rem;padding:4px 9px;border-radius:999px}
 .amr-twin .twin-presets button[aria-pressed="true"]{background:var(--cyan);color:#081016;border-color:var(--cyan)}
 .amr-twin .twin-presets #tw-autoGate[aria-pressed="true"]{background:var(--amber);border-color:var(--amber);color:#0b0f14}
+
+/* 26.10.16 AMR 관리자 OTP */
+.amr-twin{position:relative}
+.amr-twin > .otpg{align-items:flex-start;padding-top:min(18vh,160px);border-radius:10px}
+.amr-twin .tw-auth{position:relative}
+.amr-twin .tw-authChip{width:100%;font-size:11.5px;font-weight:800;padding:2px 10px;border-radius:999px;border:1px solid var(--amber);color:var(--amber);background:transparent;white-space:nowrap;cursor:pointer;font-family:inherit}
+.amr-twin .tw-authChip.ok{border-color:var(--cyan);color:var(--cyan)}
+.amr-twin .tw-authMenu{position:absolute;right:0;top:calc(100% + 6px);z-index:20;min-width:150px;display:flex;flex-direction:column;padding:6px;background:var(--panel);border:1px solid var(--edge2);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.4)}
+.amr-twin .tw-authMenu[hidden]{display:none}
+.amr-twin .tw-authMenu button{text-align:left;padding:8px 10px;border:0;background:transparent;color:var(--ink);font-size:13px;border-radius:6px;cursor:pointer;font-family:inherit}
+.amr-twin .tw-authMenu button:hover{background:var(--panel2)}
