@@ -18,17 +18,18 @@ function setOnline(v) { if (v !== online) { online = v; listeners.forEach((f) =>
 const TOKEN_KEY = 'scargo_amr_token', EXP_KEY = 'scargo_amr_token_exp'
 const ls = { get(k) { try { return localStorage.getItem(k) } catch { return null } }, set(k, v) { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v) } catch { /* 무시 */ } } }
 let token = ls.get(TOKEN_KEY), tokenExp = +(ls.get(EXP_KEY) || 0)
-let needAuth = false // 서버가 인증을 요구하는데 토큰이 없으면 요청을 아예 보내지 않는다 (2초마다 401이 쌓이지 않게)
+let needAuth = false // 앱: 서버가 인증을 요구하는데 토큰이 없으면 요청을 아예 보내지 않는다 (2초마다 401이 쌓이지 않게)
+let cookieAuth = false // 웹: 팀 관리자 로그인 쿠키로 인증 (토큰 대신)
 const authListeners = new Set()
 function setToken(t, exp) { token = t || null; if (token) needAuth = false; tokenExp = t ? new Date(exp).getTime() : 0; ls.set(TOKEN_KEY, token); ls.set(EXP_KEY, token ? String(tokenExp) : null); authListeners.forEach((f) => f(!!token)) }
-function locked() { needAuth = true; if (token) setToken(null); else authListeners.forEach((f) => f(false)) } // 서버가 401 → 다시 6자리 입력
+function locked() { if (cookieAuth) { authListeners.forEach((f) => f(false)); return } needAuth = true; if (token) setToken(null); else authListeners.forEach((f) => f(false)) } // 서버가 401 → 다시 6자리 입력
 function headers(body) { const h = {}; if (body) h['Content-Type'] = 'application/json'; if (token) h['X-AMR-Token'] = token; return h }
 
 async function req(method, path, body, timeout = 3000) {
   if (needAuth && !token && path !== '/api/amr/health') return null
   const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), timeout)
   try {
-    const r = await fetch(base + path, { method, signal: ctl.signal, headers: headers(body), body: body ? JSON.stringify(body) : undefined })
+    const r = await fetch(base + path, { method, signal: ctl.signal, headers: headers(body), body: body ? JSON.stringify(body) : undefined, credentials: cookieAuth ? 'include' : 'same-origin' })
     if (r.status === 401) { setOnline(true); locked(); return null }
     if (!r.ok) throw new Error('HTTP ' + r.status)
     setOnline(true)
@@ -75,7 +76,7 @@ export const amrApi = {
     if (needAuth && !token) return { error: 'AMR 관리자 인증 필요', status: 401 }
     const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 25000)
     try {
-      const r = await fetch(base + '/api/amr/vehicles/scan', { method: 'POST', signal: ctl.signal, headers: headers(true), body: JSON.stringify(body) })
+      const r = await fetch(base + '/api/amr/vehicles/scan', { method: 'POST', signal: ctl.signal, headers: headers(true), body: JSON.stringify(body), credentials: cookieAuth ? 'include' : 'same-origin' })
       if (r.status === 401) { locked(); return { error: 'AMR 관리자 인증 필요', status: 401 } }
       const txt = await r.text(); let j = null; try { j = txt ? JSON.parse(txt) : null } catch { /* 무시 */ }
       if (!r.ok) return { error: (j && (j.message || j.error)) || 'HTTP ' + r.status, status: r.status }
@@ -90,22 +91,23 @@ export const amrApi = {
   },
   kpi() { return req('GET', '/api/amr/kpi', null, 5000) },
 
-  // ── 26.10.16 AMR 관리자 OTP ──
+  // ── 26.10.16 AMR 관리자 인증 (웹 = 팀 관리자 로그인 · 앱 = 웹에 뜬 6자리 / QR) ──
+  useCookieAuth() { cookieAuth = true },
   get authed() { return !!token && tokenExp > Date.now() },
   get tokenExpiresAt() { return tokenExp },
   onAuth(fn) { authListeners.add(fn); return () => authListeners.delete(fn) },
   authStatus() { return auth('GET', '/status') },
+  appCode() { return auth('GET', '/code') },        // 웹: 앱 연결 코드 + 노트북 주소
+  rotate() { return auth('POST', '/rotate', {}) },   // 웹: 모든 앱 로그아웃
   async login(code, client) { const r = await auth('POST', '/login', { code, client }); if (r.data) setToken(r.data.token, r.data.expiresAt); return r },
-  setup() { return auth('POST', '/setup', {}, true) },
-  async confirmSetup(code) { const r = await auth('POST', '/setup/confirm', { code }, true); if (r.data) setToken(r.data.token, r.data.expiresAt); return r },
   async logout() { await auth('POST', '/logout', {}); setToken(null) },
 }
 
-// 인증 요청: 실패 이유(메시지)를 그대로 돌려준다 · 등록(setup)은 팀 ADMIN 로그인 쿠키가 필요해서 credentials 포함
-async function auth(method, path, body, withCookie = false) {
+// 인증 요청: 실패 이유(메시지)를 그대로 돌려준다 · 웹은 팀 관리자 로그인 쿠키를 같이 보낸다
+async function auth(method, path, body) {
   const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 6000)
   try {
-    const r = await fetch(base + '/api/amr/auth' + path, { method, signal: ctl.signal, headers: headers(body), body: body ? JSON.stringify(body) : undefined, credentials: withCookie ? 'include' : 'same-origin' })
+    const r = await fetch(base + '/api/amr/auth' + path, { method, signal: ctl.signal, headers: headers(body), body: body ? JSON.stringify(body) : undefined, credentials: cookieAuth ? 'include' : 'same-origin' })
     const txt = await r.text(); let j = null; try { j = txt ? JSON.parse(txt) : null } catch { /* 무시 */ }
     setOnline(true)
     if (!r.ok) return { error: (j && j.message) || 'HTTP ' + r.status, status: r.status }

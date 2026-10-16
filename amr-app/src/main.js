@@ -9,7 +9,8 @@ import { createSim, HUBS, ZONES, STATE_KO, PHASE_T, CAPTIONS, COLORS, status, lv
 import { createAmrScene } from './twin/amrScene3d.js'
 import { amrApi } from './twin/amrApi.js'   // DB 연동: 웹 관제 화면과 같은 서버 · 같은 DB
 import { LocalNotifications } from '@capacitor/local-notifications' // 휴대폰 알림 (차단 · 정비)
-import { mountAuthGate, hoursLeft } from './twin/amrAuthGate.js' // 26.10.16 관리자 OTP 잠금 화면
+import { mountAuthGate, hoursLeft } from './twin/amrAuthGate.js' // 26.10.16 관리자 잠금 화면 (웹의 앱 연결 QR · 6자리)
+import { BarcodeScanner, BarcodeFormat } from '@capacitor-mlkit/barcode-scanning' // QR 찍기 (구글 ML Kit)
 
 const $ = (id) => document.getElementById(id)
 const PH_COL = { 1: COLORS.cyan, 2: COLORS.amber, 3: COLORS.amber, 4: COLORS.red, 5: COLORS.green }
@@ -591,7 +592,24 @@ $('db-save').addEventListener('click', async () => {
 })
 $('db-chip').addEventListener('click', () => setTab('settings'))
 
-/* ── 26.10.16 관리자 OTP: 앱을 켜면 6자리부터 (통과하면 24시간 유지) ── */
+/* ── 26.10.16 관리자 인증: 앱을 켜면 웹의 [앱 연결] QR을 찍거나 6자리 입력 (통과하면 24시간 유지) ── */
+async function scanQr() {
+  // 구글 코드 스캐너: 카메라 권한 없이 구글 화면으로 찍고 글자만 돌려받는다 (처음 한 번 모듈 설치)
+  try {
+    const m = await BarcodeScanner.isGoogleBarcodeScannerModuleAvailable()
+    if (m && m.available === false) {
+      await BarcodeScanner.installGoogleBarcodeScannerModule()
+      throw new Error('QR 기능을 내려받는 중입니다. 10초쯤 뒤 다시 눌러 주세요')
+    }
+  } catch (e) { if (e && /내려받는/.test(e.message)) throw e /* 확인 기능이 없는 기기는 그냥 찍기 시도 */ }
+  try {
+    const { barcodes } = await BarcodeScanner.scan({ formats: [BarcodeFormat.QrCode] })
+    return barcodes && barcodes[0] ? barcodes[0].rawValue : ''
+  } catch (e) {
+    if (e && /cancel/i.test(String(e.message || e))) return ''
+    throw new Error('QR을 읽지 못했습니다. 6자리를 입력하세요')
+  }
+}
 function renderAuth() {
   const ok = amrApi.authed
   $('au-status').textContent = ok ? '● 인증됨 · ' + hoursLeft() + '시간 남음' : '○ 인증 필요'
@@ -599,7 +617,8 @@ function renderAuth() {
   $('au-out').hidden = !ok
 }
 gate = mountAuthGate(document.body, {
-  client: 'APP', keypad: true, blockOffline: true,
+  client: 'APP', keypad: true, blockOffline: true, onScan: scanQr,
+  onServer: (b) => { $('db-url').value = b; toast('QR로 서버 주소 설정: ' + b.replace(/^https?:\/\//, ''), 'ok') },
   onSettings: () => { gate.el.hidden = true; setTab('settings'); toast('서버 주소를 바꾸고 [연결]을 누르면 인증 화면으로 돌아갑니다', 'amber') },
   onChange: () => renderAuth(),
 })

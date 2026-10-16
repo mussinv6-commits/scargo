@@ -8,7 +8,7 @@ import { createSim, HUBS, ZONES, STATE_KO, PHASE_T, CAPTIONS, PIPE_ON, PH_COL, C
 import { createAmrScene } from './amrScene3d.js'
 import { createAmrSound } from './amrSound.js'
 import { amrApi } from './amrApi.js'   // DB 연동 (서버가 꺼져 있으면 시뮬레이션만으로 동작)
-import { mountAuthGate, hoursLeft } from './amrAuthGate.js' // 26.10.16 AMR 관리자 OTP
+import { drawQr } from './amrQr.js' // 26.10.16 앱 연결 QR
 
 export function mountAmrTwin(root) {
   const $ = (id) => root.querySelector('#tw-' + id)
@@ -99,25 +99,45 @@ export function mountAmrTwin(root) {
   ocrBadge.textContent = '○ OCR 대기'; ocrBadge.style.color = '#8a9bb0'; ocrBadge.style.borderColor = '#3a4a5c'
   ocrBadge.title = '트럭이 입구 게이트에 오면 번호판 인식을 요청합니다'
 
-  /* ── 26.10.16 AMR 관리자 OTP: 잠금 화면 + 헤더 인증 표시(누르면 로그아웃 · 다시 등록) ── */
-  const gate = mountAuthGate(root, { client: 'WEB', onChange: () => syncAuth() })
-  const authWrap = document.createElement('div'); authWrap.className = 'tw-auth'
-  authWrap.innerHTML = '<button type="button" class="tw-authChip" aria-expanded="false"></button><div class="tw-authMenu" hidden><button type="button" data-a="out">로그아웃</button><button type="button" data-a="reg">OTP 다시 등록</button></div>'
-  badgeBox.appendChild(authWrap)
-  const authChip = authWrap.querySelector('.tw-authChip'), authMenu = authWrap.querySelector('.tw-authMenu')
-  function syncAuth() {
-    const ok = amrApi.authed
-    authChip.textContent = ok ? '🔒 OTP 인증 · ' + hoursLeft() + '시간' : '🔓 OTP 인증 필요'
-    authChip.classList.toggle('ok', ok)
+  /* ── 26.10.16 앱 연결: 웹(팀 관리자 로그인)에 30초마다 바뀌는 6자리 + QR → 앱이 찍거나 입력하면 24시간 로그인 ── */
+  amrApi.useCookieAuth()
+  const linkWrap = document.createElement('div'); linkWrap.className = 'tw-link'
+  linkWrap.innerHTML = '<button type="button" class="tw-linkChip" aria-expanded="false">📱 앱 연결</button>' +
+    '<div class="tw-linkPop" hidden><div class="tw-linkHd">관리자 앱 연결</div>' +
+    '<div class="tw-linkBody"><canvas class="tw-linkQr"></canvas><div class="tw-linkSide"><div class="tw-linkCode">------</div><div class="tw-linkBar"><i></i></div><div class="tw-linkSec"></div></div></div>' +
+    '<p class="tw-linkHelp">앱에서 <b>QR 찍기</b> 또는 6자리 입력 → 24시간 로그인<br>QR에는 이 노트북 주소도 들어 있어 주소 입력이 필요 없어요</p>' +
+    '<p class="tw-linkSrv"></p><button type="button" class="tw-linkOut">모든 앱 로그아웃</button></div>'
+  badgeBox.appendChild(linkWrap)
+  const linkChip = linkWrap.querySelector('.tw-linkChip'), linkPop = linkWrap.querySelector('.tw-linkPop')
+  let link = null, linkAt = 0, linkFetching = false
+  async function fetchCode() {
+    if (linkFetching) return
+    linkFetching = true
+    const r = await amrApi.appCode(); linkFetching = false
+    if (destroyed) return
+    if (!r.data) { link = null; linkChip.textContent = r.status === 403 ? '📱 앱 연결 · 관리자 로그인 필요' : '📱 앱 연결'; linkChip.classList.remove('ok'); linkWrap.querySelector('.tw-linkCode').textContent = '------'; linkWrap.querySelector('.tw-linkSec').textContent = r.error || ''; return }
+    link = r.data; linkAt = Date.now()
+    const code = link.code.slice(0, 3) + ' ' + link.code.slice(3)
+    linkChip.textContent = '📱 앱 연결 ' + code; linkChip.classList.add('ok')
+    linkWrap.querySelector('.tw-linkCode').textContent = code
+    const server = link.lanBase || amrApi.base
+    linkWrap.querySelector('.tw-linkSrv').textContent = '노트북 주소 ' + server.replace(/^https?:\/\//, '') + (link.lanBase ? '' : ' (와이파이 IP를 못 찾음 · 앱에서 직접 입력)')
+    drawQr(linkWrap.querySelector('.tw-linkQr'), 'sbotamr://login?server=' + encodeURIComponent(server) + '&code=' + link.code, 220)
   }
-  authChip.addEventListener('click', () => { if (!amrApi.authed) { gate.refresh(); return } authMenu.hidden = !authMenu.hidden; authChip.setAttribute('aria-expanded', String(!authMenu.hidden)) })
-  authMenu.addEventListener('click', (e) => {
-    const a = e.target.closest('[data-a]'); if (!a) return
-    authMenu.hidden = true
-    if (a.dataset.a === 'out') gate.logout(); else gate.openRegister()
-  })
-  syncAuth()
-  const authTimer = setInterval(syncAuth, 60000)
+  function tickCode() {
+    if (!link) return
+    const left = Math.max(0, link.secondsLeft - (Date.now() - linkAt) / 1000)
+    linkWrap.querySelector('.tw-linkBar i').style.width = (left / link.period * 100) + '%'
+    linkWrap.querySelector('.tw-linkSec').textContent = Math.ceil(left) + '초 뒤 바뀜'
+    if (left <= 0) { link.secondsLeft = 9999; setTimeout(fetchCode, 400) }
+  }
+  linkChip.addEventListener('click', () => { linkPop.hidden = !linkPop.hidden; linkChip.setAttribute('aria-expanded', String(!linkPop.hidden)); if (!linkPop.hidden) fetchCode() })
+  linkWrap.querySelector('.tw-linkOut').addEventListener('click', async () => { const r = await amrApi.rotate(); if (r.data) { fetchCode(); linkWrap.querySelector('.tw-linkSec').textContent = '모든 앱 로그아웃 완료 · 새 코드' } })
+  const onDocClick = (e) => { if (!linkPop.hidden && !e.target.closest('.tw-link')) { linkPop.hidden = true; linkChip.setAttribute('aria-expanded', 'false') } }
+  document.addEventListener('click', onDocClick)
+  const offAuth = amrApi.onAuth(() => fetchCode()) // 관리자 로그인이 풀리면 표시 갱신
+  fetchCode()
+  const authTimer = setInterval(tickCode, 250)
   let dbAcc = 0
   const S = sim.S
   const warm = () => { sim.setVehicleGate(false); for (let i = 0; i < 80; i++) sim.step(0.05); S.packets.length = 0; sim.setVehicleGate(true) }
@@ -475,7 +495,7 @@ export function mountAmrTwin(root) {
       destroyed = true
       offDb()
       clearInterval(dbTimer); clearInterval(kpiTimer); clearInterval(authTimer)
-      gate.destroy()
+      offAuth(); document.removeEventListener('click', onDocClick)
       cancelAnimationFrame(raf)
       clearTimeout(bannerTimer)
       chartRO.disconnect()

@@ -1,12 +1,11 @@
 // ─────────────────────────────────────────────────────────────
-// 26.10.16 AMR 관리자 OTP 인증 화면 (웹 관제 화면 · 관리자 앱이 같이 쓴다)
-//  - 구글 OTP 앱의 6자리 → 서버 확인 → 24시간 출입증
-//  - 아직 등록 전이면: 웹(팀 ADMIN 로그인 상태)에서 QR을 띄워 등록
-//  - 사용: const gate = mountAuthGate(host, { client: 'WEB' | 'APP', keypad, blockOffline, onSettings })
-//          gate.openRegister() → OTP 다시 등록,  gate.destroy()
+// 26.10.16 관리자 앱 잠금 화면
+//  - 웹 AMR 관제 화면의 [앱 연결] QR을 찍거나, 6자리를 입력 → 서버 확인 → 24시간 출입증
+//  - QR에는 노트북 주소도 들어 있어서 찍으면 서버 주소까지 자동으로 맞춘다
+//  - 사용: const gate = mountAuthGate(host, { client: 'APP', keypad, blockOffline, onSettings, onScan })
+//          onScan: QR을 찍어 글자를 돌려주는 함수 (앱에서 카메라 플러그인으로 넣어 준다)
 // ─────────────────────────────────────────────────────────────
 import { amrApi } from './amrApi.js'
-import { drawQr } from './amrQr.js'
 
 const CSS = `
 .otpg{position:absolute;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;background:rgba(5,9,13,.72);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);font-family:inherit}
@@ -19,7 +18,8 @@ const CSS = `
 .otpg.full .otpg-lock{display:none}
 .otpg-brand{display:none;text-align:left;font-weight:900;font-size:22px;letter-spacing:.02em}.otpg-brand span{color:var(--cyan,#3fe0cc)}
 .otpg.full .otpg-brand{display:block}
-.otpg h2{font-size:19px;margin:0}.otpg.full h2{display:none}
+.otpg h2{font-size:19px;margin:0}.otpg.full [data-v=login] h2{display:none}.otpg.full h2{text-align:left;margin-top:18px}
+.otpg.full[data-view=info] .otpg-pad{display:none}
 .otpg p.otpg-d{font-size:13px;color:var(--muted,#8a9bb0);margin:6px 0 0;line-height:1.55}
 .otpg.full p.otpg-d{text-align:left}
 .otpg-code{display:flex;gap:8px;justify-content:center;margin:18px 0 8px;position:relative}
@@ -40,6 +40,7 @@ const CSS = `
 .otpg-pad button{height:54px;border:0;border-radius:12px;background:var(--panel,#111a24);color:var(--ink,#e9f0f6);font-size:21px;font-family:inherit}
 .otpg-pad button:active{background:var(--panel2,#16212d)}
 .otpg-pad button.s{font-size:13px;color:var(--muted,#8a9bb0)}
+.otpg-or{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--dim,#58697e);margin-top:16px}.otpg-or[hidden]{display:none}.otpg-or::before,.otpg-or::after{content:'';flex:1;height:1px;background:var(--edge,#1f2c3a)}
 .otpg-srv{font-size:11px;color:var(--dim,#58697e);margin-top:10px;text-align:center}
 .otpg-qr{display:flex;gap:16px;align-items:center;text-align:left;margin-top:16px}
 .otpg-qr canvas{width:150px;height:150px;border-radius:8px;flex:none;image-rendering:pixelated}
@@ -63,36 +64,30 @@ export function mountAuthGate(host, opt = {}) {
   el.innerHTML = `<div class="otpg-box">
     <div class="otpg-lock">${LOCK}</div><div class="otpg-brand">S-BOT <span>AMR</span></div>
     <div class="otpg-view" data-v="login">
-      <h2>AMR 관제 인증</h2>
-      <p class="otpg-d">휴대폰 Google Authenticator의 <b>S-BOT AMR</b> 6자리 코드를 입력하세요</p>
+      <h2>AMR 관리자 인증</h2>
+      <p class="otpg-d">웹 AMR 관제 화면 오른쪽 위 <b>[📱 앱 연결]</b>의 QR을 찍거나 6자리를 입력하세요</p>
+      <button class="otpg-btn otpg-scan" type="button" hidden>QR 찍어서 로그인</button>
+      <div class="otpg-or otpg-scan-or" hidden>또는 6자리 입력</div>
       <div class="otpg-code"><b></b><b></b><b></b><b></b><b></b><b></b><input inputmode="numeric" autocomplete="one-time-code" maxlength="6" aria-label="OTP 6자리"></div>
-      <div class="otpg-t">코드는 30초마다 바뀝니다 <i><u></u></i></div>
+      <div class="otpg-t">웹의 코드는 30초마다 바뀝니다 <i><u></u></i></div>
       <div class="otpg-keep">통과하면 이 기기에서 <b>24시간</b> 로그인 유지</div>
       <div class="otpg-msg"></div>
       <button class="otpg-btn otpg-go" type="button" disabled>확인</button>
-    </div>
-    <div class="otpg-view" data-v="register" hidden>
-      <h2>AMR 관리자 OTP 등록</h2>
-      <p class="otpg-d">처음 한 번만 하면 됩니다. 등록하면 예전에 로그인한 기기는 모두 로그아웃돼요.</p>
-      <div class="otpg-qr"><canvas></canvas><div class="otpg-steps"><div><b>1</b>Google Authenticator 설치</div><div><b>2</b>앱에서 <b>+</b> → QR 코드 스캔</div><div><b>3</b>뜬 6자리를 아래에 입력</div></div></div>
-      <div class="otpg-key">QR이 안 되면 키 직접 입력: <code></code></div>
-      <div class="otpg-code"><b></b><b></b><b></b><b></b><b></b><b></b><input inputmode="numeric" autocomplete="one-time-code" maxlength="6" aria-label="OTP 6자리"></div>
-      <div class="otpg-msg"></div>
-      <button class="otpg-btn otpg-go" type="button" disabled>등록 완료</button>
-      <button class="otpg-btn sub otpg-cancel" type="button" hidden>취소</button>
     </div>
     <div class="otpg-view" data-v="info" hidden>
       <h2 class="otpg-it"></h2>
       <p class="otpg-d otpg-id"></p>
       <div class="otpg-msg"></div>
-      <button class="otpg-btn otpg-retry" type="button">다시 확인</button>
+      <button class="otpg-btn otpg-scan" type="button" hidden>QR 찍어서 연결</button>
+      <button class="otpg-btn sub otpg-retry" type="button">다시 확인</button>
+      <button class="otpg-btn sub otpg-set" type="button">서버 주소 직접 입력</button>
     </div>
     <div class="otpg-pad">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => `<button type="button" data-k="${n}">${n}</button>`).join('')}<button type="button" class="s" data-k="set">서버 설정</button><button type="button" data-k="0">0</button><button type="button" data-k="del" aria-label="지우기">⌫</button></div>
     <div class="otpg-srv"></div>
   </div>`
   host.appendChild(el)
   const q = (s) => el.querySelector(s)
-  const views = { login: q('[data-v=login]'), register: q('[data-v=register]'), info: q('[data-v=info]') }
+  const views = { login: q('[data-v=login]'), info: q('[data-v=info]') }
   let view = 'login', busy = false, destroyed = false, wasAuthed = amrApi.authed
 
   // ── 6자리 입력 칸 ──
@@ -110,7 +105,7 @@ export function mountAuthGate(host, opt = {}) {
     go.addEventListener('click', () => submit())
     return { inp, paint, clear() { inp.value = ''; paint() } }
   }
-  const boxes = { login: codeBox(views.login), register: codeBox(views.register) }
+  const boxes = { login: codeBox(views.login) }
   const msg = (v, t, ok = false) => { const m = v.querySelector('.otpg-msg'); m.textContent = t || ''; m.classList.toggle('ok', ok) }
 
   // ── 앱 키패드 ──
@@ -127,7 +122,7 @@ export function mountAuthGate(host, opt = {}) {
   const tick = setInterval(() => { if (!el.hidden) bar.style.width = (100 - ((Date.now() / 1000) % 30) / 30 * 100) + '%' }, 250)
 
   function show(v) {
-    view = v
+    view = v; el.dataset.view = v
     Object.entries(views).forEach(([k, n]) => { n.hidden = k !== v })
     el.hidden = false; el.classList.remove('err')
     q('.otpg-srv').textContent = '서버 ' + amrApi.base.replace(/^https?:\/\//, '')
@@ -140,24 +135,13 @@ export function mountAuthGate(host, opt = {}) {
     if (busy) return
     const box = boxes[view]; const code = box.paint(); if (code.length !== 6) return
     busy = true; box.paint()
-    const r = view === 'register' ? await amrApi.confirmSetup(code) : await amrApi.login(code, client)
+    const r = await amrApi.login(code, client)
     busy = false
     if (destroyed) return
     if (r.data) { msg(views[view], '인증 완료', true); setTimeout(hide, 350); return }
     el.classList.remove('err'); void el.offsetWidth; el.classList.add('err')
     box.clear(); msg(views[view], r.error || '인증 실패')
   }
-
-  async function openRegister(canCancel = false) {
-    const r = await amrApi.setup()
-    if (destroyed) return
-    if (!r.data) { info('OTP 등록 불가', r.status === 403 ? '웹에서 관리자(ADMIN) 계정으로 로그인한 상태에서만 등록할 수 있습니다.' : '', r.error); return }
-    show('register')
-    drawQr(views.register.querySelector('canvas'), r.data.uri, 300)
-    views.register.querySelector('.otpg-key code').textContent = r.data.secret.replace(/(.{4})/g, '$1 ').trim()
-    views.register.querySelector('.otpg-cancel').hidden = !canCancel
-  }
-  views.register.querySelector('.otpg-cancel').addEventListener('click', () => { if (amrApi.authed) hide() })
 
   async function refresh() {
     const s = await amrApi.authStatus()
@@ -169,14 +153,27 @@ export function mountAuthGate(host, opt = {}) {
     }
     const st = s.data || {}
     if (st.valid) { hide(); return }
-    if (!st.registered) {
-      if (client === 'WEB' && st.admin) { openRegister(false); return }
-      info('OTP가 아직 등록되지 않았습니다', client === 'WEB' ? '팀 관리자(ADMIN) 계정으로 로그인한 뒤 다시 들어오세요.' : '웹 AMR 관제 화면에서 관리자 OTP를 먼저 등록하세요.', '')
-      return
-    }
     show('login')
   }
   q('.otpg-retry').addEventListener('click', () => refresh())
+  q('.otpg-set').hidden = !opt.onSettings
+  q('.otpg-set').addEventListener('click', () => { if (opt.onSettings) opt.onSettings() })
+
+  // QR 찍기: sbotamr://login?server=http://노트북IP:8080&code=123456
+  const onScanClick = async () => {
+    if (busy) return
+    let text = ''
+    try { text = await opt.onScan() } catch (e) { msg(views[view], (e && e.message) || 'QR을 읽지 못했습니다. 6자리를 입력하세요'); return }
+    if (!text) return
+    let server = '', code = ''
+    try { const u = new URL(text.replace(/^sbotamr:\/\//, 'http://x/')); server = u.searchParams.get('server') || ''; code = u.searchParams.get('code') || '' } catch { /* 무시 */ }
+    if (!/^\d{6}$/.test(code)) { msg(views[view], '앱 연결 QR이 아닙니다. 웹의 [📱 앱 연결] QR을 찍어 주세요'); return }
+    if (server && server !== amrApi.base) { amrApi.setBase(server); if (opt.onServer) opt.onServer(amrApi.base) }
+    if (view !== 'login') show('login') // 서버를 못 찾던 화면에서도 QR 하나로 주소 + 로그인
+    const box = boxes.login; box.inp.value = code; box.inp.dispatchEvent(new Event('input'))
+  }
+  el.querySelectorAll('.otpg-scan').forEach((b) => { b.hidden = !opt.onScan; b.addEventListener('click', onScanClick) })
+  q('.otpg-scan-or').hidden = !opt.onScan
 
   // 토큰이 만료되거나 서버가 401을 주면 다시 잠금 화면
   const offAuth = amrApi.onAuth((ok) => {
@@ -190,7 +187,6 @@ export function mountAuthGate(host, opt = {}) {
   return {
     el,
     refresh,
-    openRegister: () => openRegister(true),
     logout: () => amrApi.logout(),
     destroy() { destroyed = true; clearInterval(tick); clearInterval(expT); offAuth(); el.remove() },
   }
