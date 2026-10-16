@@ -1390,6 +1390,7 @@ export function createAmrScene(container, sim, opts = {}) {
     station: { tgt: [X(430), 0, Z(590)], off: [6, 12, 14], z2: 2.4 },
   }
   let gateSide = null // 지금 자동으로 보고 있는 게이트 ('in' | 'out')
+  const dockPrev = new WeakMap() // 도크별 직전 상태 (트럭이 들어오기 · 나가기 시작하는 순간을 잡으려고)
   let preset = null, autoGate = false, gateBack = null, gateUntil = 0, gateSeen = new WeakSet(), exitSeen = new WeakSet()
   const backTgt = new THREE.Vector3(), backPos = new THREE.Vector3(); let backZoom = 1, backUntil = 0
   function setPreset(name) {
@@ -1401,6 +1402,11 @@ export function createAmrScene(container, sim, opts = {}) {
   //  - 손으로 움직인 자유 시점 · 로봇 따라가기에서도 동작 (예전엔 자동 · 전체 · 바로가기 시점에서만 동작)
   //  - 들어올 때(입구 OCR) + 택배차가 나갈 때(출구 OCR) 모두
   function autoGateCheck(t) {
+    // 트럭 움직임으로도 판단: 입구로 들어오기 시작(empty → arriving) · 택배차가 나가기 시작(docked → leaving)
+    //  - 앱은 번호판 인식을 직접 하지 않아서(웹 결과만 받음) 'scan' 상태가 없으므로 이 기준으로 움직인다
+    let moveHit = null
+    S.inDocks.forEach((d) => { const pv = dockPrev.get(d); if (pv !== undefined && pv !== d.state && d.state === 'arriving' && !moveHit) moveHit = 'gateIn'; dockPrev.set(d, d.state) })
+    S.outDocks.forEach((d) => { const pv = dockPrev.get(d); if (pv !== undefined && pv !== d.state && !moveHit && (d.state === 'arriving' || d.state === 'leaving')) moveHit = 'gateOut'; dockPrev.set(d, d.state) })
     if (!autoGate) return
     if (gateUntil && t > gateUntil) {
       gateUntil = 0; gateSide = null
@@ -1412,6 +1418,7 @@ export function createAmrScene(container, sim, opts = {}) {
       gateBack = null; return
     }
     if (gateUntil || viewMode === 'back') return
+    if (moveHit) { [...S.inDocks, ...S.outDocks].forEach((d) => { if (d.ocr) { gateSeen.add(d.ocr); if (d.ocr.exit === 'scan') exitSeen.add(d.ocr) } }); goGate(moveHit, t); return } // 같은 트럭으로 두 번 움직이지 않게
     const hit = [...S.inDocks.map((d) => [d, 'gateIn']), ...S.outDocks.map((d) => [d, 'gateOut'])].find(([d]) => d.ocr && ((d.ocr.st === 'scan' && !gateSeen.has(d.ocr)) || (d.ocr.exit === 'scan' && !exitSeen.has(d.ocr))))
     if (!hit) return
     const o = hit[0].ocr

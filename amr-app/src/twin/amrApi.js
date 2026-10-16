@@ -99,6 +99,8 @@ export const amrApi = {
   authStatus() { return auth('GET', '/status') },
   appCode() { return auth('GET', '/code') },        // 웹: 앱 연결 코드 + 노트북 주소
   rotate() { return auth('POST', '/rotate', {}) },   // 웹: 모든 앱 로그아웃
+  // 26.10.16 인식 사진: 백엔드(8080)를 거쳐 받는다 (휴대폰이 OCR 서버 8001에 직접 못 붙어도 됨 · 이미지 태그라 출입증을 주소에 붙임)
+  photoUrl(id) { return base + '/api/amr/vehicles/' + id + '/photo' + (token ? '?t=' + encodeURIComponent(token) : '') },
   async login(code, client) { const r = await auth('POST', '/login', { code, client }); if (r.data) setToken(r.data.token, r.data.expiresAt); return r },
   async logout() { await auth('POST', '/logout', {}); setToken(null) },
 }

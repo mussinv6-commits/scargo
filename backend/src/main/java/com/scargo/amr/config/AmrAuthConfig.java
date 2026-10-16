@@ -43,6 +43,7 @@ public class AmrAuthConfig implements WebMvcConfigurer {
                 if ("OPTIONS".equalsIgnoreCase(req.getMethod())) return true;
                 if (adminId() != null) return true;                       // ① 웹 관리자
                 if (auth.check(req.getHeader(HEADER)) != null) return true; // ② 앱 토큰
+                if (req.getRequestURI().endsWith("/photo") && auth.check(req.getParameter("t")) != null) return true; // ③ 앱 사진 (이미지 태그는 헤더를 못 보냄)
                 res.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                 res.setCharacterEncoding("UTF-8");
                 res.setContentType("application/json;charset=UTF-8");

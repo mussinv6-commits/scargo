@@ -458,7 +458,6 @@ function applyVehicles(list) {
     const d = (out ? S.outDocks : S.inDocks)[v.dock]; if (!d) return
     if (v.direction === 'EXIT') d.ocr = { st: 'ok', plate: v.plate, photo: v.photoPlate, conf: v.confidence, kind: v.kind, exit: null }
     else d.ocr = { st: v.decision === 'BLOCK' ? 'block' : 'ok', plate: v.plate, photo: v.photoPlate, conf: v.confidence, kind: v.kind, exit: null }
-    if (!first && scene) scene.focusGate(out ? 'out' : 'in') // 게이트 자동이 켜져 있으면 새 결과가 온 게이트를 6초 보여 줌
     if (v.decision === 'BLOCK' && !first) { toast('미등록 차량 차단 · ' + (fmtPlate(v.plate) || '판독 불가'), ''); phoneNotify('미등록 차량 진입 차단', (fmtPlate(v.plate) || '판독 불가') + ' · ' + (v.lane === 'OUT' ? '출고' : '입고') + ' 게이트', 'crit') }
   })
   lastVehicleId = Math.max(lastVehicleId, ...list.map((v) => v.id))
@@ -486,7 +485,7 @@ $('v-list').addEventListener('click', (e) => {
   const v = vehCache.find((x) => String(x.id) === li.dataset.id); if (!v) return
   vPick = v.id
   const ph = $('v-photo')
-  if (v.imageUrl) { $('v-img').src = photoUrl(v.imageUrl); $('v-cap').textContent = '사진 ' + (fmtPlate(v.photoPlate) || '') + ' → 인식 ' + (fmtPlate(v.plate) || '판독 불가'); ph.hidden = false } else ph.hidden = true
+  if (v.imageUrl) { $('v-img').src = amrApi.photoUrl(v.id); $('v-cap').textContent = '사진 ' + (fmtPlate(v.photoPlate) || '') + ' → 인식 ' + (fmtPlate(v.plate) || '판독 불가'); ph.hidden = false } else ph.hidden = true
   renderVehicles()
 })
 $('c-seg').addEventListener('click', (e) => {

@@ -143,6 +143,24 @@ public class HubVehicleService implements ApplicationRunner {
         return view(logRepo.save(log));
     }
 
+    // 26.10.16 인식 사진을 백엔드(8080)를 거쳐 내준다
+    //  - 휴대폰이 OCR 서버(8001)에 직접 붙지 않아도 됨 (노트북 방화벽에 8001을 열 필요 없음)
+    //  - 사진 주소는 DB에 남은 OCR 서버 주소의 경로만 쓰고, 서버는 설정된 ocrBase 로 고정 (다른 주소로 못 보냄)
+    public byte[] photo(Long id) {
+        HubVehicleLog l = logRepo.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "기록 없음"));
+        String u = l.getImageUrl();
+        int i = u == null ? -1 : u.indexOf("/hub-images/");
+        if (i < 0) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "사진 없음");
+        URI uri = UriComponentsBuilder.fromUriString(ocrBase + u.substring(i)).build().encode().toUri();
+        try {
+            byte[] b = rest.getForObject(uri, byte[].class);
+            if (b == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "사진 없음");
+            return b;
+        } catch (RestClientException e) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "OCR 서버에서 사진을 가져오지 못했습니다");
+        }
+    }
+
     public List<VehicleView> recent(int limit) {
         return logRepo.findByHubIdOrderByLogIdDesc(amr.hubId(), PageRequest.of(0, Math.max(1, Math.min(limit, 100)))).stream().map(HubVehicleService::view).toList();
     }

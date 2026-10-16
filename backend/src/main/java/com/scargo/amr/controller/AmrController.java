@@ -72,6 +72,12 @@ public class AmrController {
     @GetMapping("/vehicles")
     public List<VehicleView> vehicleLogs(@RequestParam(name = "limit", defaultValue = "20") int limit) { return vehicles.recent(limit); }
 
+    // 26.10.16 인식 사진 (앱은 출입증을 ?t= 로 붙여 요청: 이미지 태그는 헤더를 못 보내서)
+    @GetMapping("/vehicles/{id}/photo")
+    public ResponseEntity<byte[]> photo(@PathVariable("id") Long id) {
+        return ResponseEntity.ok().header("Content-Type", "image/jpeg").header("Cache-Control", "max-age=3600").body(vehicles.photo(id));
+    }
+
     @GetMapping("/vehicles/registry")
     public List<RegistryView> registry() { return vehicles.registry(); }
 

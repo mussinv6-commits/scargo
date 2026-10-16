@@ -317,3 +317,11 @@
 /* 26.10.16 게이트 자동: 기다리는 중이면 점이 깜빡임 */
 .amr-twin .twin-presets #tw-autoGate.wait{animation:agWait 1.6s ease-in-out infinite}
 @keyframes agWait{50%{box-shadow:0 0 0 3px rgba(255,184,77,.35)}}
+
+/* 26.10.16 입출차 번호를 누르면 인식 사진 */
+.amr-twin #tw-gates li[data-id]{cursor:pointer}
+.amr-twin #tw-gates li.pick{outline:1px solid var(--cyan);outline-offset:-1px;border-radius:6px}
+.amr-twin .tw-gphoto{margin-top:8px}
+.amr-twin .tw-gphoto[hidden]{display:none}
+.amr-twin .tw-gphoto img{display:block;width:100%;max-height:180px;object-fit:contain;background:#000;border-radius:8px;border:1px solid var(--edge2)}
+.amr-twin .tw-gphoto p{margin:6px 0 0;font-size:11.5px;color:var(--muted);font-family:var(--font-data)}

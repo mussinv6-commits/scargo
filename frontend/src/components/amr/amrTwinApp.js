@@ -188,17 +188,34 @@ export function mountAmrTwin(root) {
   // 입출차 OCR 기록 (DB)
   const KIND = { CARGO: '화물차', COURIER: '택배차', UNKNOWN: '미등록' }
   const DEC = { ALLOW: ['입차', '#4fdc8a'], BLOCK: ['차단', '#ff5a5f'], EXIT_OK: ['출차', '#3fe0cc'], MISMATCH: ['불일치', '#ffb84d'] }
-  let lastGateKey = ''
+  let lastGateKey = '', gateList = [], gatePick = null
   function renderGates(list) {
     if (!list || !list.length) return
     const key = list.map((v) => v.id).join(',')
     if (key === lastGateKey) return
     lastGateKey = key
-    $('gates').innerHTML = list.slice(0, 6).map((v) => {
+    gateList = list.slice(0, 6)
+    $('gates').innerHTML = gateList.map((v) => {
       const [dl, col] = DEC[v.decision] || [v.decision, '#8597aa']
-      return `<li><span class="sid">${fmtPlate(v.plate) || '판독불가'}</span><span class="sd">${KIND[v.kind] || ''}${v.confidence != null ? ' · ' + v.confidence + '%' : ''}${v.boxCount ? ' · ' + v.boxCount + '건' : ''}</span><span class="hubchip" style="background:${col}">${dl}</span></li>`
+      return `<li data-id="${v.id}" class="${v.id === gatePick ? 'pick' : ''}" title="눌러서 인식 사진 보기"><span class="sid">${fmtPlate(v.plate) || '판독불가'}</span><span class="sd">${KIND[v.kind] || ''}${v.confidence != null ? ' · ' + v.confidence + '%' : ''}${v.boxCount ? ' · ' + v.boxCount + '건' : ''}</span><span class="hubchip" style="background:${col}">${dl}</span></li>`
     }).join('')
   }
+  // 26.10.16 번호를 누르면 인식 사진 (백엔드를 거쳐 받고, 안 되면 OCR 서버 주소로 직접)
+  const gPhoto = document.createElement('div'); gPhoto.className = 'tw-gphoto'; gPhoto.hidden = true
+  gPhoto.innerHTML = '<img alt="입차 인식 사진"><p></p>'
+  $('gates').after(gPhoto)
+  const gImg = gPhoto.querySelector('img')
+  gImg.addEventListener('error', () => { const v = gateList.find((x) => x.id === gatePick); if (v && v.imageUrl && gImg.src !== v.imageUrl) gImg.src = v.imageUrl })
+  $('gates').addEventListener('click', (e) => {
+    const li = e.target.closest('li[data-id]'); if (!li) return
+    const v = gateList.find((x) => x.id === +li.dataset.id); if (!v) return
+    gatePick = gatePick === v.id ? null : v.id
+    $('gates').querySelectorAll('li[data-id]').forEach((x) => x.classList.toggle('pick', +x.dataset.id === gatePick))
+    if (!gatePick || !v.imageUrl) { gPhoto.hidden = true; return }
+    gImg.src = amrApi.photoUrl(v.id)
+    gPhoto.querySelector('p').textContent = '사진 ' + (fmtPlate(v.photoPlate) || '-') + ' → 인식 ' + (fmtPlate(v.plate) || '판독 불가') + (v.confidence != null ? ' · ' + v.confidence + '%' : '')
+    gPhoto.hidden = false
+  })
   // KPI · 오늘 (DB 집계, 10초마다)
   async function pollKpi() {
     const k = await amrApi.kpi(); if (!k || destroyed) return
