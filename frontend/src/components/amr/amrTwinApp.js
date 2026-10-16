@@ -38,20 +38,25 @@ export function mountAmrTwin(root) {
   /* ── DB 연동: 이 화면이 현장(시뮬레이터) 역할 → 센서 · 예측 · 정비 진행을 저장, 승인은 앱 · 웹 어디서든 ── */
   let maintId = null, remote = null, approveFlash = 0, pendingBy = null, lastCfgBy = '', cfgLocalT = 0
   // 입구 · 출구 번호판 OCR: 트럭이 게이트에 오면 서버(→ gate_api.py)로 인식 요청, 결과로 3D 트럭이 들어오거나 돌아간다
-  let ocrOk = null
-  function setOcr(ok, msg) {
-    if (ok === ocrOk && ok) return
-    ocrOk = ok
-    ocrBadge.textContent = ok ? '● OCR 연결' : '○ OCR 오프라인'
-    ocrBadge.title = ok ? '번호판 인식 서버(gate_api.py :8001) 연결됨' : (msg || '') + ' · python 폴더에서 gate_api.py 실행 (uvicorn gate_api:app --port 8001)'
-    ocrBadge.style.color = ok ? '#4fdc8a' : '#8a9bb0'; ocrBadge.style.borderColor = ok ? '#4fdc8a' : '#3a4a5c'
+  // 26.10.16 배지는 최근 결과로 판단: 90초 안에 성공이 있으면 "연결" 유지, 실패는 건수로만 표시 (한 건 실패로 오프라인이 되지 않게)
+  let ocrLastOk = 0, ocrFails = 0, ocrLastErr = ''
+  function setOcr(ok, msg, status) {
+    const now = Date.now()
+    if (ok) { ocrLastOk = now; ocrFails = 0 } else { ocrFails++; ocrLastErr = (status ? status + ' · ' : '') + (msg || '응답 없음'); console.warn('[OCR] 인식 요청 실패', status || '', msg || '') }
+    const live = now - ocrLastOk < 90000
+    let txt, col
+    if (live && ocrFails === 0) { txt = '● OCR 연결'; col = '#4fdc8a' }
+    else if (live) { txt = '● OCR 연결 · ' + ocrFails + '건 실패'; col = '#ffb84d' }
+    else { txt = '○ OCR 오류' + (status ? ' ' + status : ''); col = '#ff8a8e' }
+    ocrBadge.textContent = txt; ocrBadge.style.color = col; ocrBadge.style.borderColor = col
+    ocrBadge.title = live && ocrFails === 0 ? '번호판 인식 서버(gate_api.py :8001) 연결됨' : '최근 실패: ' + ocrLastErr + ' · OCR 서버(2_OCR서버_실행.bat)와 백엔드 콘솔을 확인하세요'
   }
   function onVehicle(p) {
     amrApi.vehicleScan({ direction: p.dir, kind: p.kind, dock: p.dock, vehicleNo: p.vehicleNo, boxCount: p.boxCount, barcodes: p.barcodes, destHub: p.destHub })
       .then((res) => {
         if (destroyed || !simRef) return
         if (res.data) { setOcr(true); simRef.vehicleResult(p.side, p.dock, res.data, p.dir) }
-        else { setOcr(false, res.error); simRef.vehicleResult(p.side, p.dock, null, p.dir) }
+        else { setOcr(false, res.error, res.status); simRef.vehicleResult(p.side, p.dock, null, p.dir) }
       })
   }
   function onSimEvent(type, p) {

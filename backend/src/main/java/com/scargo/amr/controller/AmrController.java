@@ -5,7 +5,9 @@ import com.scargo.amr.service.AmrService;
 import com.scargo.amr.service.HubVehicleService;
 import com.scargo.amr.service.AmrKpiService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Map;
@@ -79,4 +81,10 @@ public class AmrController {
 
     @GetMapping("/kpi")
     public KpiView kpi() { return kpi.kpi(); }
+
+    // 26.10.16 실패 이유(예: OCR 서버 연결 실패 · 판독 오류)를 화면에 그대로 보여 주려고 메시지를 JSON으로 돌려준다
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<Map<String, Object>> fail(ResponseStatusException e) {
+        return ResponseEntity.status(e.getStatusCode()).body(Map.of("message", e.getReason() == null ? "요청 실패" : e.getReason()));
+    }
 }
