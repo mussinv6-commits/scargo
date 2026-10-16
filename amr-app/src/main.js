@@ -34,6 +34,7 @@ function alertLevel(text, lv) {
   return lv === 'crit' || lv === 'warn' ? 'warn' : 'info'
 }
 let vehInit = false // 입출차 기록을 한 번이라도 받았는지
+const vQueue = [], vWant = [], lastOk = { IN: null, OUT: null } // 앱 트럭 게이트 OCR (아래 gateWant 참고)
 let kpiCache = null, vehCache = [], vFilter = 'all', vPick = null // 통계(KPI) · 입출차 기록 (DB)
 const events = [] // { time, text, lv, cat, read }
 const phaseAt = {} // 단계별 시작 시각(실제 시계)
@@ -64,7 +65,7 @@ function onLog(items) {
     const lv = cat === 'fl' && !it.lv ? 'fl' : it.lv
     events.unshift({ time: new Date(), text: it.text, lv, cat, read: tab === 'alert' })
     const al = alertLevel(it.text, it.lv)
-    if (al !== 'info' && allowAlert(al)) toast(it.text, al === 'crit' ? '' : 'amber')
+    if (al !== 'info' && allowAlert(al) && !/진입 차단/.test(it.text)) toast(it.text, al === 'crit' ? '' : 'amber')
   })
   if (events.length > 80) events.length = 80
   renderAlerts(); renderBadge()
@@ -80,9 +81,9 @@ let remote = null            // 서버 /api/amr/state 응답
 const linked = () => !!(remote && remote.producerLive && amrApi.online)   // 웹 관제(현장)가 돌고 있을 때만 따라간다
 let dbHist = null            // 선택 로봇의 DB 진동 기록
 
-const sim = createSim({ onLog, onPhase, autoApproveSec: 0 })
+const sim = createSim({ onLog, onPhase, autoApproveSec: 0, vehicleGate: true, onEvent: (type, p) => { if (type === 'vehicle') gateWant(p) } })
 const S = sim.S
-for (let i = 0; i < 80; i++) sim.step(0.05)
+sim.setVehicleGate(false); for (let i = 0; i < 80; i++) sim.step(0.05); sim.setVehicleGate(true) // 미리 돌릴 때는 게이트 OCR 없이
 S.packets.length = 0
 onLog(S.logItems); phaseAt[S.sc.phase] = new Date()
 
@@ -448,6 +449,31 @@ setInterval(pollRemote, 2000); pollRemote()
 const VKIND = { CARGO: '화물차', COURIER: '택배차', UNKNOWN: '미등록' }
 const VDEC = { ALLOW: ['입차', 'g'], BLOCK: ['차단', 'r'], EXIT_OK: ['출차', 'c'], MISMATCH: ['불일치', 'a'] }
 let lastVehicleId = 0
+/* 26.10.16 앱 트럭의 게이트 OCR
+   앱 3D 트럭은 웹과 따로 움직이므로, 앱 트럭이 게이트에 서면 '인식 중'을 띄우고
+   웹(현장)에서 막 나온 OCR 결과를 붙인다. 6초 안에 새 결과가 없으면 최근 결과를 다시 보여 준다 */
+const laneOf = (v) => v.lane || (v.kind === 'COURIER' ? 'OUT' : 'IN')
+const toRes = (v) => ({ plate: v.plate, photoPlate: v.photoPlate, confidence: v.confidence, kind: v.kind, decision: v.decision })
+function gateWant(p) { vWant.push({ side: p.side, dock: p.dock, dir: p.dir, vehicleNo: p.vehicleNo, at: Date.now() }); gateMatch() }
+function gateMatch() {
+  for (let i = 0; i < vWant.length; i++) {
+    const w = vWant[i], lane = w.side === 'out' ? 'OUT' : 'IN'
+    const qi = vQueue.findIndex((q) => q.v.direction === w.dir && laneOf(q.v) === lane)
+    if (qi < 0) continue
+    const q = vQueue.splice(qi, 1)[0]; vWant.splice(i--, 1)
+    sim.vehicleResult(w.side, w.dock, toRes(q.v), w.dir)
+  }
+}
+setInterval(() => {
+  const now = Date.now()
+  while (vQueue.length && now - vQueue[0].at > 60000) vQueue.shift() // 1분 지난 결과는 버림
+  for (let i = 0; i < vWant.length; i++) {
+    const w = vWant[i]; if (now - w.at < 6000) continue
+    vWant.splice(i--, 1)
+    if (w.dir === 'EXIT') sim.vehicleResult(w.side, w.dock, { plate: w.vehicleNo, decision: 'EXIT_OK', confidence: null }, 'EXIT')
+    else { const v = lastOk[w.side === 'out' ? 'OUT' : 'IN']; sim.vehicleResult(w.side, w.dock, v ? toRes(v) : null, 'ENTRY') }
+  }
+}, 1000)
 function applyVehicles(list) {
   const fresh = list.filter((v) => v.id > lastVehicleId).reverse() // 오래된 것부터
   const first = !vehInit; vehInit = true // 첫 응답(기록이 0건이어도)까지만 '처음'으로 본다
@@ -455,9 +481,8 @@ function applyVehicles(list) {
   fresh.forEach((v) => {
     if (v.dock == null) return
     const out = v.lane ? v.lane === 'OUT' : v.kind === 'COURIER'
-    const d = (out ? S.outDocks : S.inDocks)[v.dock]; if (!d) return
-    if (v.direction === 'EXIT') d.ocr = { st: 'ok', plate: v.plate, photo: v.photoPlate, conf: v.confidence, kind: v.kind, exit: null }
-    else d.ocr = { st: v.decision === 'BLOCK' ? 'block' : 'ok', plate: v.plate, photo: v.photoPlate, conf: v.confidence, kind: v.kind, exit: null }
+    if (v.direction !== 'EXIT' && v.decision !== 'BLOCK') lastOk[out ? 'OUT' : 'IN'] = v // 새 결과가 없을 때 다시 보여 줄 최근 결과
+    if (!first) { vQueue.push({ v, at: Date.now() }); gateMatch() }
     if (v.decision === 'BLOCK' && !first) { toast('미등록 차량 차단 · ' + (fmtPlate(v.plate) || '판독 불가'), ''); phoneNotify('미등록 차량 진입 차단', (fmtPlate(v.plate) || '판독 불가') + ' · ' + (v.lane === 'OUT' ? '출고' : '입고') + ' 게이트', 'crit') }
   })
   lastVehicleId = Math.max(lastVehicleId, ...list.map((v) => v.id))
@@ -485,9 +510,11 @@ $('v-list').addEventListener('click', (e) => {
   const v = vehCache.find((x) => String(x.id) === li.dataset.id); if (!v) return
   vPick = v.id
   const ph = $('v-photo')
-  if (v.imageUrl) { $('v-img').src = amrApi.photoUrl(v.id); $('v-cap').textContent = '사진 ' + (fmtPlate(v.photoPlate) || '') + ' → 인식 ' + (fmtPlate(v.plate) || '판독 불가'); ph.hidden = false } else ph.hidden = true
+  if (v.imageUrl) { const im = $('v-img'); im.dataset.alt = photoUrl(v.imageUrl); im.src = amrApi.photoUrl(v.id); $('v-cap').textContent = '사진 ' + (fmtPlate(v.photoPlate) || '') + ' → 인식 ' + (fmtPlate(v.plate) || '판독 불가'); ph.hidden = false } else ph.hidden = true
   renderVehicles()
 })
+// 사진: 백엔드(8080)로 못 받으면 OCR 서버(8001)에서 직접 한 번 더 (웹과 같은 예비 경로)
+$('v-img').addEventListener('error', () => { const im = $('v-img'); if (im.dataset.alt && im.src !== im.dataset.alt) { const a = im.dataset.alt; im.dataset.alt = ''; im.src = a } })
 $('c-seg').addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return
   $('c-seg').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b))
