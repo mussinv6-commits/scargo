@@ -59,12 +59,13 @@
 | `/scargo` | S Cargo (게이트·과적·관리자·사업자·기사) | S Cargo 계정 |
 | `/sbot` | S-Bot 허브 AMR 관제 | S-Bot 관리자 전용 |
 
-### 관리자 계정 (서버 시작 시 자동 생성)
-| 구분 | 아이디 | 비밀번호 | 접근 범위 |
-|---|---|---|---|
-| S Cargo 관리자 | `admin` | `admin1234` | S Cargo 관리자 화면만 |
-| S-Bot 관리자 | `sbot` | `sbot1234` | S-Bot 화면만 (S Cargo 접근 차단) |
+### 관리자 계정
+| 구분 | 접근 범위 |
+|---|---|
+| S Cargo 관리자 | S Cargo 관리자 화면만 |
+| S-Bot 관리자 | S-Bot 화면만 (S Cargo 접근 차단) |
 
+> 계정은 서버 시작 시 자동 생성되며, 아이디/비밀번호는 팀 내부에서만 공유합니다.
 > 현재 분리는 화면(라우터) 기준입니다.
 
 ---
@@ -110,8 +111,8 @@ gradlew.bat bootRun
 ```bat
 conda activate yolo
 cd python
-set GATE_API_ID=admin
-set GATE_API_PW=admin1234
+set GATE_API_ID=<관리자 아이디>
+set GATE_API_PW=<관리자 비밀번호>
 uvicorn gate_api:app --host 0.0.0.0 --port 8001
 ```
 > 백엔드를 재시작하면 OCR 서버도 같이 재시작하세요.
