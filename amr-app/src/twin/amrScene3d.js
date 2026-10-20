@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────
-// S카고 물류센터 3D 디지털 트윈 렌더러 (Three.js)
+// S카고 허브 3D 디지털 트윈 렌더러 (Three.js)
 // 시뮬레이션(amrSim.js)의 평면도 좌표를 미터로 바꿔서 실사형 창고로 그린다.
 //   1px = 0.05m  →  건물 약 42m x 32m
 // ─────────────────────────────────────────────────────────────
@@ -12,7 +12,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js'
-import { AISLES, ROWS, NS, SX, DOCK_Y, HXL, HXR, STATION_Y, CHARGERS, BAY, GW, HUBS, ZONES, COLORS, status, lvCol, COLD_ROW, COLD_ROOM, LEVEL_H, FL_HOME, sideOn } from './amrSim.js'
+import { AISLES, ROWS, NS, SX, DOCK_Y, HXL, HXR, STATION_Y, CHARGERS, BAY, GW, HUBS, ZONES, COLORS, status, lvCol, COLD_ROW, COLD_ROOM, LEVEL_H, FL_HOME, sideOn, ean13Bits, fmtPlate, INTER_NODES, INTER_R } from './amrSim.js'
 
 const M = 0.05
 const X = (x) => (x - 500) * M
@@ -83,7 +83,7 @@ function texSign(text, sub, bg, fg) {
 }
 /* ── 택배 박스: 크라프트 골판지 + 브랜드 테이프 + 취급 스티커 + 운송장 ──
    면별 텍스처는 (크기 · 취급표시) 조합마다 한 번만 만들어 공유하고,
-   화물마다 다른 운송장(번호 · 허브 · 무게 · 바코드)만 작은 라벨 판으로 붙인다. */
+   화물마다 다른 운송장(번호 · 권역 · 무게 · 바코드)만 작은 라벨 판으로 붙인다. */
 const SIZE_MM = { S: [720, 420, 600], M: [920, 620, 740], L: [1040, 860, 840] }
 const HANDLE_STYLE = {
   파손주의: { bg: '#d62828', fg: '#ffffff', ko: '파손주의', en: 'FRAGILE', icon: 'glass' },
@@ -220,7 +220,7 @@ function cargoMaterials(size, handle) {
     }
     g.fillStyle = cold ? '#1f6fd1' : 'rgba(20,30,50,0.85)'; g.font = `900 ${h * 0.1}px ${FONT}`; g.textBaseline = 'alphabetic'
     g.fillText('S CARGO', w * 0.05, h * 0.92)
-    g.font = `700 ${h * 0.045}px ${FONT}`; g.fillText('LOGISTICS · 물류센터', w * 0.05, h * 0.97)
+    g.font = `700 ${h * 0.045}px ${FONT}`; g.fillText('LOGISTICS · 허브', w * 0.05, h * 0.97)
     upArrows(g, w * 0.82, h * 0.1, Math.min(90, h * 0.2))
     if (st) sticker(g, w * 0.04, h * 0.2, Math.min(w * 0.3, h * 0.5), st)
   })
@@ -239,7 +239,7 @@ function cargoMaterials(size, handle) {
   cargoMatCache.set(key, mats)
   return mats
 }
-// 화물별 운송장 라벨 (허브 색 띠 · 허브명 · 송장번호 · 무게 · 바코드)
+// 화물별 운송장 라벨 (권역 색 띠 · 권역명 · 송장번호 · 무게 · 바코드)
 function waybillTex(c) {
   const h = HUBS[c.hub]
   return canvasTex(256, 168, (g, w, hh) => {
@@ -250,10 +250,12 @@ function waybillTex(c) {
     g.font = `800 21px ${FONT}`; g.fillText(c.id, 10, 66)
     g.font = `600 14px ${FONT}`; g.fillStyle = '#333'
     g.fillText(c.w + 'kg · ' + c.size + ' · ' + c.handle, 10, 88)
+    // 상품 바코드 EAN-13 (바코드 폴더와 같은 번호 체계 · 95칸을 2px씩)
     g.fillStyle = '#0b0f14'
-    let seed = 0; for (const ch of c.id) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0
-    for (let x = 10; x < w - 10; x += 3) { seed = (seed * 1103515245 + 12345) >>> 0; if (seed % 10 < 6) g.fillRect(x, 102, (seed >> 8) % 3 === 0 ? 2 : 1, 44) }
-    g.font = `500 11px ${FONT}`; g.fillText('S CARGO 운송장 · ' + h.full, 10, 158)
+    const code = c.ean || '8802610141003'
+    ean13Bits(code).forEach((b, i) => { if (b) g.fillRect(14 + i * 2, 98, 2, (i < 3 || (i >= 45 && i < 50) || i >= 92) ? 50 : 44) })
+    g.font = `600 13px ${FONT}`; g.fillText(code[0] + '  ' + code.slice(1, 7) + '   ' + code.slice(7), 12, 162)
+    g.font = `500 10px ${FONT}`; g.textAlign = 'right'; g.fillText('S CARGO', w - 8, 162); g.textAlign = 'left'
     g.strokeStyle = 'rgba(0,0,0,0.15)'; g.strokeRect(0.5, 0.5, w - 1, hh - 1)
   })
 }
@@ -321,11 +323,34 @@ export function createAmrScene(container, sim, opts = {}) {
   controls.target.copy(HOME_TGT)
   controls.enableDamping = true
   controls.dampingFactor = 0.08
-  controls.maxPolarAngle = Math.PI * 0.47
+  // 26.10.15 지도 앱처럼: 한 손가락 · 왼쪽 드래그 = 이동, 두 손가락 · 오른쪽 드래그 = 회전, 핀치 · 휠 = 확대
+  controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE }
+  controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE }
+  controls.screenSpacePanning = false // 바닥을 따라 미끄러지듯 이동
+  controls.zoomToCursor = true
+  // 각도 제한: 기울기 30~65°, 좌우 회전은 기본 방향 ±45° (방향을 잃지 않게)
+  const HOME_AZ = Math.atan2(HOME_POS.x - HOME_TGT.x, HOME_POS.z - HOME_TGT.z)
+  controls.minPolarAngle = Math.PI / 6; controls.maxPolarAngle = Math.PI * 0.36
+  controls.minAzimuthAngle = HOME_AZ - Math.PI / 4; controls.maxAzimuthAngle = HOME_AZ + Math.PI / 4
   controls.minDistance = 6
-  controls.maxDistance = 95
+  controls.maxDistance = 80
+  // 이동 범위: 창고 + 바깥 마당 + 입구 · 출구 게이트까지 (그 밖 빈 바닥으로는 못 나감)
+  const SITE = { x0: -43, x1: 39, z0: -21, z1: 21 }
   let viewMode = 'auto'
   controls.addEventListener('start', () => { if (viewMode !== 'free') { viewMode = 'free'; opts.onViewChange && opts.onViewChange(viewMode) } })
+
+  // 2D 모드: 위에서 똑바로 내려다보는 평면 지도 (회전 없음 · 이동/확대만 · 빛 효과 없이 가볍게)
+  const cam2 = new THREE.OrthographicCamera(-20, 20, 20, -20, 0.1, 200)
+  cam2.up.set(0, 0, -1); cam2.position.set(0, 90, 0); cam2.lookAt(0, 0, 0)
+  const controls2 = new OrbitControls(cam2, renderer.domElement)
+  controls2.enableRotate = false; controls2.screenSpacePanning = true; controls2.enableDamping = true; controls2.dampingFactor = 0.1
+  controls2.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }
+  controls2.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN }
+  controls2.zoomToCursor = true
+  controls2.minZoom = 0.5; controls2.maxZoom = 6; controls2.enabled = false
+  controls2.addEventListener('start', () => { if (viewMode !== 'free') { viewMode = 'free'; opts.onViewChange && opts.onViewChange(viewMode) } })
+  let is2D = false
+  const activeCam = () => (is2D ? cam2 : camera)
 
   const composer = new EffectComposer(renderer)
   composer.addPass(new RenderPass(scene, camera))
@@ -591,9 +616,9 @@ export function createAmrScene(container, sim, opts = {}) {
       // 도크 레벨러 (바닥 철판)
       const lev = mesh(box(1.6, 0.04, DOOR_W - 0.4), MAT.steel, wx - outward * 0.8, 0.02, zc, false); world.add(lev)
       dockDoors[kind].push({ door, lampMat, open: 0 })
-      // 도크 번호 · 허브 표지
+      // 도크 번호 · 권역 표지
       const label = kind === 'in' ? 'D' + (i + 1) : 'D' + (i + 4)
-      const sub = kind === 'in' ? '입고 · 운송장 OCR' : HUBS[i].name + ' 허브행'
+      const sub = kind === 'in' ? '입고 · 운송장 OCR' : HUBS[i].name + '행'
       const col = kind === 'in' ? '#2a3440' : HUBS[i].col
       const fg = kind === 'in' ? '#ffffff' : '#0b0f14'
       const st = texSign(label, sub, col, fg)
@@ -633,7 +658,7 @@ export function createAmrScene(container, sim, opts = {}) {
     LEVELS.forEach((ly) => zs.forEach((z) => beamPos.push([(rackX0 + rackX1) / 2, ly, z])))
     // 구역 표지판 (랙 서쪽 끝 위)
     const zn = ZONES[r]
-    const st = texSign(zn.tag + '  ' + zn.name, cold ? '냉장 · 냉동 창고' : zn.name + ' 허브행 보관', zn.col, '#0b0f14')
+    const st = texSign(zn.tag + '  ' + zn.name, cold ? '냉장 · 냉동 창고' : zn.name + '행 보관', zn.col, '#0b0f14')
     const sm = new THREE.MeshStandardMaterial({ map: st, roughness: 0.5, emissive: 0xffffff, emissiveMap: st, emissiveIntensity: 0.35, side: THREE.DoubleSide })
     const sign = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 1.2), sm)
     const zc = cold ? (z0 + zm) / 2 : zm
@@ -740,7 +765,7 @@ export function createAmrScene(container, sim, opts = {}) {
   // 화물차 번호판 (영업용 노란 번호판) · 후미등 · 후부 안전판
   let plateSeq = 0
   function plateText(kind) {
-    const IN = ['부산 98사 4417', '부산 96아 2085', '인천 94자 7731'], OUT = ['경기 82배 3051', '강원 87배 1294', '대구 85배 6620']
+    const IN = ['부산 98사 4417', '부산 96아 2085', '인천 94자 7731'], OUT = ['인천 82배 3051', '서울 87배 1294', '경기 85배 6620']
     return (kind === 'in' ? IN : OUT)[plateSeq++ % 3]
   }
   const plateGeo = new THREE.PlaneGeometry(0.52, 0.11), tailGeo = box(0.05, 0.12, 0.3); disposables.push(plateGeo)
@@ -748,11 +773,24 @@ export function createAmrScene(container, sim, opts = {}) {
   const chevTex = canvasTex(256, 32, (g, w, h) => { for (let x = -h, k = 0; x < w + h; x += 24, k++) { g.fillStyle = k % 2 ? '#d61f1f' : '#f4f4f0'; g.beginPath(); g.moveTo(x, 0); g.lineTo(x + 24, 0); g.lineTo(x + 24 - h, h); g.lineTo(x - h, h); g.fill() } })
   const chevMat = new THREE.MeshStandardMaterial({ map: chevTex, roughness: 0.4, emissive: 0xffffff, emissiveMap: chevTex, emissiveIntensity: 0.15 })
   disposables.push(chevTex)
-  function truckRear(g, x, dir, y, Wd, text) {
-    const pt = canvasTex(256, 56, (cg, w, h) => {
+  // 번호판 텍스처: OCR 결과가 오면 같은 텍스처를 다시 그린다 (앞 · 뒤 번호판이 같이 바뀜)
+  function plateTex(text) {
+    let t = null
+    const draw = (txt) => {
+      const cv = t ? t.image : null, cg = cv.getContext('2d'), w = cv.width, h = cv.height
       cg.fillStyle = '#f2c200'; cg.fillRect(0, 0, w, h); cg.strokeStyle = '#1a1a1a'; cg.lineWidth = 4; cg.strokeRect(3, 3, w - 6, h - 6)
-      cg.fillStyle = '#121212'; cg.font = `800 34px ${FONT}`; cg.textAlign = 'center'; cg.textBaseline = 'middle'; cg.fillText(text, w / 2, h / 2 + 2)
-    })
+      cg.fillStyle = '#121212'; cg.font = `800 ${txt.length > 11 ? 30 : 34}px ${FONT}`; cg.textAlign = 'center'; cg.textBaseline = 'middle'; cg.fillText(txt, w / 2, h / 2 + 2)
+      t.needsUpdate = true
+    }
+    t = canvasTex(256, 56, () => {}); t.userData.draw = draw; draw(text); disposables.push(t)
+    return t
+  }
+  function plateMesh(g, x, dir, y, pt) {
+    const pl = new THREE.Mesh(plateGeo, new THREE.MeshStandardMaterial({ map: pt, roughness: 0.35, metalness: 0.2 }))
+    pl.position.set(x + dir * 0.06, y, 0); pl.rotation.y = dir > 0 ? Math.PI / 2 : -Math.PI / 2; g.add(pl)
+  }
+  function truckRear(g, x, dir, y, Wd, text) {
+    const pt = plateTex(text); g.userData.plateTex = pt
     const pm = new THREE.MeshStandardMaterial({ map: pt, roughness: 0.35, metalness: 0.2 })
     const pl = new THREE.Mesh(plateGeo, pm); pl.position.set(x + dir * 0.06, y, 0); pl.rotation.y = dir > 0 ? Math.PI / 2 : -Math.PI / 2; g.add(pl)
     ;[-1, 1].forEach((s) => { const tl = new THREE.Mesh(tailGeo, tailMat); tl.position.set(x + dir * 0.04, y + 0.1, s * (Wd / 2 - 0.25)); g.add(tl) })
@@ -777,11 +815,12 @@ export function createAmrScene(container, sim, opts = {}) {
     g.add(mesh(box(2.6, 0.5, 2.3), MAT.steel, cabX + 0.5, 0.75, 0))
     ;[[-1.2, 0.5], [-L + 1.3, 0.5], [-L + 2.5, 0.5], [cabX - 0.6, 0.5], [cabX + 1.0, 0.5]].forEach(([wx, r]) => { wheel(g, wx, Wd / 2 - 0.1, r); wheel(g, wx, -Wd / 2 + 0.1, r) })
     truckRear(g, 0.02, 1, 0.75, Wd, plateText('in'))
+    plateMesh(g, cabX - 1.24, -1, 0.85, g.userData.plateTex) // 캡 앞 번호판 (입구 카메라가 읽는 쪽)
     ;[-1, 1].forEach((s) => g.add(mesh(box(0.08, 0.32, 0.05), MAT.steel, cabX - 0.9, 2.5, s * 1.38, false)))
     return g
   }
   function makeCourierTruck(hub) {
-    // 출고: 허브행 택배차 (뒷문이 건물 쪽 -X)
+    // 출고: 권역행 택배차 (뒷문이 건물 쪽 -X)
     const g = new THREE.Group()
     const L = 5.2, Wd = 2.3, Hh = 2.3
     const h = HUBS[hub]
@@ -789,7 +828,7 @@ export function createAmrScene(container, sim, opts = {}) {
       cg.fillStyle = '#f4f6f8'; cg.fillRect(0, 0, w, hh)
       cg.fillStyle = h.col; cg.fillRect(0, hh - 70, w, 70)
       cg.fillStyle = '#0b2540'; cg.font = `800 54px ${FONT}`; cg.fillText('S CARGO', 30, 90)
-      cg.fillStyle = '#0b0f14'; cg.font = `800 40px ${FONT}`; cg.fillText(h.name + ' 허브행', 30, hh - 22)
+      cg.fillStyle = '#0b0f14'; cg.font = `800 40px ${FONT}`; cg.fillText(h.name + '행', 30, hh - 22)
     })
     const sideMat = new THREE.MeshStandardMaterial({ map: sideTex, roughness: 0.45, metalness: 0.2 })
     const roofMat = new THREE.MeshStandardMaterial({ color: 0xf4f6f8, roughness: 0.4, transparent: true, opacity: 0.18, depthWrite: false })
@@ -803,11 +842,74 @@ export function createAmrScene(container, sim, opts = {}) {
     g.add(mesh(box(2.05, 0.18, 2.24), new THREE.MeshStandardMaterial({ color: new THREE.Color(h.col), roughness: 0.4 }), cabX, 0.75, 0))
     ;[[1.0, 0.45], [L - 0.9, 0.45], [cabX + 0.3, 0.45]].forEach(([wx, r]) => { wheel(g, wx, Wd / 2 - 0.1, r); wheel(g, wx, -Wd / 2 + 0.1, r) })
     truckRear(g, -0.02, -1, 0.62, Wd, plateText('out'))
+    plateMesh(g, cabX + 1.02, 1, 0.62, g.userData.plateTex) // 캡 앞 번호판
     ;[-1, 1].forEach((s) => g.add(mesh(box(0.08, 0.3, 0.05), MAT.steel, cabX + 0.7, 2.0, s * 1.25, false)))
     return g
   }
   const inTrucks = DOCK_Y.map((y) => { const t = makeTrailerTruck(); t.position.set(WALL_L - 0.6, 0, Z(y)); world.add(t); return t })
   const outTrucks = DOCK_Y.map((y, i) => { const t = makeCourierTruck(i); t.position.set(WALL_R + 0.6, 0, Z(y)); world.add(t); return t })
+
+  /* ── 입구 · 출구 번호판 OCR (gate_api.py · YOLO + CRNN) ── */
+  // 트럭이 게이트 앞(off = 0.45)에서 멈췄을 때 캡 앞 번호판 위치에 카메라 게이트를 세운다
+  const GATE_OFF = 0.18 * 22 // ease(0.3) * 22 — amrSim 의 GATE_OFF(0.3) 와 맞춘다
+  function ocrGantry(x, dir, label) {
+    const g = new THREE.Group(), z0 = Z(DOCK_Y[0]) - 2.2, z1 = Z(DOCK_Y[2]) + 2.2, zc = (z0 + z1) / 2
+    ;[z0, z1].forEach((z) => g.add(mesh(box(0.22, 5.4, 0.22), MAT.steel, 0, 2.7, z)))
+    g.add(mesh(box(0.3, 0.32, z1 - z0 + 0.3), MAT.steel, 0, 5.4, zc))
+    const beams = DOCK_Y.map((y) => {
+      g.add(mesh(box(0.42, 0.26, 0.34), MAT.rubber, dir * 0.15, 5.1, Z(y)))
+      const lens = new THREE.Mesh(new THREE.CircleGeometry(0.07, 16), new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0x7fd6ff, emissiveIntensity: 1.6 }))
+      lens.position.set(dir * 0.37, 5.1, Z(y)); lens.rotation.y = dir * Math.PI / 2; g.add(lens)
+      // 인식 중일 때 번호판 쪽으로 비추는 빛 (스캔 장면)
+      const bm = new THREE.MeshBasicMaterial({ color: 0xffb84d, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending })
+      const beam = new THREE.Mesh(new THREE.ConeGeometry(1.4, 4.4, 24, 1, true), bm)
+      beam.position.set(dir * 1.6, 3.0, Z(y)); beam.rotation.z = dir * (Math.PI / 2 - 0.55); g.add(beam)
+      return { beam, bm }
+    })
+    const t = tag(label, 'twin-tag twin-tag-gate'); t.position.set(0, 6.3, zc); g.add(t)
+    g.position.set(x, 0, 0); world.add(g)
+    return beams
+  }
+  const gateBeams = [
+    ocrGantry(WALL_L - 0.6 - GATE_OFF - 8.2 - 2.1 - 1.2 - 1.4, 1, 'IN GATE · 번호판 OCR'),
+    ocrGantry(WALL_R + 0.6 + GATE_OFF + 5.2 + 1.15 + 1.0 + 1.4, -1, 'OUT GATE · 번호판 OCR'),
+  ]
+  const KIND_KO = { CARGO: '화물차', COURIER: '택배차', UNKNOWN: '미등록' }
+  const plateTags = [inTrucks, outTrucks].map((arr, side) => arr.map((t) => {
+    const o = tag('', 'twin-tag twin-tag-plate'); o.position.set(side ? 3 : -6, side ? 4.2 : 5.0, 0); o.visible = false; t.add(o)
+    return { o, key: '', plate: '', dockedAt: -1 }
+  }))
+  function plateTagUpdate(d, i, side, tr, t) {
+    const pt = plateTags[side][i], oc = d.ocr
+    const gb = gateBeams[side][i]
+    const scanning = oc && tr.visible && ((oc.st === 'scan' && d.state === 'arriving') || (oc.exit === 'scan' && d.state === 'leaving'))
+    gb.bm.opacity = scanning ? 0.16 + 0.12 * Math.abs(Math.sin(t * 9)) : 0
+    if (!oc || !tr.visible) { pt.o.visible = false; return }
+    if (d.state === 'docked') { if (pt.dockedAt < 0) pt.dockedAt = t } else pt.dockedAt = -1
+    if (pt.oc !== oc) { pt.oc = oc; pt.changedAt = t } // 앱: 서버 결과가 새로 들어오면 잠깐 보여 준다
+    const showing = d.state !== 'docked' || t - pt.dockedAt < 10 || t - (pt.changedAt || -99) < 8
+    pt.o.visible = showing
+    // 번호판 텍스처를 인식 결과로 바꾼다
+    const want = oc.plate ? fmtPlate(oc.plate) : ''
+    if (want && want !== pt.plate) { pt.plate = want; tr.userData.plateTex.userData.draw(want) }
+    if (!showing) return
+    const where = side ? '출고 D' + (i + 4) : '입고 D' + (i + 1)
+    let cls = '', head = '', body = '', foot = ''
+    const conf = (c) => (c != null ? ' ' + c + '%' : '')
+    if (d.state === 'leaving' && oc.exit) {
+      cls = ' is-out'
+      if (oc.exit === 'scan') { head = '출차 OCR · 인식 중…'; body = fmtPlate(oc.plate) }
+      else { head = (oc.exit.ok ? '출차 OCR ✓' : '출차 번호 불일치') + conf(oc.exit.conf); body = fmtPlate(oc.exit.plate) || '판독 불가'; foot = side ? HUBS[d.hub].name + '행 · ' + d.boxes.length + '건 출고 기록' : '하차 완료 · 출차 기록'; if (!oc.exit.ok) cls = ' is-block' }
+    } else if (oc.st === 'scan') { cls = ' is-scan'; head = '입차 OCR · 번호판 인식 중…'; body = '· · · · ·' }
+    else if (oc.st === 'block') { cls = ' is-block'; head = '미등록 차량 · 진입 차단' + conf(oc.conf); body = fmtPlate(oc.plate) || '판독 불가'; foot = 'DB 등록 차량 아님 → 회차' }
+    else if (oc.st === 'off') { cls = ' is-off'; head = 'OCR 서버 응답 없음'; body = fmtPlate(oc.plate); foot = '예시 번호 · gate_api.py 확인' }
+    else { head = '입차 OCR ✓' + conf(oc.conf); body = fmtPlate(oc.plate); foot = (KIND_KO[oc.kind] || '') + ' · 등록 차량 → ' + where }
+    const key = cls + head + body + foot
+    if (key === pt.key) return
+    pt.key = key
+    pt.o.element.className = 'twin-tag twin-tag-plate' + cls
+    pt.o.element.innerHTML = '<i>' + head + '</i><b>' + body + '</b>' + (foot ? '<span>' + foot + '</span>' : '')
+  }
 
   /* ── 현장 소품: 볼라드 · 소화기 · 도크 실 · 롤테이너 · 안전 표지 ── */
   {
@@ -841,7 +943,7 @@ export function createAmrScene(container, sim, opts = {}) {
     for (let x = WALL_L + 1.5; x < WALL_R - 1.5; x += 3.2) world.add(mesh(box(2.6, 0.75, 0.05), winMat, x + 1.3, WALL_H - 0.9, WALL_N + 0.01, false))
     const bTex = canvasTex(1024, 128, (g, w, h) => {
       g.fillStyle = '#0b2540'; g.fillRect(0, 0, w, h); g.fillStyle = '#ff6b00'; g.fillRect(0, h - 14, w, 14)
-      g.fillStyle = '#fff'; g.font = `900 58px ${FONT}`; g.textBaseline = 'middle'; g.fillText('S CARGO 물류센터', 34, 58)
+      g.fillStyle = '#fff'; g.font = `900 58px ${FONT}`; g.textBaseline = 'middle'; g.fillText('S CARGO 허브', 34, 58)
       g.font = `700 34px ${FONT}`; g.fillStyle = '#ffd38a'; g.fillText('안전이 최우선입니다 · 무재해 365일', 560, 58)
     })
     const ban = new THREE.Mesh(new THREE.PlaneGeometry(12, 1.5), new THREE.MeshStandardMaterial({ map: bTex, emissive: 0xffffff, emissiveMap: bTex, emissiveIntensity: 0.18 }))
@@ -855,7 +957,7 @@ export function createAmrScene(container, sim, opts = {}) {
     const aMat = new THREE.MeshStandardMaterial({ map: aTex, emissive: 0xffffff, emissiveMap: aTex, emissiveIntensity: 0.15 })
     ;[-15, 9].forEach((x) => { const sg = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 1.0), aMat); sg.position.set(x, 2.2, WALL_N + 0.02); world.add(sg) })
   }
-  // 롤테이너 (출고 대기 · 허브 색) — 동쪽 도크 사이 빈 공간
+  // 롤테이너 (출고 대기 · 권역 색) — 동쪽 도크 사이 빈 공간
   const cageTex = canvasTex(128, 128, (g, w, h) => { g.clearRect(0, 0, w, h); g.strokeStyle = '#c9d0d6'; g.lineWidth = 3; for (let k = 0; k <= w; k += 16) { g.beginPath(); g.moveTo(k, 0); g.lineTo(k, h); g.stroke(); g.beginPath(); g.moveTo(0, k); g.lineTo(w, k); g.stroke() } })
   disposables.push(cageTex)
   const cageMat = new THREE.MeshStandardMaterial({ map: cageTex, transparent: true, alphaTest: 0.3, side: THREE.DoubleSide, metalness: 0.7, roughness: 0.4 })
@@ -1146,6 +1248,38 @@ export function createAmrScene(container, sim, opts = {}) {
     return { g, body, ledMat, fanMat, ring, ringMat, sel, selMat, mRing, mMat, label, lidarRing, lift, liftK: 0 }
   })
 
+  /* ── 교차로 예약 표시: 바닥 칸(예약 = 청록) · 대기선(대기 = 주황) · 대기 말풍선 ── */
+  const IW = INTER_R * 2 * M
+  const tileGeo = new THREE.PlaneGeometry(IW, IW), edgeGeo = new THREE.EdgesGeometry(tileGeo); disposables.push(tileGeo, edgeGeo)
+  const interTiles = INTER_NODES.map((n) => {
+    const m = new THREE.MeshBasicMaterial({ color: 0x3fe0cc, transparent: true, opacity: 0, depthWrite: false, toneMapped: false })
+    const tile = new THREE.Mesh(tileGeo, m); tile.rotation.x = -Math.PI / 2; tile.position.set(X(n.x), 0.03, Z(n.y)); tile.renderOrder = 2; world.add(tile)
+    const em = new THREE.LineBasicMaterial({ color: 0xffb84d, transparent: true, opacity: 0, toneMapped: false })
+    const edge = new THREE.LineSegments(edgeGeo, em); edge.rotation.x = -Math.PI / 2; edge.position.set(X(n.x), 0.04, Z(n.y)); world.add(edge)
+    return { n, m, em }
+  })
+  const waitTags = S.amrs.map(() => { const o = tag('', 'twin-tag twin-tag-wait'); o.visible = false; world.add(o); return o })
+  function interUpdate(t) {
+    interTiles.forEach((it) => {
+      const slot = S.inter && S.inter[it.n.key]
+      const waiting = S.amrs.some((a) => a.iWaitNode === it.n)
+      it.m.opacity = slot && slot.owner ? 0.22 : 0
+      it.em.opacity = waiting ? 0.55 + 0.4 * Math.abs(Math.sin(t * 6)) : 0
+    })
+    S.amrs.forEach((a, i) => {
+      const o = waitTags[i], g = amrs3[i].g
+      let txt = ''
+      if (a.iWaitNode && a.iwait > 0.3) txt = '교차로 대기 ' + a.iwait.toFixed(1) + '초'
+      else if (a.lastWaitT != null && S.simT - a.lastWaitT < 1.2) txt = '대기 ' + a.lastWait.toFixed(1) + '초 → 통과'
+      o.visible = !!txt
+      if (!txt) return
+      o.position.set(g.position.x, 2.15, g.position.z)
+      if (o.element.textContent !== txt) o.element.textContent = txt
+      const cls = 'twin-tag twin-tag-wait' + (a.iWaitNode ? '' : ' is-go')
+      if (o.element.className !== cls) o.element.className = cls
+    })
+  }
+
   // 실내라 반사 환경광을 낮춘다 (밝은 흰 방 환경맵이 모든 면을 하얗게 띄우는 것 방지)
   const envTune = (m) => { if (m && m.isMeshStandardMaterial && m.envMapIntensity === 1) m.envMapIntensity = 0.55 }
   scene.traverse((o) => { if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(envTune) })
@@ -1244,7 +1378,75 @@ export function createAmrScene(container, sim, opts = {}) {
   /* ── 카메라 시점 ── */
   const camGoalPos = new THREE.Vector3().copy(HOME_POS), camGoalTgt = new THREE.Vector3().copy(HOME_TGT)
   let followIdx = 2
+  /* ── 바로가기 시점 (부지 전체 · 게이트 · 도크 · 랙 · 충전/정비) ── */
+  const GATE_IN_X = WALL_L - 0.6 - GATE_OFF - 8.2 - 2.1 - 1.2 - 1.4, GATE_OUT_X = WALL_R + 0.6 + GATE_OFF + 5.2 + 1.15 + 1.0 + 1.4
+  const PRESETS = {
+    overview: { tgt: [-2, 0, 0], off: [10, 44, 48], z2: 0.7 },
+    gateIn: { tgt: [GATE_IN_X + 5, 0, 0], off: [9, 19, 21], z2: 1.6 },
+    dockIn: { tgt: [WALL_L + 3, 0, 0], off: [9, 16, 18], z2: 1.9 },
+    rack: { tgt: [0, 0, -1], off: [7, 20, 22], z2: 1.5 },
+    dockOut: { tgt: [WALL_R - 2, 0, 0], off: [9, 16, 18], z2: 1.9 },
+    gateOut: { tgt: [GATE_OUT_X - 4, 0, 0], off: [9, 19, 21], z2: 1.6 },
+    station: { tgt: [X(430), 0, Z(590)], off: [6, 12, 14], z2: 2.4 },
+  }
+  let gateSide = null // 지금 자동으로 보고 있는 게이트 ('in' | 'out')
+  const dockPrev = new WeakMap() // 도크별 직전 상태 (트럭이 들어오기 · 나가기 시작하는 순간을 잡으려고)
+  let preset = null, autoGate = false, gateBack = null, gateUntil = 0, gateSeen = new WeakSet(), exitSeen = new WeakSet()
+  const backTgt = new THREE.Vector3(), backPos = new THREE.Vector3(); let backZoom = 1, backUntil = 0
+  function setPreset(name) {
+    const p = PRESETS[name]; if (!p) return
+    preset = p; viewMode = 'preset'; opts.onViewChange && opts.onViewChange('preset:' + name)
+  }
+  function setAutoGate(on) { autoGate = !!on; if (!autoGate) gateSide = null }
+  // 26.10.16 입구 · 출구에서 인식이 시작되면 그 게이트를 잠깐(6초) 보여 주고 원래 보던 자리로 돌아간다
+  //  - 손으로 움직인 자유 시점 · 로봇 따라가기에서도 동작 (예전엔 자동 · 전체 · 바로가기 시점에서만 동작)
+  //  - 들어올 때(입구 OCR) + 택배차가 나갈 때(출구 OCR) 모두
+  function autoGateCheck(t) {
+    // 트럭 움직임으로도 판단: 입구로 들어오기 시작(empty → arriving) · 택배차가 나가기 시작(docked → leaving)
+    //  - 앱은 번호판 인식을 직접 하지 않아서(웹 결과만 받음) 'scan' 상태가 없으므로 이 기준으로 움직인다
+    let moveHit = null
+    S.inDocks.forEach((d) => { const pv = dockPrev.get(d); if (pv !== undefined && pv !== d.state && d.state === 'arriving' && !moveHit) moveHit = 'gateIn'; dockPrev.set(d, d.state) })
+    S.outDocks.forEach((d) => { const pv = dockPrev.get(d); if (pv !== undefined && pv !== d.state && !moveHit && (d.state === 'arriving' || d.state === 'leaving')) moveHit = 'gateOut'; dockPrev.set(d, d.state) })
+    if (!autoGate) return
+    if (gateUntil && t > gateUntil) {
+      gateUntil = 0; gateSide = null
+      if (viewMode === 'preset' && gateBack) { // 게이트를 보는 사이 사용자가 직접 움직였으면 그대로 둔다
+        if (gateBack.mode === 'preset') { preset = gateBack.preset; viewMode = 'preset' }
+        else if (gateBack.mode === 'free') { preset = null; viewMode = 'back'; backUntil = t + 2.5 }
+        else setView(gateBack.mode, gateBack.idx)
+      }
+      gateBack = null; return
+    }
+    if (gateUntil || viewMode === 'back') return
+    if (moveHit) { [...S.inDocks, ...S.outDocks].forEach((d) => { if (d.ocr) { gateSeen.add(d.ocr); if (d.ocr.exit === 'scan') exitSeen.add(d.ocr) } }); goGate(moveHit, t); return } // 같은 트럭으로 두 번 움직이지 않게
+    const hit = [...S.inDocks.map((d) => [d, 'gateIn']), ...S.outDocks.map((d) => [d, 'gateOut'])].find(([d]) => d.ocr && ((d.ocr.st === 'scan' && !gateSeen.has(d.ocr)) || (d.ocr.exit === 'scan' && !exitSeen.has(d.ocr))))
+    if (!hit) return
+    const o = hit[0].ocr
+    if (o.exit === 'scan') exitSeen.add(o); else gateSeen.add(o)
+    goGate(hit[1], t)
+  }
+  function goGate(key, t) {
+    gateBack = { mode: viewMode, idx: followIdx, preset }
+    if (viewMode === 'free') { // 자유 시점: 지금 카메라 자리를 기억
+      if (is2D) { backTgt.copy(controls2.target); backZoom = cam2.zoom } else { backTgt.copy(controls.target); backPos.copy(camera.position) }
+    }
+    preset = PRESETS[key]; viewMode = 'preset'; gateUntil = t + 6; gateSide = key === 'gateIn' ? 'in' : 'out'
+    opts.onViewChange && opts.onViewChange('preset:' + key)
+  }
+  // 앱용: 앱은 인식을 직접 하지 않고 웹이 끝낸 결과만 받으므로, 새 결과가 오면 그 게이트로 바로 이동
+  function focusGate(side) {
+    if (!autoGate || gateUntil || viewMode === 'back') return
+    goGate(side === 'out' ? 'gateOut' : 'gateIn', performance.now() / 1000)
+  }
+  // 이동 범위 제한 (목표점을 부지 안으로 · 카메라도 같은 만큼 옮겨 시야 유지)
+  const clampV = new THREE.Vector3()
+  function clampSite(ctl, cam) {
+    const tg = ctl.target
+    clampV.set(Math.min(SITE.x1, Math.max(SITE.x0, tg.x)) - tg.x, 0, Math.min(SITE.z1, Math.max(SITE.z0, tg.z)) - tg.z)
+    if (clampV.x || clampV.z) { tg.add(clampV); cam.position.add(clampV) }
+  }
   function setView(mode, idx) {
+    preset = null
     viewMode = mode
     if (idx != null) followIdx = idx
     opts.onViewChange && opts.onViewChange(viewMode)
@@ -1260,6 +1462,7 @@ export function createAmrScene(container, sim, opts = {}) {
       const tr = inTrucks[i]
       tr.visible = d.state !== 'empty'
       tr.position.x = WALL_L - 0.6 - ease(d.off) * 22
+      plateTagUpdate(d, i, 0, tr, t)
       const dd = dockDoors.in[i]; const want = d.state === 'docked' ? 1 : 0
       dd.open += (want - dd.open) * Math.min(1, dtReal * 2.5)
       dd.door.scale.y = Math.max(0.05, 1 - dd.open * 0.95); dd.door.position.y = DOOR_H - (DOOR_H * dd.door.scale.y) / 2
@@ -1269,6 +1472,7 @@ export function createAmrScene(container, sim, opts = {}) {
       const tr = outTrucks[i]
       tr.visible = d.state !== 'empty'
       tr.position.x = WALL_R + 0.6 + ease(d.off) * 22
+      plateTagUpdate(d, i, 1, tr, t)
       const dd = dockDoors.out[i]; const want = d.state === 'docked' ? 1 : 0
       dd.open += (want - dd.open) * Math.min(1, dtReal * 2.5)
       dd.door.scale.y = Math.max(0.05, 1 - dd.open * 0.95); dd.door.position.y = DOOR_H - (DOOR_H * dd.door.scale.y) / 2
@@ -1308,7 +1512,7 @@ export function createAmrScene(container, sim, opts = {}) {
     })
 
     // AMR
-    const T = S.amrs[2]
+    const T = S.amrs[S.sc.target == null ? 2 : S.sc.target]
     S.amrs.forEach((a, i) => {
       const o = amrs3[i], [lv] = status(a), col = lvCol(lv)
       const [x, z] = o.fl ? [o.px, o.pz] : amrPos(a)
@@ -1390,10 +1594,12 @@ export function createAmrScene(container, sim, opts = {}) {
       s.beamMat.opacity = done ? 0.22 : 0.12 + 0.12 * Math.abs(Math.sin(t * 14))
       s.beam.position.x = done ? 0.05 : 0.05 + Math.sin(t * 9) * 0.25
       s.lbl.visible = true
-      s.lbl.element.textContent = done ? 'OCR ✓ ' + c.id + ' → ' + HUBS[c.hub].name + (c.handle === '냉장' ? ' · 냉장' : '') : '운송장 스캔 중…'
+      s.lbl.element.textContent = done ? '바코드 ✓ ' + (c.ean || c.id) + ' → ' + HUBS[c.hub].name + (c.handle === '냉장' ? ' · 냉장' : '') : '바코드 스캔 중…'
       s.lbl.element.className = 'twin-tag twin-tag-ocr' + (done ? ' is-done' : '')
       s.lbl.element.style.setProperty('--hub', HUBS[c.hub].col)
     })
+
+    interUpdate(t)
 
     // 센서 패킷 → 게이트웨이
     const pk = S.packets
@@ -1428,7 +1634,7 @@ export function createAmrScene(container, sim, opts = {}) {
       u.torso.rotation.z = Math.sin(ph * 1.3) * 0.015
       u.head.rotation.y = Math.sin(ph * 0.4) * 0.5
       if (k === 'tech') {
-        const working = S.amrs[2].state === 'maint'
+        const working = S.amrs.some((a, i) => i < 4 && a.state === 'maint')
         u.crouch = (u.crouch || 0) + ((working ? 1 : 0) - (u.crouch || 0)) * Math.min(1, dtReal * 3)
         const c = u.crouch
         u.hip.position.y = 0.9 - c * 0.42
@@ -1448,25 +1654,45 @@ export function createAmrScene(container, sim, opts = {}) {
       callout.visible = true
       const [x, z] = amrPos(T)
       callout.position.set(x, 2.1, z)
-      const html = `<b>AMR-03 · ${ui.callout.title}</b><span>${ui.callout.line}</span>`
+      const html = `<b>${S.amrs[S.sc.target == null ? 2 : S.sc.target].name} · ${ui.callout.title}</b><span>${ui.callout.line}</span>`
       if (callout.userData.html !== html) { callout.element.innerHTML = html; callout.userData.html = html }
       callout.element.style.setProperty('--c', ui.callout.col)
     } else callout.visible = false
 
     // 카메라
-    if (viewMode !== 'free') {
+    if (viewMode === 'back') { // 게이트를 보여 준 뒤 자유 시점의 원래 자리로 부드럽게 복귀
+      const k = Math.min(1, dtReal * 2.2)
+      if (is2D) { controls2.target.lerp(backTgt, k); cam2.position.set(controls2.target.x, 90, controls2.target.z); cam2.zoom += (backZoom - cam2.zoom) * k; cam2.updateProjectionMatrix() }
+      else { controls.target.lerp(backTgt, k); camera.position.lerp(backPos, k) }
+      const near = is2D ? controls2.target.distanceTo(backTgt) < 0.05 && Math.abs(cam2.zoom - backZoom) < 0.01 : controls.target.distanceTo(backTgt) < 0.05 && camera.position.distanceTo(backPos) < 0.05
+      if (near || t > backUntil) { // 다 왔거나 시간이 지나면 원래 자리에 정확히 맞추고 자유 시점으로
+        if (is2D) { controls2.target.copy(backTgt); cam2.position.set(backTgt.x, 90, backTgt.z); cam2.zoom = backZoom; cam2.updateProjectionMatrix() } else { controls.target.copy(backTgt); camera.position.copy(backPos) }
+        viewMode = 'free'; opts.onViewChange && opts.onViewChange('free')
+      }
+    } else if (viewMode !== 'free') {
       let follow = viewMode === 'follow' || (viewMode === 'auto' && ui.phase >= 2 && ui.phase <= 4)
-      const fi = viewMode === 'follow' ? followIdx : 2
+      if (viewMode === 'preset' && preset) follow = false
+      const fi = viewMode === 'follow' ? followIdx : (S.sc.target == null ? 2 : S.sc.target)
       if (follow) {
         const a = S.amrs[fi], [x, z] = amrPos(a)
         camGoalTgt.set(x, 0.6, z)
         camGoalPos.set(x + 9, 11, z + 13)
+      } else if (viewMode === 'preset' && preset) {
+        camGoalTgt.set(...preset.tgt); camGoalPos.set(preset.tgt[0] + preset.off[0], preset.off[1], preset.tgt[2] + preset.off[2])
       } else { camGoalTgt.copy(HOME_TGT); camGoalPos.copy(HOME_POS) }
       const k = Math.min(1, dtReal * 1.6)
-      controls.target.lerp(camGoalTgt, k)
-      camera.position.lerp(camGoalPos, k)
+      if (is2D) {
+        const pz = viewMode === 'preset' && preset
+        tmpV.set(follow || pz ? camGoalTgt.x : -2, 0, follow || pz ? camGoalTgt.z : 0)
+        controls2.target.lerp(tmpV, k); cam2.position.set(controls2.target.x, 90, controls2.target.z)
+        const zGoal = follow ? 2.2 : pz ? preset.z2 : 0.7; cam2.zoom += (zGoal - cam2.zoom) * k; cam2.updateProjectionMatrix()
+      } else {
+        controls.target.lerp(camGoalTgt, k)
+        camera.position.lerp(camGoalPos, k)
+      }
     }
-    controls.update()
+    autoGateCheck(t)
+    if (is2D) { clampSite(controls2, cam2); controls2.update() } else { clampSite(controls, camera); controls.update() }
   }
 
   /* ── 화질: 'normal' 일반 / 'low' 저사양 (그림자 · 빛 번짐 · 먼지 · 냉기 끄고 해상도 1배) ── */
@@ -1481,7 +1707,20 @@ export function createAmrScene(container, sim, opts = {}) {
     ;[fx.dust, fx.mist, fx.shafts].forEach((o) => { if (o) o.visible = !low })
     resize()
   }
+  function set2D(on) {
+    is2D = !!on
+    controls.enabled = !is2D; controls2.enabled = is2D
+    if (is2D) { controls2.target.set(-2, 0, 0); cam2.position.set(-2, 90, 0); cam2.zoom = 0.7 }
+    resize()
+  }
+  const THEME_BG = { dark: 0x0b1016, light: 0xdfe6ec }
+  let theme = 'dark'
+  function setTheme(t) {
+    theme = t === 'light' ? 'light' : 'dark'
+    scene.background.set(THEME_BG[theme]); scene.fog.color.set(THEME_BG[theme])
+  }
   function render() {
+    if (is2D) { renderer.render(scene, cam2); labelRenderer.render(scene, cam2); return }
     if (quality === 'low') { renderer.render(scene, camera); labelRenderer.render(scene, camera); return }
     composer.render()
     labelRenderer.render(scene, camera)
@@ -1496,6 +1735,9 @@ export function createAmrScene(container, sim, opts = {}) {
     labelRenderer.setSize(w, h)
     camera.aspect = w / h
     camera.updateProjectionMatrix()
+    // 2D: 창고 전체(가로 약 50m · 세로 약 34m)가 화면에 들어오게
+    const asp = w / h, hh = Math.max(18, 26 / asp), hw = hh * asp
+    cam2.left = -hw; cam2.right = hw; cam2.top = hh; cam2.bottom = -hh; cam2.updateProjectionMatrix()
   }
   const ro = new ResizeObserver(resize); ro.observe(container); resize()
 
@@ -1507,7 +1749,7 @@ export function createAmrScene(container, sim, opts = {}) {
     if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 5) return
     const r = renderer.domElement.getBoundingClientRect()
     ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1)
-    ray.setFromCamera(ndc, camera)
+    ray.setFromCamera(ndc, activeCam())
     const targets = amrs3.map((o) => o.body).concat([...cargoMeshes.values()].filter((m) => m.g.visible).map((m) => m.g), [...upperSets.values()], [upPallet])
     const hit = ray.intersectObjects(targets, true)[0]
     if (!hit) return
@@ -1523,7 +1765,7 @@ export function createAmrScene(container, sim, opts = {}) {
     ro.disconnect()
     renderer.domElement.removeEventListener('pointerdown', onDown)
     renderer.domElement.removeEventListener('pointerup', onUp)
-    controls.dispose()
+    controls.dispose(); controls2.dispose()
     scene.traverse((o) => {
       if (o.geometry) o.geometry.dispose()
       if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => { if (m.map) m.map.dispose(); m.dispose() })
@@ -1539,5 +1781,5 @@ export function createAmrScene(container, sim, opts = {}) {
     labelRenderer.domElement.remove()
   }
 
-  return { update, render, setView, resize, dispose, setQuality, get quality() { return quality }, camera, controls, renderer, world, toWorld: (x, y) => [X(x), Z(y)], get viewMode() { return viewMode } }
+  return { update, render, setView, setPreset, setAutoGate, get autoGate() { return autoGate }, get autoGateSide() { return gateSide }, focusGate, resize, dispose, setQuality, set2D, setTheme, get is2D() { return is2D }, get theme() { return theme }, get quality() { return quality }, camera, controls, renderer, world, toWorld: (x, y) => [X(x), Z(y)], get viewMode() { return viewMode } }
 }

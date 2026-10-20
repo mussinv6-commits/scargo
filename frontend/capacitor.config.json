@@ -1,0 +1,16 @@
+{
+  "appId": "com.scargo.driver",
+  "appName": "S카고 기사",
+  "webDir": "dist-driver",
+  "server": {
+    "androidScheme": "http",
+    "cleartext": true
+  },
+  "android": {
+    "allowMixedContent": true
+  },
+  "plugins": {
+    "CapacitorHttp": { "enabled": true },
+    "CapacitorCookies": { "enabled": true }
+  }
+}

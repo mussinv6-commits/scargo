@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#070b10" />
+  <title>S카고 AMR 관제</title>
+  <link rel="stylesheet" href="./src/style.css" />
+</head>
+<body>
+  <div id="app">
+    <main id="pages">
+      <!-- ① 홈: 한 화면에 요약만 (조치가 필요한 것 · 숫자 · 최근 알림 · 기준 · 3D) -->
+      <section class="page on" data-page="home">
+        <header class="hd"><div><small>S-CARGO AMR</small><h2>관제 홈</h2></div><div class="hd-r"><button type="button" class="db-chip" id="db-chip">단독</button><button type="button" class="icb" data-go="alert" aria-label="알림"><span class="bd" id="badge" hidden>0</span><svg viewBox="0 0 24 24"><path d="M18 16V11a6 6 0 1 0-12 0v5l-2 2h16z"/><path d="M10 21h4"/></svg></button><button type="button" class="icb" data-go="settings" aria-label="설정"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button></div></header>
+        <div class="scroll">
+          <div class="step" id="h-step"><b>STEP 01</b><span>정상 운영</span><span class="dots"><i></i><i></i><i></i><i></i><i></i></span></div>
+          <p class="cap" id="h-cap" hidden></p>
+          <div class="kpis">
+            <div class="kpi"><b id="h-act">4/5</b><span>AMR 가동</span></div>
+            <div class="kpi"><b id="h-thru">0</b><span>오늘 처리</span></div>
+            <div class="kpi"><b id="h-gate">0</b><span>입출차</span></div>
+            <div class="kpi"><b class="good" id="h-block">0</b><span>차단</span></div>
+          </div>
+          <div class="todo" id="h-todo"></div>
+          <div class="card">
+            <div class="row-sb"><span class="lbl">Recent · 최근 알림</span><button type="button" class="btn sm" data-go="alert">전체</button></div>
+            <div class="recent" id="h-recent"></div>
+          </div>
+          <div class="card cfg" id="cfg-card">
+            <div class="row-sb cfg-sum"><span>운영 기준 · 정비 <b id="cfg-sum-rul">24</b>시간 · 충전 <b id="cfg-sum-chg">30</b>%</span><button type="button" class="btn sm" id="cfg-toggle">변경</button></div>
+            <div class="cfg-body" id="cfg-body" hidden>
+              <div class="row-sb"><span class="lbl">Control · 운영 기준 (관리자)</span><span class="hint" id="cfg-by">-</span></div>
+              <div class="cfg-row"><div><b>정비 기준</b><small>남은 수명이 이 시간 이하면 자동 정비</small></div><div class="cfg-step"><button type="button" data-k="rul" data-d="-6">−</button><strong id="cfg-rul">24</strong><em>시간</em><button type="button" data-k="rul" data-d="6">+</button></div></div>
+              <div class="cfg-row"><div><b>충전 기준</b><small>배터리가 이 % 이하면 작업 후 충전</small></div><div class="cfg-step"><button type="button" data-k="chg" data-d="-10">−</button><strong id="cfg-chg">30</strong><em>%</em><button type="button" data-k="chg" data-d="10">+</button></div></div>
+            </div>
+          </div>
+          <div class="card mini-card">
+            <div class="row-sb"><span class="lbl">3D View · 실시간 트윈</span><button type="button" class="btn sm c" data-go="3d">⤢ 크게 보기</button></div>
+            <div class="mini" id="mini-slot"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ② 통계: DB 집계 KPI (앱에 맞게 큰 숫자 · 막대 · 카드) -->
+      <section class="page" data-page="stats">
+        <header class="hd"><div><small>KPI · DB 집계</small><h2>통계</h2></div><span class="hint" id="k-at">-</span></header>
+        <div class="scroll">
+          <div class="card">
+            <span class="lbl">Today · 오늘 처리량</span>
+            <div class="kbig"><b id="k-today">-</b><span>건</span><em id="k-delta"></em></div>
+            <div class="kbars" id="k-bars"></div>
+          </div>
+          <div class="card"><span class="lbl">Utilization · 로봇 가동률 (최근 1시간)</span><div class="kutil" id="k-util"></div></div>
+          <div class="kgrid">
+            <div class="card"><b id="k-dur">-</b><span>평균 운반 시간</span></div>
+            <div class="card"><b id="k-wait">-</b><span>교차로 평균 대기</span></div>
+            <div class="card"><b id="k-gate">-</b><span>입출차 / 차단</span></div>
+            <div class="card"><b id="k-ocr">-</b><span>OCR 평균 신뢰도</span></div>
+          </div>
+          <p class="hint" id="k-note">웹 관제 화면이 켜져 있으면 AMR 운반 · 입출차 기록이 DB에 쌓여 여기 집계됩니다.</p>
+        </div>
+      </section>
+
+      <!-- ② 3D -->
+      <section class="page full3d" data-page="3d">
+        <div class="slot3d" id="full-slot"></div>
+        <div class="ov-top">
+          <div class="row-sb"><div><small>LIVE 3D TWIN</small><h2>3D 뷰</h2></div><span class="live"><i></i>LIVE</span></div>
+          <div class="chips" id="v-chips">
+            <button type="button" data-v="follow" class="on">따라가기</button>
+            <button type="button" data-v="overview">전체 보기</button>
+            <button type="button" data-v="cold">냉장 창고</button>
+            <button type="button" data-v="auto">자동 연출</button>
+          </div>
+          <div class="chips pre" id="v-presets">
+            <button type="button" data-p="overview">부지</button><button type="button" data-p="gateIn">입구</button><button type="button" data-p="dockIn">입고</button><button type="button" data-p="rack">랙</button><button type="button" data-p="dockOut">출고</button><button type="button" data-p="gateOut">출구</button><button type="button" data-p="station">충전</button><button type="button" id="v-autogate" class="ag">게이트 자동</button>
+          </div>
+        </div>
+        <div class="ov-side">
+          <button type="button" id="v-2d" title="2D / 3D 전환">2D</button>
+          <button type="button" data-theme-toggle title="다크 / 라이트">라이트</button>
+          <button type="button" id="v-quality" title="화질">저사양</button>
+          <button type="button" id="v-speed" title="배속">1x</button>
+          <button type="button" id="v-pause" title="일시정지">Ⅱ</button>
+        </div>
+        <div class="sheet" id="v-sheet">
+          <div class="gr"></div>
+          <div class="row-sb">
+            <div><div class="sn"><b id="s-name">AMR-03</b><span class="pill" id="s-pill">정상</span></div><div class="ss" id="s-state">-</div></div>
+            <div class="rulbox"><b id="s-rul">-</b><span id="s-rul-k">건강점수</span></div>
+          </div>
+          <div class="mets">
+            <div class="met"><b id="s-vib">-</b><span>진동 mm/s</span></div>
+            <div class="met"><b id="s-temp">-</b><span>모터 °C</span></div>
+            <div class="met"><b id="s-batt">-</b><span>배터리 %</span></div>
+          </div>
+          <div class="pick" id="s-pick"></div>
+        </div>
+      </section>
+
+      <!-- ③ 로봇 -->
+      <section class="page" data-page="robot">
+        <header class="hd"><div><small>ROBOT · 예지보전</small><h2 id="r-name">AMR-03</h2></div><span class="pill" id="r-pill">정상</span></header>
+        <div class="seg-robots" id="r-tabs"></div>
+        <div class="scroll">
+          <div class="card big">
+            <div class="ring"><svg viewBox="0 0 96 96"><circle cx="48" cy="48" r="40" fill="none" stroke="#1f2c3a" stroke-width="9"/><circle id="r-ring" cx="48" cy="48" r="40" fill="none" stroke="#3fe0cc" stroke-width="9" stroke-linecap="round" stroke-dasharray="0 252" transform="rotate(-90 48 48)"/><text x="48" y="70" text-anchor="middle" fill="#8a9bb0" font-size="10">건강점수</text></svg><b id="r-health">-</b></div>
+            <div class="bigtxt">
+              <div class="lbl" id="r-rul-l">AI 예측 · 남은 수명</div>
+              <div class="rul"><b id="r-rul">-</b><span id="r-rul-u"></span></div>
+              <div class="sub" id="r-sub">-</div>
+            </div>
+          </div>
+          <div class="mets six">
+            <div class="met"><b id="r-vib">-</b><span>진동 mm/s</span></div>
+            <div class="met"><b id="r-temp">-</b><span>모터 °C</span></div>
+            <div class="met"><b id="r-batt">-</b><span>배터리 %</span></div>
+            <div class="met"><b id="r-cum">-</b><span>누적 운반 t</span></div>
+            <div class="met"><b id="r-load">-</b><span>현재 적재 kg</span></div>
+            <div class="met"><b id="r-state">-</b><span>상태</span></div>
+          </div>
+          <div class="card">
+            <div class="row-sb"><span class="lbl" id="r-chart-lbl">Vibration · 최근 30초</span><span class="hint">주의 4.5 · 고장 7.1</span></div>
+            <canvas id="r-chart" class="chart"></canvas>
+          </div>
+          <div class="card" id="r-maint-card">
+            <span class="lbl">Maintenance · 정비 진행</span>
+            <div class="tl" id="r-tl"></div>
+          </div>
+          <button type="button" class="btn c wide" id="r-see3d">3D에서 이 로봇 따라가기</button>
+          <div class="card">
+            <div class="row-sb"><span class="lbl">Fleet · 로봇 6대</span><span class="hint">눌러서 상세</span></div>
+            <div class="fleet" id="h-fleet"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ④ 물류: 입출차(번호판 OCR) · 상자 흐름 -->
+      <section class="page" data-page="cargo">
+        <header class="hd"><div><small>GATE · CARGO</small><h2>물류</h2></div><span class="live"><i></i>LIVE</span></header>
+        <div class="seg2" id="c-seg"><button type="button" class="on" data-s="gate">입출차</button><button type="button" data-s="box">상자 흐름</button></div>
+        <div class="scroll" id="c-gate">
+          <div class="chips2" id="v-filter"><button type="button" class="on" data-f="all">전체</button><button type="button" data-f="ENTRY">입차</button><button type="button" data-f="EXIT">출차</button><button type="button" data-f="BLOCK">차단</button></div>
+          <div class="vphoto" id="v-photo" hidden><img id="v-img" alt="번호판 인식 사진" /><span id="v-cap"></span></div>
+          <ul class="vlist big" id="v-list"><li><span>웹 관제 화면이 켜져 있으면 입구 · 출구 인식 결과가 여기와 3D 트럭 위에 나옵니다</span></li></ul>
+        </div>
+        <div class="scroll" id="c-box" hidden>
+          <div class="card">
+            <span class="lbl">Today · 오늘 흐름</span>
+            <div class="flow">
+              <div class="fn"><div class="ic">🚛</div><b id="c-in">0</b><span>입고 스캔</span></div><span class="fa">›</span>
+              <div class="fn"><div class="ic c">▤</div><b id="c-store">0</b><span>보관 중</span></div><span class="fa">›</span>
+              <div class="fn"><div class="ic a">⇄</div><b id="c-move">0</b><span>이동 중</span></div><span class="fa">›</span>
+              <div class="fn"><div class="ic b">➜</div><b id="c-out">0</b><span>권역 출고</span></div>
+            </div>
+          </div>
+          <div class="card"><span class="lbl">Out · 권역별 택배차 적재</span><div id="c-hubs"></div></div>
+          <div class="card"><span class="lbl">Storage · 보관 현황 (바닥 칸 / 위 단)</span><div id="c-stock"></div></div>
+          <div class="card">
+            <div class="row-sb"><span class="lbl">Moving · 지금 움직이는 화물</span><span class="mini-chips" id="c-filter"><button type="button" class="on" data-f="all">전체</button><button type="button" data-f="cold">냉장</button></span></div>
+            <div id="c-moving"></div>
+          </div>
+          <div class="card"><span class="lbl">Inbound · 최근 상자 바코드</span><div id="c-scans"></div></div>
+        </div>
+      </section>
+
+      <!-- ⑤ 알림 -->
+      <section class="page" data-page="alert">
+        <header class="hd"><div><button type="button" class="back" data-go="home">‹ 홈</button><h2>알림 · 이벤트</h2></div><button type="button" class="btn sm" id="a-read">모두 읽음</button></header>
+        <div class="chips2" id="a-filter">
+          <button type="button" class="on" data-f="all">전체</button><button type="button" data-f="pm">예지보전</button><button type="button" data-f="cargo">화물</button><button type="button" data-f="fl">지게차</button>
+        </div>
+        <div class="scroll" id="a-list"></div>
+      </section>
+      <!-- ⑥ 설정 (톱니) -->
+      <section class="page" data-page="settings">
+        <header class="hd"><div><button type="button" class="back" data-go="home">‹ 홈</button><h2>설정</h2></div></header>
+        <div class="scroll">
+          <div class="card" id="db-card">
+            <span class="lbl">Server · DB 연동</span>
+            <p class="db-status" id="db-status">-</p>
+            <div class="db-row"><input id="db-url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="노트북 IP 예: 192.168.0.10:8080" /><button type="button" class="btn sm c" id="db-save">연결</button></div>
+            <p class="hint">노트북과 휴대폰을 같은 와이파이에 두고, 노트북 IP를 넣으세요. 웹 관제 화면이 켜져 있으면 상태 · 기준 · 입출차가 함께 움직입니다.</p>
+          </div>
+          <div class="card" id="au-card">
+            <div class="row-sb"><span class="lbl">Admin · 관리자 인증</span><button type="button" class="btn sm" id="au-out">로그아웃</button></div>
+            <p class="db-status" id="au-status">-</p>
+            <p class="hint">웹 AMR 관제 화면의 [📱 앱 연결] QR이나 6자리로 들어오면 24시간 동안 유지됩니다. 모든 휴대폰 로그아웃은 웹에서 합니다.</p>
+          </div>
+          <div class="card" id="nt-card">
+            <span class="lbl">Notify · 휴대폰 알림</span>
+            <div class="seg3" id="nt-seg"><button type="button" data-n="crit">긴급만</button><button type="button" data-n="warn">긴급 + 주의</button><button type="button" data-n="all">전부</button></div>
+            <ul class="nt-list">
+              <li><i class="r"></i><b>긴급</b><span>미등록 차량 차단 · 서버 연결 끊김</span></li>
+              <li><i class="a"></i><b>주의</b><span>AI 고장 예측 · 자동 정비 예약 · 진동 이상</span></li>
+              <li><i class="g"></i><b>정보</b><span>정비 시작 · 완료 · 충전 · 기준 변경</span></li>
+            </ul>
+            <p class="hint">고르지 않은 단계는 휴대폰 알림과 팝업 없이 알림 탭에만 쌓입니다.</p>
+          </div>
+          <div class="card"><div class="row-sb"><span class="lbl">Display · 화면</span><button type="button" class="theme-btn" data-theme-toggle>라이트 모드</button></div></div>
+        </div>
+      </section>
+    </main>
+
+    <div id="host3d"></div>
+
+    <nav class="tabbar" id="tabbar">
+      <button type="button" class="tab on" data-tab="home"><svg viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>홈</button>
+      <button type="button" class="tab" data-tab="stats"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>통계</button>
+      <button type="button" class="tab" data-tab="3d"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="10" ry="4.2"/><ellipse cx="12" cy="12" rx="4.2" ry="10"/><circle cx="12" cy="12" r="1.6" class="f"/></svg>3D</button>
+      <button type="button" class="tab" data-tab="cargo"><svg viewBox="0 0 24 24"><path d="M3 7h11v9H3zM14 10h4l3 3v3h-7z"/><circle cx="7" cy="18" r="1.8"/><circle cx="17" cy="18" r="1.8"/></svg>물류</button>
+      <button type="button" class="tab" data-tab="robot"><svg viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="10" rx="2"/><circle cx="8" cy="19" r="1.6"/><circle cx="16" cy="19" r="1.6"/><path d="M9 8V5h6v3"/></svg>로봇</button>
+    </nav>
+    <div class="toast" id="toast"></div>
+  </div>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>

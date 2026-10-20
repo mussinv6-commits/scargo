@@ -9,14 +9,14 @@
    ============================================================ */
 
 .driver-app-shell {
-  --bg: var(--color-bg, #f4f6f8);
+  --bg: var(--color-bg, #f6f4ee);
   --surface: var(--color-card, #ffffff);
   --surface-alt: #eef1f6;
   --border: #e3e8ef;
-  --text: var(--color-text, #0a2540);
+  --text: var(--color-text, #112847);
   --text-muted: var(--color-subtext, #64748b);
-  --amber: var(--color-accent, #ff6b00);
-  --amber-soft: rgba(255, 107, 0, 0.12);
+  --amber: var(--color-accent, #c9972f);
+  --amber-soft: rgba(201, 151, 47, 0.12);
   --green: var(--status-delivered, #10b981);
   --green-soft: rgba(16, 185, 129, 0.12);
   --red: var(--status-delayed, #ef4444);
@@ -84,7 +84,7 @@
 .driver-app-shell .driver-sidebar {
   width: 224px;
   flex-shrink: 0;
-  background: var(--color-primary, #0a2540);
+  background: var(--color-primary, #112847);
   border-right: none;
   padding: 24px 14px;
   display: flex;

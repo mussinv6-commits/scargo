@@ -273,14 +273,14 @@
   border: 1px solid var(--a-border, #e3e8ef);
   border-radius: 10px;
   background: #fff;
-  color: var(--a-text, #0a2540);
+  color: var(--a-text, #112847);
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
 }
 .biz-today-btn.on {
-  background: #0a2540;
-  border-color: #0a2540;
+  background: #112847;
+  border-color: #112847;
   color: #fff;
 }
 .biz-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
@@ -320,7 +320,7 @@
   margin-top: 12px;
   padding: 12px 14px;
   border-radius: 12px;
-  background: #ff6b00;
+  background: #c9972f;
   color: #fff !important;
   font-size: 14px;
   font-weight: 800;
@@ -368,7 +368,7 @@
   padding: 14px 4px;
   border-bottom: 1px solid #f1f4f8;
   font-size: 13.5px;
-  color: var(--a-text, #0a2540);
+  color: var(--a-text, #112847);
 }
 .biz-metrics li span { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; }
 .biz-metrics li i { color: #64748b; }
@@ -415,8 +415,8 @@
   border-radius: 999px;
   text-align: center;
 }
-.admin-app .badge-default { background: rgba(10, 37, 64, 0.08); color: #0a2540; }
-.admin-app .badge-must-read { background: rgba(255, 107, 0, 0.14); color: #ff6b00; }
+.admin-app .badge-default { background: rgba(10, 37, 64, 0.08); color: #112847; }
+.admin-app .badge-must-read { background: rgba(201, 151, 47, 0.14); color: #c9972f; }
 .admin-app .badge-urgent { background: rgba(217, 92, 69, 0.16); color: #c2410c; }
 
 @media (max-width: 1280px) {

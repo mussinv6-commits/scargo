@@ -160,7 +160,7 @@
   color: var(--color-primary);
 }
 .badge-must-read {
-  background: rgba(255, 107, 0, 0.14);
+  background: rgba(201, 151, 47, 0.14);
   color: var(--color-accent);
 }
 .badge-urgent {
@@ -200,7 +200,7 @@
   justify-content: space-between;
   font-size: 13px;
   padding: 6px 10px;
-  background: #f4f6f8;
+  background: #f6f4ee;
   border-radius: 8px;
   margin-bottom: 4px;
 }

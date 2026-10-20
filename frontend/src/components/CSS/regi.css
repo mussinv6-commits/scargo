@@ -28,13 +28,13 @@
 
 /* 트러스트 & 마린 팔레트 매핑 (scoped라 :root 대신 .regi-box에 정의) */
 .regi-box {
-  --regi-primary: var(--color-primary, #0a2540);
-  --regi-primary-hover: var(--color-primary-hover, #123a63);
-  --regi-accent: var(--color-accent, #ff6b00);
-  --regi-text: var(--color-text, #0a2540);
+  --regi-primary: var(--color-primary, #112847);
+  --regi-primary-hover: var(--color-primary-hover, #1d4070);
+  --regi-accent: var(--color-accent, #c9972f);
+  --regi-text: var(--color-text, #112847);
   --regi-text-muted: var(--color-subtext, #64748b);
   --regi-border: #d7dce4;
-  --regi-bg-soft: var(--color-bg, #f4f6f8);
+  --regi-bg-soft: var(--color-bg, #f6f4ee);
   --regi-danger: #ef4444;
 
   position: relative;
@@ -114,7 +114,7 @@
 .form-row .form-select:focus {
   outline: none;
   border-color: var(--regi-accent);
-  box-shadow: 0 0 0 3px rgba(255, 107, 0, 0.18);
+  box-shadow: 0 0 0 3px rgba(201, 151, 47, 0.18);
   background-color: #fff;
 }
 

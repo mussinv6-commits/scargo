@@ -4,13 +4,13 @@
    login.css / regi.css 등 어디서든 var(--color-xxx)로 참조하면 됨.
    ============================================================ */
 :root {
-  --color-primary: #0a2540;        /* Main 60% - 딥 나이트 블루 (바다와 신뢰감) */
-  --color-primary-hover: #123a63;  /* 버튼 마우스 오버 (한 톤 밝은 네이비) */
+  --color-primary: #112847;        /* Main 60% - 딥 나이트 블루 (바다와 신뢰감) */
+  --color-primary-hover: #1d4070;  /* 버튼 마우스 오버 (한 톤 밝은 네이비) */
   --color-secondary: #3b5674;      /* Main의 라이트 톤 - 보조 강조/보더용 */
-  --color-accent: #ff6b00;         /* Point 10% - 에너지 오렌지 (CTA, 상태 업데이트, 알림) */
-  --color-bg: #f4f6f8;             /* Sub 30% - 아이스 화이트 / 쿨 그레이 */
+  --color-accent: #c9972f;         /* Point 10% - 에너지 오렌지 (CTA, 상태 업데이트, 알림) */
+  --color-bg: #f6f4ee;             /* Sub 30% - 아이스 화이트 / 쿨 그레이 */
   --color-card: #ffffff;           /* Card - 화이트 (가독성 확보용 여백) */
-  --color-text: #0a2540;           /* Text - 메인 컬러를 그대로 텍스트에도 사용 */
+  --color-text: #112847;           /* Text - 메인 컬러를 그대로 텍스트에도 사용 */
   --color-subtext: #64748b;        /* Sub Text - 그레이 */
 
   /* 26.09.30 추가: 상단 네비 높이 - 관리자 사이드바 sticky 위치 계산에 사용 */
@@ -18,8 +18,8 @@
 
   /* 물류 상태 표시 */
   --status-delivered: #10b981;   /* 배송완료 */
-  --status-in-transit: #0a2540;  /* 배송중 - 메인 네이비 */
-  --status-pending: #ff6b00;     /* 배송대기 - 포인트 오렌지 */
+  --status-in-transit: #112847;  /* 배송중 - 메인 네이비 */
+  --status-pending: #c9972f;     /* 배송대기 - 포인트 오렌지 */
   --status-delayed: #ef4444;     /* 배송지연 */
 }
 

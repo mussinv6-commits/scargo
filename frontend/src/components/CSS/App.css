@@ -259,7 +259,7 @@ nav.navbar.bg-brand {
   border-radius: 999px;
   white-space: nowrap;
 }
-.role-badge.role-admin { background: rgba(255, 107, 0, 0.18); color: #ffc58f; }
+.role-badge.role-admin { background: rgba(201, 151, 47, 0.18); color: #ffc58f; }
 .role-badge.role-biz { background: rgba(125, 170, 220, 0.2); color: #cfe2f7; }
 .role-badge.role-driver { background: rgba(16, 185, 129, 0.18); color: #9be8c8; }
 .role-badge.role-pending { background: rgba(255, 255, 255, 0.1); color: rgba(255, 255, 255, 0.7); }
@@ -290,7 +290,7 @@ nav.navbar.bg-brand {
 .dropdown-item.is-current,
 .dropdown-item.router-link-exact-active {
   color: var(--color-accent);
-  background: rgba(255, 107, 0, 0.08);
+  background: rgba(201, 151, 47, 0.08);
 }
 .navbar-dark .dropdown-toggle::after {
   border-top-color: currentColor;
@@ -303,7 +303,7 @@ nav.navbar.bg-brand {
   padding: 5px 14px !important;
 }
 .role-menu.role-admin > .dropdown-toggle {
-  background: rgba(255, 107, 0, 0.16);
+  background: rgba(201, 151, 47, 0.16);
   color: #ffd7b0 !important;
 }
 .role-menu.role-biz > .dropdown-toggle {

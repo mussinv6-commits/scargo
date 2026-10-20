@@ -35,6 +35,12 @@ const router = createRouter({
 router.beforeEach((to, from, next) => {
     const user = authState.user; // reactive 객체에서 바로 꺼내 씀
 
+    // 26.10.20: S-Bot 관리자는 S그룹 메인(/) · S-Bot(/sbot) · 로그인 화면만 사용 (S Cargo 쪽은 전부 차단, 알림창 없이 S-Bot 으로 이동)
+    if (user?.userType === 'ADMIN' && user?.adminScope === 'SBOT') {
+        const p = to.path;
+        if (p !== '/' && p !== '/login' && !p.startsWith('/sbot')) return next({ name: 'sbot' });
+    }
+
     if (user?.userType === 'ADMIN') {
         if (to.name === 'notice') return next({ name: 'admin-notices' });
         if (to.name === 'noticeWrite') return next({ name: 'admin-notice-write' });
@@ -52,6 +58,24 @@ router.beforeEach((to, from, next) => {
         if (user.userType !== 'ADMIN') {
             alert('관리자 계정만 접근할 수 있습니다.');
             return next({ name: 'home' });
+        }
+        // 26.10.20: S-Bot 관리자는 S Cargo 관리자 화면에 들어갈 수 없다
+        if (user.adminScope === 'SBOT') {
+            alert('S-Bot 관리자는 S Cargo 관리자 화면에 접근할 수 없습니다.');
+            return next({ name: 'sbot' });
+        }
+    }
+
+    // 26.10.20 추가: S-Bot 화면은 S-Bot 관리자만
+    if (to.matched.some((r) => r.meta.requiresSbotAdmin)) {
+        if (!user) {
+            alert('로그인이 필요합니다.');
+            sessionStorage.setItem('location', to.fullPath);
+            return next({ name: 'login' });
+        }
+        if (user.userType !== 'ADMIN' || user.adminScope !== 'SBOT') {
+            alert('S-Bot 관리자 계정만 접근할 수 있습니다.');
+            return next({ name: 'group' });
         }
     }
 

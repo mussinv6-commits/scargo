@@ -13,7 +13,8 @@ import safeCargoLogo from "@/assets/scargo_logo_4x.png";
 const router = useRouter();
 const route = useRoute();
 
-const isAdmin = computed(() => authState.user?.userType === "ADMIN");
+// 26.10.20: S Cargo 관리자 = ADMIN 이면서 S-Bot 관리자가 아닌 계정
+const isAdmin = computed(() => authState.user?.userType === "ADMIN" && authState.user?.adminScope !== "SBOT");
 const isCorporateApproved = computed(() => authState.user?.userType === "CORPORATE_APPROVED");
 const isCorporatePending = computed(() => authState.user?.userType === "CORPORATE_PENDING");
 const isDriver = computed(() => authState.user?.userType === "GENERAL");
@@ -30,7 +31,7 @@ const roleBadge = computed(() => {
 const myInfoLink = computed(() => {
   if (isAdmin.value) return "/admin/profile";
   if (isCorporateApproved.value) return "/company";
-  if (isCorporatePending.value) return "/";
+  if (isCorporatePending.value) return "/scargo";
   return "/driver/app/my-page";
 });
 
@@ -98,7 +99,8 @@ onBeforeUnmount(() => document.removeEventListener("click", onDocClick));
 const isDriverApp = computed(() => route.path.startsWith("/driver"));
 const isAdminApp = computed(() => route.path.startsWith("/admin"));
 const isCompanyApp = computed(() => route.path.startsWith("/company"));
-const hideChrome = computed(() => isDriverApp.value || isAdminApp.value || isCompanyApp.value);
+const isGroup = computed(() => route.path === "/" || route.path === "/login" || route.path.startsWith("/sbot"));
+const hideChrome = computed(() => isGroup.value || isDriverApp.value || isAdminApp.value || isCompanyApp.value);
 
 function isSection(prefix) {
   return route.path === prefix || route.path.startsWith(prefix + "/");
@@ -123,9 +125,9 @@ function scrollToTop() {
 
 <template>
   <div id="app">
-    <nav class="navbar navbar-expand-lg navbar-dark bg-brand sticky-top site-nav">
+    <nav v-if="!isGroup" class="navbar navbar-expand-lg navbar-dark bg-brand sticky-top site-nav">
       <div class="container-fluid nav-grid">
-        <RouterLink to="/" class="navbar-brand brand-logo">
+        <RouterLink to="/scargo" class="navbar-brand brand-logo">
           <img :src="safeCargoLogo" alt="S Cargo" />
         </RouterLink>
 
@@ -143,7 +145,7 @@ function scrollToTop() {
         <div id="mainNavbar" class="collapse navbar-collapse" :class="{ show: navOpen }">
           <ul class="navbar-nav main-menu">
             <li class="nav-item">
-              <RouterLink to="/" class="nav-link" :class="{ 'is-active': route.path === '/' }">홈</RouterLink>
+              <RouterLink to="/" class="nav-link">홈</RouterLink>
             </li>
             <li class="nav-item">
               <RouterLink :to="isAdmin ? '/admin/notices' : '/notice'" class="nav-link" :class="{ 'is-active': isNoticeSection }">공지사항</RouterLink>

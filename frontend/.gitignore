@@ -17,3 +17,6 @@ dist-ssr/
 # env
 .env
 .env.*
+
+# 26.10.08 기사 앱 빌드 결과물 (npm run build:driver 로 다시 만들 수 있음)
+dist-driver

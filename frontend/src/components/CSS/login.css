@@ -358,7 +358,7 @@
  
 .login-box .card-header { /* 🟡 변경: 앞에 .login-box 추가 */ 
  
-  background: #0a2d4f; 
+  background: #0f2a4a; 
  
   border: none; 
  
@@ -583,7 +583,7 @@
  
   border-radius: 6px; 
  
-  background: #0a2d4f !important; /* 🟡 변경: #1268d5 → #0a2d4f (남색) */ 
+  background: #0f2a4a !important; /* 🟡 변경: #1268d5 → #0f2a4a (남색) */ 
  
   border: none !important; /* 🟡 !important 추가 */ 
  

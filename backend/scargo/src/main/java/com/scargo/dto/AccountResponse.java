@@ -16,6 +16,7 @@ public class AccountResponse {
     private String phoneNum;
     private String businessNo; 
     private OffsetDateTime createdAt;
+    private String adminScope; // 26.10.20 추가: 관리자 구분 (SCARGO = S Cargo 관리자 / SBOT = S-Bot 관리자, 관리자가 아니면 null)
 
     public AccountResponse(Account account) {
         this.accountId = account.getAccountId();
@@ -26,5 +27,9 @@ public class AccountResponse {
         this.phoneNum = account.getPhoneNum();
         this.businessNo = account.getBusinessNo(); 
         this.createdAt = account.getCreatedAt();
+        // S-Bot 관리자 계정은 아이디가 sbot 으로 시작한다 (AdminInitializer 에서 생성)
+        if (account.getUserType() == Account.UserType.ADMIN) {
+            this.adminScope = account.getUserId() != null && account.getUserId().toLowerCase().startsWith("sbot") ? "SBOT" : "SCARGO";
+        }
     }
 }

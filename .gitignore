@@ -36,3 +36,13 @@ python/crash_log.txt
 backend/scargo/.apt_generated/
 backend/scargo/.apt_generated_tests/
 python/__pycache__/
+
+# ===== 26.10.20 추가: 올리지 않는 것 =====
+목업/
+**/_색상변경전_백업/
+amr-app/node_modules/
+amr-app/android/build/
+amr-app/android/app/build/
+amr-app/android/.gradle/
+amr-app/android/local.properties
+*.apk

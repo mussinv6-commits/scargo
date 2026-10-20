@@ -1,0 +1,633 @@
+// ─────────────────────────────────────────────────────────────
+// S카고 허브 AMR 시뮬레이션 코어 (그리기 없음)
+// 평면도 좌표(px, 1000 x 640) 기준으로 동작하고, 3D 렌더러가 미터로 변환해서 그린다.
+//   - 입고: 운송장 OCR로 목적지 권역 확인 → 권역별 랙 보관
+//   - 출고: 권역별 출고 도크 택배차로 이동
+//   - 예지보전: 누적 운반량이 가장 많은 AMR 진동 상승 → 고장 예측 → 관리자 승인 → 예비기 교대 → 계획 정비
+// ─────────────────────────────────────────────────────────────
+export const W = 1000, H = 640
+export const AISLES = [62, 175, 295, 415, 540]
+export const ROWS = [[92, 142], [210, 260], [330, 380], [450, 500]]
+export const NS = 9
+export const SX = (i) => 262 + i * 49
+export const DOCK_Y = [130, 300, 470]
+export const HXL = 185, HXR = 720
+export const STATION_Y = 600
+export const CHARGERS = [262, 311, 360, 409, 458].map((x) => ({ x, y: STATION_Y, kind: 'station' }))
+export const BAY = { x: 600, y: STATION_Y, kind: 'station' }
+export const GW = { x: 870, y: 30 }
+// 무인 지게차 대기 · 충전 위치
+export const FL_HOME = { x: 660, y: STATION_Y, kind: 'station' }
+// 랙 단 높이 (m): 바닥 칸(0층)은 AMR, 위 3단은 무인 지게차가 다룬다
+export const LEVEL_H = [1.75, 3.45, 5.15]
+// 냉장 · 냉동 창고: 0번 줄 랙을 단열 패널 방으로 감싼다 (북쪽 통로 쪽 한 면만 사용)
+export const COLD_ROW = 0
+export const COLD_ROOM = { x0: 222, x1: 688, y0: 32, y1: 120, doorY: 62, doors: [222, 688] }
+const VMAX = 84, ACC = 150, VMAX_FL = 56
+
+export const COLORS = { cyan: '#3fe0cc', amber: '#ffb84d', red: '#ff5a5f', green: '#4fdc8a', spare: '#6b7a8a', sky: '#9fd8ff' }
+export const HUBS = [
+  { name: '인천', full: '인천 권역 (서브터미널)', col: '#b48cff' },
+  { name: '서울', full: '서울 권역 (서브터미널)', col: '#5aa8ff' },
+  { name: '경기', full: '경기 권역 (서브터미널)', col: '#ff7eb3' },
+]
+export const ZONES = [
+  { tag: 'D', name: '냉장', col: COLORS.sky },
+  { tag: 'A', name: '인천', col: HUBS[0].col },
+  { tag: 'B', name: '서울', col: HUBS[1].col },
+  { tag: 'C', name: '경기', col: HUBS[2].col },
+]
+// 줄 · 면이 실제로 쓰이는지 (냉장 창고 줄은 북쪽 면만)
+export const sideOn = (r, s) => !(r === COLD_ROW && s === 1)
+export const STATE_KO = { charge: '충전 중', idle: '대기', toPick: '픽업 이동', load: '적재 중', toDrop: '운반 중', unload: '하역 중', toMaint: '정비소 이동', maint: '정비 중', toHome: '복귀 중', toRack: '랙 이동', fwork: '랙 작업 중' }
+export const PHASE_T = { 1: '정상 운영', 2: '이상 징후 감지', 3: 'AI 고장 예측', 4: '교대 · 계획 정비', 5: '정상 복귀' }
+export const CAPTIONS = {
+  1: '입고 도크에서 운송장 OCR로 목적지를 읽고, AMR이 권역별 랙 바닥 칸(A 인천 · B 서울 · C 경기 · D 냉장 창고)에 보관합니다. 위 단 보충 재고는 무인 지게차가 내리고 올리며, 출고는 권역별 택배차로 나갑니다.',
+  2: 'AMR-03 구동모터 진동이 평소 범위(1.2~2.0 mm/s)를 벗어나기 시작합니다. 무거운 화물을 가장 많이 나른 기체입니다.',
+  3: '진동 추세로 남은 수명을 계산합니다. 관리자가 정한 정비 기준 이하로 떨어지면 자동으로 정비를 예약하고 예비기 AMR-05를 투입합니다.',
+  4: 'AMR-03은 하던 작업만 마치고 정비 스테이션으로 이동합니다. 그동안 AMR-05가 작업을 이어받아 권역 출고는 멈추지 않습니다.',
+  5: '베어링 교체 후 진동이 정상으로 돌아오고 누적 운반 중량도 초기화됩니다. AMR-05는 대기 위치로 돌아갑니다.',
+}
+export const PIPE_ON = { 1: [0, 1, 2], 2: [2, 3], 3: [3, 4], 4: [4, 5], 5: [4] }
+export const PH_COL = { 1: COLORS.cyan, 2: COLORS.amber, 3: COLORS.amber, 4: COLORS.red, 5: COLORS.green }
+
+// 상품 바코드 (EAN-13) — 최종파일/Scargo_바코드_EAN13버전 과 같은 번호 체계
+//   880(국가) 2610(업체) 14 + 그룹 1~5(100~500번대) + 00~20 + 검증숫자
+export function eanCheck(d12) { let s = 0; for (let i = 0; i < 12; i++) s += +d12[i] * (i % 2 ? 3 : 1); return String((10 - (s % 10)) % 10) }
+export const EAN_LIST = (() => { const o = []; for (let g = 1; g <= 5; g++) for (let n = 0; n <= 20; n++) { const d = '880261014' + g + String(n).padStart(2, '0'); o.push(d + eanCheck(d)) } return o })()
+const EAN_L = ['0001101', '0011001', '0010011', '0111101', '0100011', '0110001', '0101111', '0111011', '0110111', '0001011']
+const EAN_G = ['0100111', '0110011', '0011011', '0100001', '0011101', '0111001', '0000101', '0010001', '0001001', '0010111']
+const EAN_R = ['1110010', '1100110', '1101100', '1000010', '1011100', '1001110', '1010000', '1000100', '1001000', '1110100']
+const EAN_P = ['LLLLLL', 'LLGLGG', 'LLGGLG', 'LLGGGL', 'LGLLGG', 'LGGLLG', 'LGGGLL', 'LGLGLG', 'LGLGGL', 'LGGLGL']
+// 95칸 막대 패턴 (true = 검은 막대)
+export function ean13Bits(code) {
+  const d = String(code).split('').map(Number), par = EAN_P[d[0]]; let b = '101'
+  for (let i = 1; i <= 6; i++) b += (par[i - 1] === 'L' ? EAN_L : EAN_G)[d[i]]
+  b += '01010'; for (let i = 7; i <= 12; i++) b += EAN_R[d[i]]; b += '101'
+  return b.split('').map((x) => x === '1')
+}
+// 번호판 표시: 서울85자6013 → 서울 85자 6013
+export const fmtPlate = (p) => (p ? String(p).replace(/\s/g, '').replace(/^(\D*)(\d{2,3})(\D)(\d{4})$/, (m, a, b, c, d) => (a ? a + ' ' : '') + b + c + ' ' + d) : '')
+
+// 교차로: 통로(가로) × 간선(세로)이 만나는 10곳 — 한 번에 한 대만 지나간다 (예약)
+export const INTER_NODES = [HXL, HXR].flatMap((x) => AISLES.map((y) => ({ x, y, key: x + ':' + y })))
+export const INTER_R = 14 // 교차로 칸 반지름 (px, 0.7m)
+
+export const zoneRow = (c) => (c.handle === '냉장' ? COLD_ROW : c.hub + 1)
+export const tons = (a) => (a.cumKg / 1000).toFixed(2)
+
+export function status(a) {
+  if (a.state === 'maint') return ['crit', '정비 중']
+  if (a.maintFlag) return ['crit', '정비 필요']
+  if (a.vib > 2.6 && a.deg > 0.5) return ['warn', '주의']
+  if (a.role === 'spare' && a.state === 'idle') return ['spare', '예비 대기']
+  return ['ok', '정상']
+}
+export const lvCol = (lv) => (lv === 'crit' ? COLORS.red : lv === 'warn' ? COLORS.amber : lv === 'spare' ? COLORS.spare : COLORS.cyan)
+
+export function createSim(hooks = {}) {
+  const onLog = hooks.onLog || (() => {})
+  const onPhase = hooks.onPhase || (() => {})
+  const onEvent = hooks.onEvent || (() => {})   // DB 저장용: ('move' | 'maint' | 'vehicle', 내용)
+  // 입구 · 출구 번호판 OCR 게이트 (웹 관제만 켠다): 트럭이 게이트에서 멈추고 OCR 결과를 기다린다
+  let gate = !!hooks.vehicleGate
+  const GATE_WAIT = 25 // 초 · 이 안에 결과가 없으면 OCR 응답 없음으로 통과
+  const GATE_OFF = 0.3 // 입구 카메라 앞 정지 위치 (도크 쪽으로 가까이 · 화면에서 보이게)
+  const GATE_MIN = 2.5 // 결과가 빨리 와도 이만큼은 게이트에서 멈춰 '인식' 장면을 보여 준다
+  const SAMPLE_IN = ['서울85자6013', '경기90자8118', '인천98바2578'], SAMPLE_OUT = ['부산90배8407', '경남99바4892', '대구80자6850']
+  // 관리자 승인: AI 예측 뒤 바로 교대하지 않고 승인을 기다린다. 응답이 없으면 autoApproveSec 뒤 자동 승인
+  const autoApproveSec = () => (typeof hooks.autoApproveSec === 'function' ? hooks.autoApproveSec() : hooks.autoApproveSec == null ? 20 : hooks.autoApproveSec)
+  const slotName = (sl) => (sl ? 'R' + (sl.r + 1) + '-' + (sl.s ? 'B' : 'A') + (sl.i + 1) : '')
+
+  let seed = 11
+  const rnd = () => { seed |= 0; seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296 }
+  const pick = (a) => a[Math.floor(rnd() * a.length)]
+  const CATS = [
+    { n: '전자제품', w: [2, 12], h: () => { const r = rnd(); return r < 0.45 ? '파손주의' : r < 0.75 ? '취급주의' : '일반' } },
+    { n: '식품', w: [3, 18], h: () => (rnd() < 0.55 ? '냉장' : '일반') },
+    { n: '의류', w: [1, 6], h: () => '일반' },
+    { n: '생활용품', w: [2, 15], h: () => { const r = rnd(); return r < 0.15 ? '파손주의' : r < 0.4 ? '취급주의' : '일반' } },
+    { n: '가구부품', w: [10, 28], h: () => '일반' },
+  ]
+
+  const S = {}
+
+  function mkCargo(hub) {
+    const c = pick(CATS), w = Math.round(c.w[0] + rnd() * (c.w[1] - c.w[0]))
+    const id = 'SC-' + S.cargoSeq++, h = hub == null ? Math.floor(rnd() * 3) : hub
+    // 취급 표시: 파손주의 · 취급주의 · 냉장 · 중량물(20kg 이상) · 일반 → 박스 스티커와 운반 속도에 쓰인다
+    let handle = c.h()
+    if (handle === '일반' && w >= 20) handle = '중량물'
+    return { id, hub: h, cat: c.n, w, size: w < 6 ? 'S' : w < 15 ? 'M' : 'L', handle, loc: null, res: false, ean: EAN_LIST[Math.floor(rnd() * EAN_LIST.length)] }
+  }
+  function mkCargoForRow(r) { let c; do { c = mkCargo(r === COLD_ROW ? null : r - 1) } while ((r === COLD_ROW) !== (c.handle === '냉장')); return c }
+  function fillInTruck(dk, d, n) { dk.cargo = []; for (let k = 0; k < n; k++) { const c = mkCargo(); c.loc = { type: 'inTruck', d }; dk.cargo.push(c) } }
+
+  function addLog(text, lv) { S.logItems.unshift({ t: S.simT || 0, text, lv }); S.logItems = S.logItems.slice(0, 8); onLog(S.logItems) }
+  function setPhase(p) { S.sc.phase = p; S.sc.start = S.sc.t; onPhase(p) }
+
+  function init() {
+    seed = 11
+    Object.assign(S, { simT: 0, thru: 0, logItems: [], taskFlip: 0, sampleAcc: 0, packets: [], cargoSeq: 24001, scans: [], hubSent: [0, 0, 0], scanVer: 0 })
+    S.slots = ROWS.map((_, r) => [0, 1].map((s) => Array.from({ length: NS }, (_, i) => {
+      if (!sideOn(r, s)) return { st: -1, box: null }
+      if (rnd() < 0.45) { const b = mkCargoForRow(r); b.loc = { type: 'slot', r, s, i }; return { st: 1, box: b } }
+      return { st: 0, box: null }
+    })))
+    // 위 3단 보충 재고 (팔레트 단위)
+    S.upper = ROWS.map((_, r) => [0, 1].map((s) => Array.from({ length: NS }, (_, i) => [0, 1, 2].map((lv) => {
+      if (!sideOn(r, s)) return null
+      if (rnd() < 0.6) { const b = mkCargoForRow(r); b.loc = { type: 'upper', r, s, i, lv }; return { box: b, res: false } }
+      return { box: null, res: false }
+    }))))
+    S.upperVer = 0
+    S.inDocks = DOCK_Y.map((y, d) => { const dk = { y, state: d === 2 ? 'empty' : 'docked', off: d === 2 ? 1 : 0, cargo: [], timer: 2 }; if (d !== 2) fillInTruck(dk, d, 3 + (d % 2)); return dk })
+    S.outDocks = DOCK_Y.map((y, d) => ({ y, hub: d, state: 'docked', off: 0, boxes: [], res: 0, timer: 0, cap: 4 }))
+    const cum = [8200, 9100, 12400, 7600, 3100]
+    S.amrs = [0, 1, 2, 3, 4].map((i) => { const h = CHARGERS[i]; return {
+      id: i + 1, name: 'AMR-0' + (i + 1), x: h.x, y: h.y, rx: h.x, ry: h.y, ox: 0, oy: 0, ang: -Math.PI / 2,
+      home: h, cur: h, dest: h, path: [], state: 'idle', task: null, box: null, lastBox: null, timer: 0, wait: 0.4 + i * 0.6, role: i === 4 ? 'spare' : 'active',
+      v: 0, blocked: 0, dirx: 0, diry: -1, pktAcc: i * 0.15, cumKg: cum[i],
+      vib: 1.5, temp: 45, batt: 66 + i * 6, health: 98, hist: [], maintFlag: false, release: false, deg: 0, ph: i * 2.1, kind: 'amr' } })
+    // 무인 지게차 FL-01: 위 단 ↔ 바닥 칸 보충 · 적치 전담
+    S.amrs.push({
+      id: 6, name: 'FL-01', kind: 'fl', x: FL_HOME.x, y: FL_HOME.y, ox: 0, oy: 0, ang: -Math.PI / 2,
+      home: FL_HOME, cur: FL_HOME, dest: FL_HOME, path: [], state: 'idle', task: null, box: null, lastBox: null, timer: 0, wait: 2.5, role: 'active',
+      v: 0, blocked: 0, dirx: 0, diry: -1, pktAcc: 0.4, cumKg: 5300, vib: 1.1, temp: 41, batt: 82, health: 97, hist: [], maintFlag: false, release: false, deg: 0, ph: 1,
+      forkH: 0, reach: 0, fw: null, fx: 0, fy: 0,
+    })
+    S.inter = {}; INTER_NODES.forEach((n) => (S.inter[n.key] = { owner: 0, waiters: 0 }))
+    S.istats = { n: 0, total: 0, max: 0 }
+    S.cfg = S.cfg || { rulAt: 24, chargeAt: 30, chargeTo: 90 }   // 관리자 운영 기준 (앱 · 웹에서 바꾸면 DB로 공유)
+    S.sc = { phase: 1, t: 0, start: 0, degrading: false, rul: null, slope: 0, await: false, awaitT: 0, approvedBy: null, target: 2 }
+    addLog('관제 시작 · AMR 4대 가동, 1대 예비 · 무인 지게차 1대', '')
+    setPhase(1)
+  }
+
+  // ── 경로: 통로 → 간선 → 통로 → 목적지 ──
+  const aisleOf = (p) => (p.kind === 'station' ? 540 : p.y)
+  function route(P, Q) {
+    let hx
+    if (P.kind === 'in' || Q.kind === 'in') hx = HXL
+    else if (P.kind === 'out' || Q.kind === 'out') hx = HXR
+    else hx = Math.abs(P.x - HXL) + Math.abs(Q.x - HXL) <= Math.abs(P.x - HXR) + Math.abs(Q.x - HXR) ? HXL : HXR
+    const ya = aisleOf(P), yb = aisleOf(Q), pts = []
+    const add = (p) => { const l = pts[pts.length - 1] || P; if (Math.hypot(l.x - p.x, l.y - p.y) > 0.5) pts.push(p) }
+    add({ x: P.x, y: ya })
+    if (ya !== yb) { add({ x: hx, y: ya }); add({ x: hx, y: yb }) }
+    add({ x: Q.x, y: yb }); add({ x: Q.x, y: Q.y })
+    return pts
+  }
+  function goTo(a, Q, st) { a.path = route(a.cur, Q); a.dest = Q; a.state = st }
+
+  // ── 작업 할당: 목적지 권역 기준 ──
+  function slotsWhere(fn) { const o = []; S.slots.forEach((r, ri) => r.forEach((s, si) => s.forEach((v, i) => { if (fn(v, ri)) o.push({ r: ri, s: si, i }) }))); return o }
+  const slotAt = (sl) => S.slots[sl.r][sl.s][sl.i]
+  const slotPt = (sl) => ({ x: SX(sl.i), y: AISLES[sl.r + sl.s], kind: 'rack' })
+  function near(a, list) { list.sort((p, q) => Math.hypot(SX(p.i) - a.x, AISLES[p.r + p.s] - a.y) - Math.hypot(SX(q.i) - a.x, AISLES[q.r + q.s] - a.y)); return list[Math.floor(rnd() * Math.min(4, list.length))] }
+  function tryIn(a) {
+    const ds = S.inDocks.map((d, k) => ({ d, k })).filter((o) => o.d.state === 'docked' && o.d.cargo.some((c) => !c.res))
+    for (const { d, k } of ds.sort(() => rnd() - 0.5)) {
+      for (const c of d.cargo) {
+        if (c.res) continue
+        const z = zoneRow(c), em = slotsWhere((v, ri) => ri === z && v.st === 0)
+        if (!em.length) continue
+        const sl = near(a, em); c.res = true; slotAt(sl).st = 2
+        return { type: 'in', dock: d, dk: k, box: c, slot: sl, from: { x: 115, y: d.y, kind: 'in' }, to: slotPt(sl) }
+      }
+    }
+    return null
+  }
+  function tryOut(a) {
+    const ds = S.outDocks.filter((d) => d.state === 'docked' && d.cap - d.boxes.length - d.res > 0)
+    for (const d of ds.sort(() => rnd() - 0.5)) {
+      const fl = slotsWhere((v) => v.st === 1 && v.box && v.box.hub === d.hub)
+      if (!fl.length) continue
+      const sl = near(a, fl); d.res++; slotAt(sl).st = 3
+      return { type: 'out', dock: d, box: slotAt(sl).box, slot: sl, from: slotPt(sl), to: { x: 885, y: d.y, kind: 'out' } }
+    }
+    return null
+  }
+  function assign(a) {
+    const full = slotsWhere((v) => v.st === 1).length / slotsWhere((v) => v.st >= 0).length
+    let preferIn = S.taskFlip++ % 2 === 0
+    if (full > 0.7) preferIn = false
+    if (full < 0.25) preferIn = true
+    return preferIn ? tryIn(a) || tryOut(a) : tryOut(a) || tryIn(a)
+  }
+  function doPick(a) {
+    const t = a.task, c = t.box
+    if (t.type === 'in') { t.dock.cargo.splice(t.dock.cargo.indexOf(c), 1); S.scans.unshift({ t: S.simT, c }); S.scans = S.scans.slice(0, 4); S.scanVer++ }
+    else { const s = slotAt(t.slot); s.st = 0; s.box = null }
+    c.loc = { type: 'amr', a }; a.box = c; a.lastBox = c; a.pickedAt = new Date().toISOString(); a.taskWait = 0
+  }
+  function doDrop(a) {
+    const t = a.task, c = t.box
+    if (t.type === 'in') { const s = slotAt(t.slot); s.st = 1; s.box = c; c.loc = { type: 'slot', ...t.slot }; c.res = false }
+    else { t.dock.boxes.push(c); t.dock.res--; c.loc = { type: 'outTruck', d: t.dock.hub } }
+    a.cumKg += c.w; a.box = null; S.thru++
+    onEvent('move', { code: a.name, waybillNo: c.id, taskType: t.type === 'in' ? 'IN' : 'OUT',
+      fromLoc: t.type === 'in' ? '입고 D' + (t.dk + 1) : slotName(t.slot), toLoc: t.type === 'in' ? slotName(t.slot) : '출고 D' + (t.dock.hub + 4),
+      hub: c.handle === '냉장' ? '냉장' : (HUBS[c.hub] ? HUBS[c.hub].name : null), handleType: c.handle, weightKg: c.w, barcode: c.ean, interWaitSec: Math.round((a.taskWait || 0) * 10) / 10, startedAt: a.pickedAt, finishedAt: new Date().toISOString() })
+  }
+
+  // ── 도크 ──
+  // ── 입구 · 출구 번호판 OCR ──
+  // d.ocr = { st: 'scan' | 'ok' | 'block' | 'off', plate, photo, conf, kind, exit: null | 'scan' | {plate, ok, conf} }
+  function gateEntry(d, side, k, kind) {
+    if (!gate) { d.ocr = null; return }
+    d.ocr = { st: 'scan', t: 0, exit: null }
+    onEvent('vehicle', { dir: 'ENTRY', side, dock: k, kind })
+  }
+  function gateHold(d, dt, side, k) {
+    if (!d.ocr || d.ocr.st !== 'scan') return
+    d.off = Math.max(d.off, GATE_OFF) // 입구 게이트 앞에서 멈춰서 인식 결과를 기다린다
+    d.ocr.t += dt
+    if (d.ocr.pending && d.ocr.t >= GATE_MIN) { const r = d.ocr.pending; d.ocr.pending = null; applyEntry(side, k, d, r.res) }
+    else if (d.ocr.t > GATE_WAIT) vehicleResult(side, k, null)
+  }
+  function gateExit(d, side, k, kind, boxes) {
+    if (!gate || !d.ocr || !d.ocr.photo) return
+    d.ocr.exit = 'scan'
+    onEvent('vehicle', { dir: 'EXIT', side, dock: k, kind, vehicleNo: d.ocr.photo, boxCount: boxes.length,
+      barcodes: boxes.map((c) => c.ean), destHub: side === 'out' ? HUBS[d.hub].name : null })
+  }
+  // 서버 판정 결과 반영 (r = null 이면 OCR 서버 응답 없음 → 예시 번호로 통과)
+  function vehicleResult(side, k, r, dir = 'ENTRY') {
+    const d = (side === 'out' ? S.outDocks : S.inDocks)[k]; if (!d || !d.ocr) return
+    if (dir === 'EXIT') { d.ocr.exit = r ? { plate: r.plate, ok: r.decision === 'EXIT_OK', conf: r.confidence } : null; return }
+    if (d.ocr.st !== 'scan') return
+    if (d.ocr.t < GATE_MIN) { d.ocr.pending = { res: r }; return } // 최소 정지 시간 뒤에 반영
+    applyEntry(side, k, d, r)
+  }
+  function applyEntry(side, k, d, r) {
+    const where = side === 'out' ? '출고 D' + (k + 4) : '입고 D' + (k + 1)
+    if (!r) {
+      const p = (side === 'out' ? SAMPLE_OUT : SAMPLE_IN)[k % 3]
+      d.ocr = { st: 'off', plate: p, photo: null, conf: null, kind: side === 'out' ? 'COURIER' : 'CARGO', exit: null }
+      return
+    }
+    if (r.decision === 'BLOCK') {
+      d.ocr = { st: 'block', plate: r.plate, photo: r.photoPlate, conf: r.confidence, kind: r.kind, exit: null }
+      if (side === 'in') d.cargo = []; else d.boxes = []
+      d.state = 'leaving'
+      addLog((r.plate ? '미등록 차량 ' + fmtPlate(r.plate) : '번호판 판독 불가') + ' · ' + where + ' 진입 차단', 'crit')
+      return
+    }
+    d.ocr = { st: 'ok', plate: r.plate, photo: r.photoPlate, conf: r.confidence, kind: r.kind, exit: null }
+    addLog('입차 OCR ' + fmtPlate(r.plate) + (r.confidence != null ? ' (' + r.confidence + '%)' : '') + ' · ' + (r.kind === 'COURIER' ? '택배차' : '화물차') + ' → ' + where, '')
+  }
+
+  function updDocks(dt) {
+    S.inDocks.forEach((d, k) => {
+      if (d.state === 'docked' && d.cargo.length === 0) d.state = 'leaving' // 화물차는 입차 때만 인식 (출차 OCR 은 택배차)
+      else if (d.state === 'leaving') { d.off += dt / 2.2; if (d.off >= 1) { d.off = 1; d.state = 'empty'; d.timer = 1.5 + rnd() * 2.5 } }
+      else if (d.state === 'empty') { d.timer -= dt; if (d.timer <= 0) { d.state = 'arriving'; fillInTruck(d, k, 3 + Math.floor(rnd() * 2)); gateEntry(d, 'in', k, 'CARGO') } }
+      else if (d.state === 'arriving') { d.off -= dt / 2.2; gateHold(d, dt, 'in', k); if (d.off <= 0) { d.off = 0; d.state = 'docked' } }
+    })
+    S.outDocks.forEach((d, k) => {
+      if (d.state === 'docked' && d.boxes.length >= d.cap && d.res === 0) {
+        d.state = 'leaving'
+        gateExit(d, 'out', k, 'COURIER', d.boxes)
+        const kg = d.boxes.reduce((s, c) => s + c.w, 0)
+        d.boxes.forEach((c) => (c.loc = { type: 'gone', hub: d.hub }))
+        S.hubSent[d.hub] += d.boxes.length
+        addLog('D' + (d.hub + 4) + ' ' + HUBS[d.hub].name + '행 택배차 출발 · ' + d.boxes.length + '건 ' + kg + 'kg', 'hub')
+      } else if (d.state === 'leaving') { d.off += dt / 2.2; if (d.off >= 1) { d.off = 1; d.state = 'empty'; d.timer = 1.2 + rnd() * 2 } }
+      else if (d.state === 'empty') { d.timer -= dt; if (d.timer <= 0) { d.state = 'arriving'; d.boxes = []; gateEntry(d, 'out', k, 'COURIER') } }
+      else if (d.state === 'arriving') { d.off -= dt / 2.2; gateHold(d, dt, 'out', k); if (d.off <= 0) { d.off = 0; d.state = 'docked' } }
+    })
+  }
+
+  // ── AMR 이동: 가감속 + 코너 감속 + 앞차 간격 유지 ──
+  function blockedAhead(a, dx, dy) {
+    for (const b of S.amrs) {
+      if (b === a) continue
+      const vx = b.x - a.x, vy = b.y - a.y, along = vx * dx + vy * dy, lat = Math.abs(vx * dy - vy * dx)
+      if (along <= 2 || along > (b.kind === 'fl' || a.kind === 'fl' ? 44 : 34) || lat > 9) continue
+      // 랙 앞에서 작업 중인 지게차: 같은 차선(랙 쪽)이면 끝날 때까지 기다리고, 반대 차선이면 비켜 지나간다
+      if (b.kind === 'fl' && b.state === 'fwork') { if (-dy * b.fx + dx * b.fy > 0.5) return true; continue }
+      if (a.blocked > 2) continue // 서로 마주 보고 멈춘 경우 풀어 준다
+      if (!b.path.length) return true
+      if (b.dirx * dx + b.diry * dy > 0.3) return true
+    }
+    return false
+  }
+  // ── 교차로 예약 ──
+  // 경로 앞쪽 LOOK 안에 교차로가 있으면 예약을 요청한다. 다른 로봇이 쓰고 있으면 교차로 앞(대기선)에서 멈춘다.
+  // 먼저 온 순서대로 · 3.5초 넘게 막혔는데 상대도 서 있으면(서로 막힘) 양보받고 지나간다.
+  const LOOK = 44, HOLD_R = INTER_R + 6
+  function nextNode(a) {
+    let px = a.x, py = a.y, acc = 0
+    for (const q of a.path) {
+      const seg = Math.hypot(q.x - px, q.y - py)
+      let best = null
+      for (const n of INTER_NODES) {
+        // 선분이 교차로 칸(반지름 INTER_R)을 스치기만 해도 지나가는 것으로 본다
+        const vx = q.x - px, vy = q.y - py, L2 = vx * vx + vy * vy || 1e-6
+        const tt = Math.max(0, Math.min(1, ((n.x - px) * vx + (n.y - py) * vy) / L2))
+        const cxp = px + vx * tt, cyp = py + vy * tt
+        if (Math.hypot(n.x - cxp, n.y - cyp) >= INTER_R) continue
+        if (n === a.iHold && Math.hypot(a.x - n.x, a.y - n.y) < HOLD_R) continue // 이미 들어와 있는 교차로
+        const d = acc + Math.max(0, Math.hypot(cxp - px, cyp - py) - INTER_R)
+        if (d <= LOOK && (!best || d < best.d)) best = { n, d }
+      }
+      if (best) return best
+      acc += seg; px = q.x; py = q.y
+      if (acc > LOOK) break
+    }
+    return null
+  }
+  function interGate(a, dt) {
+    // 지나간 교차로 해제
+    if (a.iHold) { const n = a.iHold; if (Math.hypot(a.x - n.x, a.y - n.y) > HOLD_R) { if (S.inter[n.key].owner === a.id) S.inter[n.key].owner = 0; a.iHold = null } }
+    const nx = a.path.length ? nextNode(a) : null
+    if (!nx) { endWait(a); return Infinity }
+    const slot = S.inter[nx.n.key]
+    if (!slot.owner || slot.owner === a.id) {
+      if (a.iHold && a.iHold !== nx.n && S.inter[a.iHold.key].owner === a.id) S.inter[a.iHold.key].owner = 0
+      slot.owner = a.id; a.iHold = nx.n; endWait(a); return Infinity
+    }
+    // 다른 로봇이 쓰는 중: 교차로 칸 바로 앞(대기선)에 서도록 미리 감속한다
+    const lim = Math.sqrt(2 * ACC * 1.6 * Math.max(0, nx.d - 3))
+    if (nx.d > 4 && (a.v || 0) > 4) return lim
+    // 대기
+    if (!a.iWaitNode) { a.iWaitNode = nx.n; a.iwait = 0 }
+    a.iwait += dt; a.taskWait = (a.taskWait || 0) + dt
+    const owner = S.amrs.find((b) => b.id === slot.owner)
+    if (!owner || (a.iwait > 3.5 && (owner.v || 0) < 1)) { slot.owner = a.id; a.iHold = nx.n; a.iYield = true; endWait(a); return Infinity }
+    return 0
+  }
+  function endWait(a) {
+    if (a.iWaitNode && a.iwait > 0.2) { S.istats.n++; S.istats.total += a.iwait; S.istats.max = Math.max(S.istats.max, a.iwait); a.lastWait = a.iwait; a.lastWaitT = S.simT }
+    a.iWaitNode = null; a.iwait = 0
+  }
+  function move(a, dt) {
+    if (!a.path.length) { a.v = 0; return }
+    const p = a.path[0], dx = p.x - a.x, dy = p.y - a.y, dist = Math.hypot(dx, dy) || 1e-6
+    const ux = dx / dist, uy = dy / dist
+    a.dirx = ux; a.diry = uy
+    let target = a.kind === 'fl' ? VMAX_FL : VMAX
+    if (a.kind === 'fl') { /* 지게차는 짐이 있어도 같은 속도 */ }
+    else if (a.box && a.box.handle === '파손주의') target = 60
+    else if (a.box && (a.box.handle === '취급주의' || a.box.handle === '중량물')) target = 72
+    const last = a.path.length === 1
+    const remain = a.path.reduce((s, q, i, arr) => s + (i === 0 ? dist : Math.hypot(q.x - arr[i - 1].x, q.y - arr[i - 1].y)), 0)
+    if (last || remain < 40) target = Math.min(target, Math.max(14, remain * 2.2))
+    if (!last && dist < 22) target = Math.min(target, 38)
+    const iLim = interGate(a, dt)
+    if (iLim < target) target = iLim
+    if (iLim === 0) { /* 교차로 대기 */ } else if (blockedAhead(a, ux, uy)) { target = 0; a.blocked += dt } else a.blocked = Math.max(0, a.blocked - dt * 2)
+    a.v += Math.max(-ACC * 1.6 * dt, Math.min(ACC * dt, target - a.v))
+    if (a.v < 0) a.v = 0
+    let rem = a.v * dt
+    while (rem > 0 && a.path.length) {
+      const q = a.path[0], ddx = q.x - a.x, ddy = q.y - a.y, d = Math.hypot(ddx, ddy)
+      if (d <= rem) { a.x = q.x; a.y = q.y; rem -= d; a.path.shift() } else { a.x += (ddx / d) * rem; a.y += (ddy / d) * rem; rem = 0 }
+    }
+    if (a.v > 3) { const ta = Math.atan2(uy, ux); let df = ta - a.ang; while (df > Math.PI) df -= 2 * Math.PI; while (df < -Math.PI) df += 2 * Math.PI; a.ang += df * Math.min(1, dt * 9) }
+    a.batt = Math.max(3, a.batt - dt * (a.box ? 0.13 : 0.1))
+  }
+  function updOffset(a, dt) {
+    // 우측 통행: 이동 방향의 오른쪽 차선으로 비켜서 달린다 (정지 시 중앙)
+    const moving = a.path.length > 0 && a.state !== 'maint'
+    let tx = moving ? -a.diry : 0, ty = moving ? a.dirx : 0
+    if (a.kind === 'fl' && a.state === 'fwork') { tx = a.fx * 0.4; ty = a.fy * 0.4 } // 랙 쪽으로 붙는다
+    const k = Math.min(1, dt * 5)
+    a.ox += (tx - a.ox) * k; a.oy += (ty - a.oy) * k
+  }
+  function afterTask(a) {
+    if (a.maintFlag) { goTo(a, BAY, 'toMaint'); addLog(a.name + ' 작업 완료 → 정비 스테이션 이동', 'crit'); return }
+    if (a.release) { a.release = false; a.role = 'spare'; goTo(a, a.home, 'toHome'); addLog(a.name + ' 대기 위치로 복귀', ''); return }
+    if (a.batt <= S.cfg.chargeAt) { a.needCharge = true; goTo(a, a.home, 'toHome'); addLog(a.name + ' 배터리 ' + Math.round(a.batt) + '% (기준 ' + S.cfg.chargeAt + '%) → 충전소 이동', 'warn'); onEvent('charge', { code: a.name, battery: a.batt }); return }
+    const t = assign(a)
+    if (t) { a.task = t; goTo(a, t.from, 'toPick') } else goTo(a, a.home, 'toHome')
+  }
+  function arrive(a) {
+    a.cur = a.dest; a.v = 0
+    if (a.state === 'toPick') { a.state = 'load'; a.timer = a.task.type === 'in' ? 1.4 : 0.9 }
+    else if (a.state === 'toDrop') { a.state = 'unload'; a.timer = 0.9 }
+    else if (a.state === 'toMaint') { a.state = 'maint'; a.timer = 7; setPhase(4); addLog(a.name + ' 정비 시작 · 구동모터 베어링 교체', 'crit'); onEvent('maint', { code: a.name, eventType: 'START', vibration: a.vib, note: '구동모터 베어링 교체' }) }
+    else if (a.state === 'toHome') { a.state = 'idle'; a.wait = 0.6 }
+  }
+  // ── 무인 지게차: 위 단 보충 재고 ↔ 바닥 칸 ──
+  const upperAt = (r, s, i, lv) => S.upper[r][s][i][lv]
+  function floorCount(r) { let n = 0, tot = 0; S.slots[r].forEach((side) => side.forEach((v) => { if (v.st >= 0) { tot++; if (v.st === 1) n++ } })); return [n, tot] }
+  function flAssign(a) {
+    // 1) 바닥이 비어가는 줄: 위 단 재고를 내려서 바닥 칸을 채운다 (보충)
+    // 2) 바닥이 꽉 찬 줄: 바닥 화물을 위 단으로 올려 입고 자리를 만든다 (적치)
+    const rows = ROWS.map((_, r) => { const [n, tot] = floorCount(r); return { r, fill: n / tot } }).sort((p, q) => p.fill - q.fill)
+    for (const { r, fill } of rows) {
+      if (fill > 0.5) break
+      const c = []
+      S.slots[r].forEach((side, s) => side.forEach((v, i) => { if (v.st === 0) S.upper[r][s][i].forEach((u, lv) => { if (u && u.box && !u.res) c.push({ r, s, i, lv }) }) }))
+      if (c.length) { const t = near(a, c); return { type: 'repl', slot: { r: t.r, s: t.s, i: t.i }, lv: t.lv } }
+    }
+    for (const { r, fill } of rows.slice().reverse()) {
+      if (fill < 0.75) break
+      const c = []
+      S.slots[r].forEach((side, s) => side.forEach((v, i) => { if (v.st === 1) S.upper[r][s][i].forEach((u, lv) => { if (u && !u.box && !u.res) c.push({ r, s, i, lv }) }) }))
+      if (c.length) { const t = near(a, c); return { type: 'put', slot: { r: t.r, s: t.s, i: t.i }, lv: t.lv } }
+    }
+    return null
+  }
+  function flStart(a) {
+    const t = flAssign(a)
+    if (!t) { if (a.cur !== a.home) goTo(a, a.home, 'toHome'); return false }
+    const sl = slotAt(t.slot), u = upperAt(t.slot.r, t.slot.s, t.slot.i, t.lv)
+    u.res = true
+    if (t.type === 'repl') { sl.st = 4; t.box = u.box } else { sl.st = 5; t.box = sl.box }
+    a.task = t
+    goTo(a, slotPt(t.slot), 'toRack')
+    return true
+  }
+  // 작업 단계: 랙 쪽으로 회전 → (포크 올림) → 밀어 넣기 → 들기/놓기 → 빼기 → ...
+  function flPlan(a) {
+    const t = a.task, H = LEVEL_H[t.lv], up = H / 0.9
+    const P = (k, d) => ({ k, d })
+    if (t.type === 'repl') return [P('turn', 0.7), P('up', up), P('in', 0.7), P('grab', 0.5), P('out', 0.7), P('down', up), P('in', 0.7), P('drop', 0.4), P('out', 0.7)]
+    return [P('turn', 0.7), P('in', 0.7), P('grab', 0.5), P('out', 0.7), P('up', up), P('in', 0.7), P('drop', 0.4), P('out', 0.7), P('down', up)]
+  }
+  function flWork(a, dt) {
+    const fw = a.fw, ph = fw.list[fw.idx], t = a.task
+    fw.t += dt
+    const k = Math.min(1, fw.t / ph.d)
+    const H = LEVEL_H[t.lv]
+    if (ph.k === 'turn') { let df = fw.face - a.ang; while (df > Math.PI) df -= 2 * Math.PI; while (df < -Math.PI) df += 2 * Math.PI; a.ang += df * Math.min(1, dt * 6) }
+    if (ph.k === 'up') a.forkH = (fw.from || 0) + (H - (fw.from || 0)) * k
+    if (ph.k === 'down') a.forkH = fw.from * (1 - k)
+    if (ph.k === 'in') a.reach = k
+    if (ph.k === 'out') a.reach = 1 - k
+    if (fw.t < ph.d) return
+    // 단계 끝: 들기 · 놓기 처리
+    const sl = slotAt(t.slot), u = upperAt(t.slot.r, t.slot.s, t.slot.i, t.lv), c = t.box
+    if (ph.k === 'grab') {
+      if (t.type === 'repl') { u.box = null } else { sl.box = null }
+      c.loc = { type: 'amr', a }; a.box = c; a.lastBox = c; S.upperVer++
+    }
+    if (ph.k === 'drop') {
+      if (t.type === 'repl') { sl.box = c; sl.st = 1; c.loc = { type: 'slot', ...t.slot }; u.res = false; addLog('FL-01 보충 · ' + ZONES[t.slot.r].tag + '-' + String(t.slot.i + 1).padStart(2, '0') + ' ' + (t.lv + 2) + '단 → 바닥 칸', '') }
+      else { u.box = c; u.res = false; sl.st = 0; c.loc = { type: 'upper', ...t.slot, lv: t.lv }; addLog('FL-01 적치 · 바닥 칸 → ' + ZONES[t.slot.r].tag + '-' + String(t.slot.i + 1).padStart(2, '0') + ' ' + (t.lv + 2) + '단', '') }
+      a.cumKg += c.w; a.box = null; S.upperVer++
+    }
+    fw.idx++; fw.t = 0; fw.from = a.forkH
+    if (fw.idx >= fw.list.length) { a.fw = null; a.task = null; a.forkH = 0; a.reach = 0; a.state = 'idle'; a.wait = 0.8 }
+  }
+  function updFork(a, dt) {
+    switch (a.state) {
+      case 'idle':
+        a.batt = Math.min(100, a.batt + dt * 0.6)
+        a.wait -= dt
+        if (a.wait <= 0) { a.wait = 1.2; flStart(a) }
+        break
+      case 'toRack': case 'toHome':
+        move(a, dt)
+        if (!a.path.length) {
+          a.cur = a.dest; a.v = 0
+          if (a.state === 'toHome') { a.state = 'idle'; a.wait = 1.5; break }
+          // 랙 방향 (s=0: 통로 남쪽 랙, s=1: 통로 북쪽 랙)
+          const s = a.task.slot.s
+          a.fx = 0; a.fy = s === 0 ? 1 : -1
+          a.state = 'fwork'; a.fw = { list: flPlan(a), idx: 0, t: 0, from: 0, face: Math.atan2(a.fy, a.fx) }
+        }
+        break
+      case 'fwork': flWork(a, dt); break
+    }
+    a.fwPhase = a.fw ? a.fw.list[a.fw.idx] && a.fw.list[a.fw.idx].k : null
+  }
+  function updAmr(a, dt) {
+    a.ph += dt
+    if (a.kind === 'fl') { updFork(a, dt); sensors(a, dt); return }
+    switch (a.state) {
+      case 'charge':
+        a.batt = Math.min(100, a.batt + dt * 1.6)
+        if (a.batt >= S.cfg.chargeTo) { a.state = 'idle'; a.needCharge = false; a.wait = 0.4; addLog(a.name + ' 충전 완료 ' + Math.round(a.batt) + '% · 작업 복귀', 'ok') }
+        break
+      case 'idle':
+        a.batt = Math.min(100, a.batt + dt * 0.8)
+        if (a.release) { a.release = false; a.role = 'spare' }
+        if ((a.needCharge || a.batt <= S.cfg.chargeAt) && !a.maintFlag) { a.state = 'charge'; a.needCharge = true; break }
+        a.wait -= dt
+        if (a.wait <= 0) {
+          a.wait = 0.6
+          if (a.maintFlag) { goTo(a, BAY, 'toMaint'); addLog(a.name + ' 정비 스테이션 이동', 'crit') }
+          else if (a.role === 'active') { const t = assign(a); if (t) { a.task = t; goTo(a, t.from, 'toPick') } }
+        }
+        break
+      case 'toPick': case 'toDrop': case 'toMaint': case 'toHome':
+        move(a, dt); if (!a.path.length) arrive(a); break
+      case 'load': a.timer -= dt; if (a.timer <= 0) { doPick(a); goTo(a, a.task.to, 'toDrop') } break
+      case 'unload': a.timer -= dt; if (a.timer <= 0) { doDrop(a); a.task = null; afterTask(a) } break
+      case 'maint': a.timer -= dt; if (a.timer <= 0) repair(a); break
+    }
+    sensors(a, dt)
+  }
+  function sensors(a, dt) {
+    updOffset(a, dt)
+    const moving = a.v > 5 || a.state === 'fwork'
+    const loadF = a.box ? a.box.w * 0.012 : 0
+    const base = 1.45 + 0.17 * Math.sin(a.ph * 1.3 + a.id) + (Math.random() - 0.5) * 0.16 + (moving ? 0.15 : 0) + (moving ? loadF : 0)
+    a.vib = a.state === 'maint' ? 0.2 + Math.random() * 0.05 : base + a.deg
+    const tt = a.state === 'maint' ? 32 : 43 + (moving ? 3 : 0) + loadF * 6 + a.deg * 7 + (Math.random() - 0.5) * 0.6
+    a.temp += (tt - a.temp) * Math.min(1, dt * 1.2)
+    a.health = a.state === 'maint' ? a.health : Math.max(5, Math.min(99, 100 - Math.max(0, a.vib - 1.9) * 15 - Math.max(0, a.temp - 55) * 0.7))
+    if (a.state !== 'maint' && (a.role === 'active' || a.state !== 'idle')) {
+      a.pktAcc += dt
+      if (a.pktAcc > 0.9) { a.pktAcc = 0; const [lv] = status(a); S.packets.push({ x: a.x, y: a.y, t: 0, lv }) }
+    }
+  }
+  function repair(a) {
+    a.deg = 0; a.maintFlag = false; a.health = 98; a.temp = 40; a.cumKg = 0
+    S.sc.degrading = false; S.sc.rul = null
+    addLog(a.name + ' 정비 완료 · 진동 정상, 누적 운반 초기화', 'ok')
+    onEvent('maint', { code: a.name, eventType: 'DONE', vibration: a.vib, note: '정비 완료 · 진동 정상' })
+    setPhase(5)
+    goTo(a, a.home, 'toHome')
+    S.amrs[4].release = true
+  }
+
+  // ── 예지보전 시나리오 ──
+  function slopeOf(h) { const v = h.filter((x) => x != null).slice(-20); if (v.length < 5) return 0; const n = v.length; let sx = 0, sy = 0, sxy = 0, sxx = 0; v.forEach((y, i) => { sx += i; sy += y; sxy += i * y; sxx += i * i }); return (n * sxy - sx * sy) / (n * sxx - sx * sx) / 0.2 }
+  function scenario(dt) {
+    const sc = S.sc, SP = S.amrs[4]
+    sc.t += dt
+    if (sc.phase === 1 && !sc.degrading && sc.t - sc.start > 9) { sc.target = pickTarget(); sc.degrading = true }
+    const T = S.amrs[sc.target]
+    if (sc.degrading && T.state !== 'maint') T.deg = Math.min(5.2, T.deg + dt * 0.27)
+    if (sc.phase === 1 && T.deg > 1.2) { setPhase(2); addLog(T.name + ' 진동 이상 감지 · 평소 대비 +' + Math.round((T.vib / 1.55 - 1) * 100) + '%', 'warn'); onEvent('maint', { code: T.name, eventType: 'WARN', vibration: T.vib, note: '진동 이상 감지' }) }
+    // 남은 수명(시간): 진동이 고장 기준 7.1 mm/s 에 닿기까지 · 이상 감지 뒤 계속 계산
+    if (sc.phase >= 2 && sc.phase <= 3 && T.state !== 'maint') sc.rul = Math.max(1, Math.round(((5.55 - T.deg) / 0.27) * 4))
+    if (sc.phase === 2 && sc.rul != null && sc.rul <= S.cfg.rulAt) {
+      sc.slope = Math.max(0.08, slopeOf(T.hist))
+      setPhase(3)
+      addLog('AI 예측 · ' + T.name + ' 남은 수명 약 ' + sc.rul + '시간 (정비 기준 ' + S.cfg.rulAt + '시간 이하)', 'crit')
+      onEvent('maint', { code: T.name, eventType: 'PREDICT', vibration: T.vib, rulHours: sc.rul, slope: sc.slope, cumKg: T.cumKg, note: '고장 예측 · 기준 ' + S.cfg.rulAt + '시간 이하 → 자동 정비 예약' })
+      sc.await = true; approve('자동 (기준 ' + S.cfg.rulAt + '시간 이하)')
+    }
+    if (sc.phase === 3 && sc.rul != null) sc.slope = Math.max(0.08, slopeOf(T.hist) || sc.slope)
+    if (sc.phase === 5 && sc.t - sc.start > 9) { setPhase(1); addLog('정상 운영 · 다음 주기 모니터링', '') }
+  }
+
+  // 고장 대상: 가동 중인 AMR-01~04 중 누적 운반량(정비 후)이 가장 많은 로봇 — 많이 쓴 로봇이 먼저 마모된다
+  function pickTarget() {
+    let best = 0
+    for (let i = 0; i < 4; i++) { const a = S.amrs[i]; if (a.role === 'active' && a.state !== 'maint' && a.cumKg > S.amrs[best].cumKg) best = i }
+    return best
+  }
+  // 운영 기준 바꾸기 (관리자) — 정비 기준은 6~60시간, 충전 기준은 10~80%
+  function setCfg(c) {
+    if (!c) return
+    if (c.rulAt != null) S.cfg.rulAt = Math.max(6, Math.min(60, Math.round(c.rulAt)))
+    if (c.chargeAt != null) S.cfg.chargeAt = Math.max(10, Math.min(80, Math.round(c.chargeAt)))
+  }
+  // 정비 예약 확정 · 예비기 투입 (기준에 걸리면 자동)
+  function approve(by) {
+    const sc = S.sc, T = S.amrs[sc.target], SP = S.amrs[4]
+    if (!sc.await) return false
+    sc.await = false; sc.approvedBy = by || '관리자'
+    T.maintFlag = true; SP.role = 'active'; SP.wait = 0.2
+    addLog('정비 승인 (' + sc.approvedBy + ') · 예비기 AMR-05 투입', 'warn')
+    onEvent('maint', { code: T.name, eventType: 'APPROVE', by: sc.approvedBy, vibration: T.vib, note: '정비 승인 · 예비기 AMR-05 투입' })
+    return true
+  }
+  // 다른 화면(웹 · 앱)이 DB에 남긴 상태를 따라간다: 고장 예측 · 승인을 맞춘다
+  function follow(r) {
+    const sc = S.sc
+    if (!r) return
+    // 웹(현장)이 고른 고장 로봇에 맞춘다
+    if (r.code && sc.phase < 3) { const i = S.amrs.findIndex((a) => a.name === r.code); if (i >= 0 && i < 4 && i !== sc.target) { S.amrs[sc.target].deg = 0; sc.target = i } }
+    const T = S.amrs[sc.target]
+    if ((r.pending || r.approved) && sc.phase < 3 && T.state !== 'maint') {
+      // 현장(웹)이 이미 정비를 잡았으면 이 화면도 같은 단계로 맞춘다: 남은 수명이 기준 바로 아래가 되게
+      T.deg = Math.max(T.deg, Math.min(5.2, 5.56 - (S.cfg.rulAt * 0.27) / 4)); sc.degrading = true
+      if (sc.phase < 2) setPhase(2)
+    }
+    if (r.approved && sc.await) approve(r.approvedBy || '관리자')
+  }
+
+  function step(dt) {
+    S.simT += dt
+    scenario(dt); updDocks(dt); S.amrs.forEach((a) => updAmr(a, dt))
+    S.sampleAcc += dt
+    while (S.sampleAcc >= 0.2) { S.sampleAcc -= 0.2; S.amrs.forEach((a) => { a.hist.push(a.state === 'maint' ? null : a.vib); if (a.hist.length > 150) a.hist.shift() }) }
+  }
+
+  function locText(c) {
+    const L = c.loc
+    const loc = (r, i) => ZONES[r].tag + '-' + String(i + 1).padStart(2, '0')
+    if (L.type === 'slot') return `랙 ${loc(L.r, L.i)} 바닥 칸${L.r === COLD_ROW ? ' (냉장 창고)' : ''} · 출고 대기`
+    if (L.type === 'upper') return `랙 ${loc(L.r, L.i)} ${L.lv + 2}단 · 보충 재고${L.r === COLD_ROW ? ' (냉장 창고)' : ''}`
+    if (L.type === 'amr' && L.a.kind === 'fl') return `무인 지게차 FL-01 · ${L.a.task && L.a.task.type === 'repl' ? '위 단 → 바닥 칸 보충 중' : '바닥 칸 → 위 단 적치 중'}`
+    if (L.type === 'amr') return `${L.a.name} 운반 중 → ${L.a.task && L.a.task.type === 'out' ? 'D' + (c.hub + 4) + ' 택배차' : '랙 ' + ZONES[zoneRow(c)].tag + ' 구역'}`
+    if (L.type === 'outTruck') return `D${L.d + 4} 택배차 적재 · 출발 대기`
+    if (L.type === 'inTruck') return `입고 도크 D${L.d + 1} · 하차 대기`
+    if (L.type === 'gone') return `${HUBS[L.hub].full}로 출발`
+    return '-'
+  }
+
+  init()
+  return { S, init, step, locText, approve, follow, setCfg, vehicleResult, setVehicleGate: (v) => { gate = !!v } }
+}
+
+// 단계 설명 문구 속 로봇 이름을 실제 고장 대상으로 바꿔서 돌려준다
+export function captionOf(S) { const T = S.amrs[S.sc.target == null ? 2 : S.sc.target]; return CAPTIONS[S.sc.phase].replace(/AMR-03/g, T.name) }

@@ -13,7 +13,7 @@
   overflow: hidden;
   color: #fff;
   box-sizing: border-box;
-  background: #0a2540;
+  background: #112847;
 }
 
 .home-slide {
@@ -188,7 +188,7 @@
 }
 
 .home-card-icon.navy { background: rgba(10, 37, 64, 0.1); }     /* Main 톤 */
-.home-card-icon.orange { background: rgba(255, 107, 0, 0.14); } /* Point 톤 */
+.home-card-icon.orange { background: rgba(201, 151, 47, 0.14); } /* Point 톤 */
 .home-card-icon.sky { background: rgba(59, 86, 116, 0.16); }    /* Main의 라이트 톤 */
 
 .home-card h3 {

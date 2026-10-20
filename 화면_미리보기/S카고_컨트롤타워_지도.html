@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>S-CARGO 컨트롤타워</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<style>
+:root{--cyan:#3fe0cc;--amber:#ffb84d;--red:#ff5a5f;--green:#4fdc8a;--blue:#5aa8ff;--purple:#b48cff;--ink:#eef3f8;--muted:#9aabbd;--panel:rgba(9,14,21,.86);--line:rgba(255,255,255,.1);--ui:'Pretendard','Malgun Gothic','Noto Sans CJK KR',sans-serif;--mono:Consolas,'DejaVu Sans Mono',monospace}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;font-family:var(--ui);color:var(--ink);background:#0b141c}
+#map{position:fixed;inset:0}
+button{font-family:inherit;cursor:pointer}
+.maplibregl-ctrl-attrib{font-size:10px}
+/* 구간 표시 */
+.pin{cursor:pointer;display:flex;flex-direction:column;align-items:center}
+.pin .c{width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,.85);box-shadow:0 4px 14px rgba(0,0,0,.45),0 0 0 7px rgba(255,255,255,.22);display:flex;align-items:center;justify-content:center;transition:transform .2s,background .2s}
+.pin .c b{font:900 15px var(--mono);color:#16202b}
+.pin .n{margin-top:8px;font-size:13px;font-weight:800;color:#fff;padding:3px 10px;border-radius:999px;background:rgba(9,14,21,.8);white-space:nowrap}
+.pin:hover .c{transform:scale(1.15)}
+.pin.on .c{background:var(--cyan);box-shadow:0 0 0 8px rgba(63,224,204,.3),0 0 26px rgba(63,224,204,.8)}
+.pin.on .n{background:var(--cyan);color:#06221e}
+.pin.amr .c{background:rgba(214,190,255,.95)}
+.pin.alert .c{animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 7px rgba(255,90,95,.45)}50%{box-shadow:0 0 0 16px rgba(255,90,95,0)}}
+/* 화물차 */
+.trk{display:flex;align-items:center;gap:5px;pointer-events:none}
+.trk i{width:13px;height:13px;border-radius:50%;background:var(--c,#fff);border:2px solid #0b141c;box-shadow:0 0 0 3px rgba(255,255,255,.35)}
+.trk span{font:800 11px var(--mono);color:#fff;background:rgba(9,14,21,.82);border-radius:5px;padding:1px 6px;white-space:nowrap}
+.trk.far span{display:none}
+/* 상단 */
+#top{position:fixed;left:18px;right:18px;top:14px;display:flex;align-items:center;gap:10px;pointer-events:none}
+#top>*{pointer-events:auto}
+#brand{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:9px 16px}
+#brand b{font:800 12px var(--mono);letter-spacing:.2em;color:var(--cyan)}
+#brand span{display:block;font-size:17px;font-weight:900;margin-top:1px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:7px 14px;min-width:100px}
+.kpi b{display:block;font:800 20px var(--mono)}
+.kpi span{font-size:12px;color:var(--muted)}
+#right{margin-left:auto;display:flex;gap:8px}
+#mode{display:flex;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:4px}
+#mode button{font-size:13px;font-weight:800;padding:7px 12px;border-radius:9px;border:0;background:none;color:var(--muted)}
+#mode button.on{background:var(--cyan);color:#06221e}
+#clock{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 14px;font:800 15px var(--mono);display:flex;align-items:center;gap:9px}
+#clock i{width:9px;height:9px;border-radius:50%;background:var(--red);box-shadow:0 0 10px var(--red);animation:blink 1.2s infinite}
+@keyframes blink{50%{opacity:.25}}
+/* 왼쪽 패널 */
+#panel{position:fixed;left:18px;top:92px;width:370px;max-height:calc(100% - 180px);overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px 20px;transition:opacity .35s,transform .35s}
+#panel.hide{opacity:0;transform:translateX(-20px);pointer-events:none}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{font-size:12px;font-weight:800;padding:3px 10px;border-radius:999px;background:var(--cyan);color:#06221e}
+.chip.o{background:transparent;color:var(--cyan);border:1px solid var(--cyan)}
+.chip.m{background:transparent;color:#d6b3ff;border:1px solid var(--purple)}
+#panel h1{font-size:24px;font-weight:900;letter-spacing:-.02em;line-height:1.25;margin-top:11px}
+#panel .sub{font-size:14px;color:var(--muted);margin-top:5px;line-height:1.5}
+#panel .loc{font-size:12px;color:#7f90a3;margin-top:6px}
+.live{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:12px}
+.live div{background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:10px;padding:7px 10px}
+.live b{display:block;font:800 18px var(--mono)}
+.live span{font-size:11px;color:var(--muted)}
+.sec{margin-top:12px;padding-top:11px;border-top:1px solid var(--line)}
+.sec .h{font:800 11.5px var(--mono);letter-spacing:.14em;color:var(--c,var(--cyan))}
+.sec ul{list-style:none;margin-top:5px}
+.sec li{font-size:14px;line-height:1.45;padding:3px 0 3px 14px;position:relative;color:#e3eaf1}
+.sec li:before{content:'';position:absolute;left:0;top:10px;width:6px;height:6px;border-radius:2px;background:var(--c,var(--cyan))}
+.sec li em{font-style:normal;color:var(--amber);font-weight:700}
+.data{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
+.data span{font-size:12px;padding:3px 9px;border-radius:7px;background:rgba(90,168,255,.12);border:1px solid rgba(90,168,255,.35);color:#cfe3ff}
+.act{display:flex;gap:6px;margin-top:13px}
+.btn{flex:1;font-size:13px;font-weight:800;padding:9px 10px;border-radius:10px;border:1px solid var(--line);background:rgba(255,255,255,.07);color:#fff}
+.btn.m{background:var(--purple);color:#1b0f33;border-color:var(--purple)}
+/* 오른쪽 로그 */
+#log{position:fixed;right:18px;top:92px;width:320px;max-height:calc(100% - 180px);display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:13px 13px 9px}
+#log .hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+#log .hd b{font:800 12px var(--mono);letter-spacing:.14em;color:var(--cyan)}
+#log .hd span{font-size:12px;color:var(--muted)}
+#events{overflow:hidden;display:flex;flex-direction:column;gap:6px}
+.ev{display:grid;grid-template-columns:60px 1fr;gap:8px;font-size:13px;padding:7px 9px;border-radius:9px;background:rgba(255,255,255,.04);border-left:3px solid var(--c,#5b6b80);animation:in .4s}
+.ev time{font:700 12px var(--mono);color:var(--muted)}
+.ev b{font-weight:800}
+.ev p{grid-column:2;color:#b9c6d3;font-size:12px;margin-top:-4px}
+@keyframes in{from{opacity:0;transform:translateX(12px)}}
+/* 하단 */
+#flow{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);display:flex;align-items:center;gap:3px;padding:7px 9px;border-radius:14px;background:var(--panel);border:1px solid var(--line)}
+#flow button{font-size:13px;font-weight:700;padding:7px 11px;border-radius:9px;color:#9aabbd;background:none;border:1px solid transparent;white-space:nowrap}
+#flow button:hover{color:#fff}
+#flow button.on{color:#06221e;background:var(--cyan)}
+#flow button.ov{color:#fff;border-color:var(--line)}
+#flow i{color:#4b5b6d;font-style:normal;font-size:12px}
+#hint{position:fixed;left:50%;top:88px;transform:translateX(-50%);font-size:13px;color:#e6eef5;background:rgba(9,14,21,.7);padding:6px 14px;border-radius:999px;transition:opacity .6s;pointer-events:none}
+#loading{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#0b141c;font-size:15px;color:var(--muted);transition:opacity .6s;z-index:9}
+@media (max-width:1150px){#log{display:none}.kpi:nth-child(n+4){display:none}}
+@media (max-width:760px){#panel{left:10px;right:10px;width:auto;top:auto;bottom:74px;max-height:46%}.kpi{display:none}#flow{left:10px;right:10px;transform:none;overflow-x:auto}#hint{display:none}}
+</style></head><body>
+<div id="map"></div>
+<div id="top">
+  <div id="brand"><b>S-CARGO</b><span>화물 물류 컨트롤타워</span></div>
+  <div class="kpi"><b id="k-run">0</b><span>운행 중 화물차</span></div>
+  <div class="kpi"><b id="k-pass">0</b><span>오늘 구간 통과</span></div>
+  <div class="kpi"><b id="k-over" style="color:var(--amber)">0</b><span>과적 의심</span></div>
+  <div class="kpi"><b id="k-van">0</b><span>택배차 출발</span></div>
+  <div id="right">
+    <div id="mode"><button data-m="sat" class="on">위성</button><button data-m="map">지도</button></div>
+    <div id="clock"><i></i><span id="clk">--:--:--</span></div>
+  </div>
+</div>
+<div id="hint">지도 위 번호를 눌러 구간을 확인하세요 · 우클릭 드래그로 기울이기 · 휠 확대</div>
+<div id="panel" class="hide"></div>
+<div id="log"><div class="hd"><b>EVENTS</b><span>실시간 이벤트</span></div><div id="events"></div></div>
+<div id="flow"></div>
+<div id="loading">지도와 실제 도로 경로를 불러오는 중…</div>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script>
+/* ═══════════ 설정 ═══════════ */
+// 위치: 인천신항 → 이천 허브 (검사소 · 톨게이트는 실제 경로 위 예시 위치)
+const PORT   = [126.6290, 37.3487]   // 인천신항 컨테이너 터미널 부근
+const CENTER = [127.3760, 37.2410]   // 이천 (가상 허브)
+const HUB    = [127.1270, 37.4200]   // 권역 방면 (서울 · 경기 쪽, 성남 부근)
+const SIM_SPEED = 40                 // 실제 1초 = 시뮬레이션 40초
+const C = { cyan: '#3fe0cc', amber: '#ffb84d', red: '#ff5a5f', green: '#4fdc8a', blue: '#5aa8ff', purple: '#b48cff' }
+
+const STATIONS = [
+  { key: 'port', n: 1, name: '항만 게이트', f: 0, place: '인천신항' },
+  { key: 'tollin', n: 2, name: '톨게이트 IN', f: 0.16, place: '고속도로 진입 요금소 (예시 위치)' },
+  { key: 'cp1', n: 3, name: '검사소 1', f: 0.36, place: '과적 검문 구간 (예시 위치)' },
+  { key: 'cp2', n: 4, name: '검사소 2', f: 0.52, place: '과적검문소 (예시 위치)' },
+  { key: 'tollout', n: 5, name: '톨게이트 OUT', f: 0.88, place: '고속도로 출구 요금소 (예시 위치)' },
+  { key: 'center', n: 6, name: '허브', f: 1, place: '경기 이천 (가상 허브)' },
+  { key: 'hub', n: 7, name: '택배차 → 권역', f: 1, place: '인천 · 서울 · 경기 방면' },
+]
+const PARTS = {
+  port: { step: 'STEP 01', title: '항만 게이트 · 번호판 OCR 출차 허가', sub: '사전 예약된 화물차만 차단기가 열린다', see: ['번호판 · 컨테이너 번호 OCR', '사전 허가(예약) 여부'], act: ['허가 → 차단기 개방 · 출차 시각 기록', '미허가 → <em>출차 보류</em> · 관리자 알림'], data: ['차량번호', '운송사', '화물 목록', '출차 시각'] },
+  tollin: { step: 'STEP 02', title: '톨게이트 IN · 스마트톨링', sub: '번호판 인식으로 정차 없이 통과', see: ['번호판 인식 (YOLO + OCR)', '차종 · 축 수 → 요금 등급'], act: ['요금 등급 자동 적용', '허브 도착 예정 시간 계산', '하이패스는 <em>보조 수단</em>'], data: ['통과 시각', '차종 · 축 수', '도착 예정'] },
+  cp1: { step: 'STEP 03', title: '검사소 1 · 과적 1차 탐지', sub: '달리는 그대로 축중 센서와 카메라로 걸러낸다', see: ['축중(WIM) · 총중량 <em>모의 데이터</em>', '적재 불안정 이미지 추정'], act: ['정상 → 통과', '의심 → <em>검사소 2 정밀 재검사 지시</em>'], data: ['축별 하중', '적재 상태', '의심 사유'] },
+  cp2: { step: 'STEP 04', title: '검사소 2 · 정밀 재검사', sub: '의심 차량만 옆 차로로 유도해 다시 잰다', see: ['정지식 축중 재측정', '구간 과속 기록'], act: ['관리자 승인 → 통과', '<em>3회 이상 초과</em> → 차단 · 사유 기록', '결과를 입고 일정에 반영'], data: ['재검사 결과', '승인 관리자', '조치 내역'] },
+  tollout: { step: 'STEP 05', title: '톨게이트 OUT · 자동 청구', sub: '요금은 운송사로, 도착 정보는 허브로', see: ['출구 통과 시각', '경로 이탈 여부'], act: ['운송사 자동 청구 → <em>미납 차단</em>', '허브 도착 예고 · 입고 도크 사전 배정'], data: ['청구 내역', '도착 예정', '배정 도크'] },
+  center: { step: 'STEP 06', title: '허브 · AMR 관제로 이관', sub: '도착 확인 후 화물 목록을 넘기면 내부는 AMR 관제가 맡는다', see: ['배정 도크 도착 확인', 'AMR 처리 상태 보고'], act: ['운송장 목록 → AMR 관제 전달', 'AMR 처리량 감소 → <em>다음 입고 지연 지시</em>'], data: ['하적 완료', '분류 결과', 'AMR 가동 대수'], amr: true },
+  hub: { step: 'STEP 07', title: '택배차 출발 · 권역별 지시', sub: '분류가 끝난 화물은 권역 택배차로 다음 장소로', see: ['권역별 적재량 (인천 · 서울 · 경기 · 냉장)', '택배차 대기 상태'], act: ['적재 완료 → <em>출발 지시</em>', '권역 서브터미널 도착 예정 계산 · 인계'], data: ['택배차 번호', '적재 건수', '도착 예정'] },
+}
+const PLATES = ['82사 1234', '인천 80사 2210', '부산 87아 3310', '경기 91자 0457', '인천 99바 5521', '서울 88사 7712', '경기 95아 1180', '인천 83자 6604', '충남 86바 2093', '전북 81아 4471']
+const HUBS = [['인천', '#ff8c42'], ['서울', C.blue], ['경기', C.purple], ['냉장', C.cyan]]
+
+/* ═══════════ 지도 ═══════════ */
+const $ = (id) => document.getElementById(id)
+const style = {
+  version: 8,
+  sources: {
+    sat: { type: 'raster', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'], tileSize: 256, maxzoom: 19, attribution: 'Imagery © Esri, Maxar, Earthstar Geographics' },
+    roads: { type: 'raster', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}'], tileSize: 256, maxzoom: 19 },
+    labels: { type: 'raster', tiles: ['https://a.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}@2x.png', 'https://b.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}@2x.png'], tileSize: 256, attribution: '© OpenStreetMap contributors © CARTO' },
+    street: { type: 'raster', tiles: ['https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png', 'https://b.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png'], tileSize: 256, attribution: '© OpenStreetMap contributors © CARTO' },
+    dem: { type: 'raster-dem', tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'], tileSize: 256, encoding: 'terrarium', maxzoom: 14 },
+  },
+  layers: [
+    { id: 'bg', type: 'background', paint: { 'background-color': '#0b141c' } },
+    { id: 'street', type: 'raster', source: 'street', layout: { visibility: 'none' } },
+    { id: 'sat', type: 'raster', source: 'sat', paint: { 'raster-saturation': 0.05, 'raster-contrast': 0.08 } },
+    { id: 'hill', type: 'hillshade', source: 'dem', paint: { 'hillshade-exaggeration': 0.25, 'hillshade-shadow-color': '#1b2a33' } },
+    { id: 'roads', type: 'raster', source: 'roads', paint: { 'raster-opacity': 0.55 } },
+    { id: 'labels', type: 'raster', source: 'labels', paint: { 'raster-opacity': 0.95 } },
+  ],
+  terrain: { source: 'dem', exaggeration: 1.6 },
+}
+const map = new maplibregl.Map({ container: 'map', style, center: [127.0, 37.3], zoom: 9.3, pitch: 55, bearing: -10, maxPitch: 80, antialias: true })
+map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'bottom-right')
+
+/* ═══════════ 경로 ═══════════ */
+async function osrm(a, b) {
+  const key = 'scargo_route_' + a.join() + '_' + b.join()
+  try { const c = localStorage.getItem(key); if (c) return JSON.parse(c) } catch (e) {}
+  try {
+    const r = await fetch(`https://router.project-osrm.org/route/v1/driving/${a.join(',')};${b.join(',')}?overview=full&geometries=geojson`)
+    const j = await r.json(); const coords = j.routes[0].geometry.coordinates
+    try { localStorage.setItem(key, JSON.stringify(coords)) } catch (e) {}
+    return coords
+  } catch (e) { // 경로 서버에 못 붙으면 직선 보간
+    const n = 60; return Array.from({ length: n + 1 }, (_, i) => [a[0] + (b[0] - a[0]) * i / n, a[1] + (b[1] - a[1]) * i / n])
+  }
+}
+const R = 6371
+function dist(a, b) { const t = Math.PI / 180, dLat = (b[1] - a[1]) * t, dLon = (b[0] - a[0]) * t, s = Math.sin(dLat / 2) ** 2 + Math.cos(a[1] * t) * Math.cos(b[1] * t) * Math.sin(dLon / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(s)) }
+function measure(coords) { const cum = [0]; for (let i = 1; i < coords.length; i++) cum.push(cum[i - 1] + dist(coords[i - 1], coords[i])); return { coords, cum, len: cum[cum.length - 1] } }
+function at(L, km) {
+  km = Math.max(0, Math.min(L.len, km)); let lo = 0, hi = L.cum.length - 1
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (L.cum[m] <= km) lo = m; else hi = m }
+  const seg = L.cum[hi] - L.cum[lo] || 1, k = (km - L.cum[lo]) / seg, a = L.coords[lo], b = L.coords[hi]
+  return [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k]
+}
+function slice(L, km) { const out = []; for (let i = 0; i < L.coords.length && L.cum[i] <= km; i++) out.push(L.coords[i]); out.push(at(L, km)); return out }
+
+let MAIN, VAN
+const fmt = (d) => d.toTimeString().slice(0, 8)
+const stat = Object.fromEntries(STATIONS.map((s) => [s.key, { pass: 0, wait: 0, alert: 0 }]))
+const K = { pass: 0, over: 0, van: 0 }
+let active = null, trucks = [], vans = []
+
+function log(title, line, col) {
+  const e = document.createElement('div'); e.className = 'ev'; e.style.setProperty('--c', col)
+  e.innerHTML = `<time>${fmt(new Date())}</time><b>${title}</b>${line ? `<p>${line}</p>` : ''}`
+  const box = $('events'); box.prepend(e); while (box.children.length > 9) box.lastChild.remove()
+}
+
+map.on('load', async () => {
+  const [a, b] = await Promise.all([osrm(PORT, CENTER), osrm(CENTER, HUB)])
+  MAIN = measure(a); VAN = measure(b)
+  STATIONS.forEach((s) => { s.km = s.key === 'hub' ? null : MAIN.len * s.f; s.pos = s.key === 'hub' ? at(VAN, VAN.len * 0.55) : at(MAIN, s.km) })
+
+  map.addSource('route', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: MAIN.coords } } })
+  map.addSource('route2', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: VAN.coords } } })
+  map.addSource('done', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: MAIN.coords } } })
+  map.addLayer({ id: 'route-case', type: 'line', source: 'route', paint: { 'line-color': '#0b141c', 'line-width': 9, 'line-opacity': 0.55 }, layout: { 'line-cap': 'round', 'line-join': 'round' } })
+  map.addLayer({ id: 'route2-line', type: 'line', source: 'route2', paint: { 'line-color': '#ff8c42', 'line-width': 4, 'line-dasharray': [1.5, 1.2] }, layout: { 'line-cap': 'round' } })
+  map.addLayer({ id: 'route-base', type: 'line', source: 'route', paint: { 'line-color': '#ffffff', 'line-width': 4, 'line-opacity': 0.85 }, layout: { 'line-cap': 'round', 'line-join': 'round' } })
+  map.addLayer({ id: 'route-done', type: 'line', source: 'done', paint: { 'line-color': C.cyan, 'line-width': 5 }, layout: { 'line-cap': 'round', 'line-join': 'round' } })
+  map.addLayer({ id: 'route-flow', type: 'line', source: 'route', paint: { 'line-color': C.cyan, 'line-width': 3, 'line-dasharray': [0, 4, 3] }, layout: { 'line-cap': 'round' } })
+  // 허브 건물 (AMR 관제 영역)
+  const [cx, cy] = CENTER, w = 0.0028, h = 0.0016
+  map.addSource('bld', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'Polygon', coordinates: [[[cx - w, cy - h], [cx + w, cy - h], [cx + w, cy + h], [cx - w, cy + h], [cx - w, cy - h]]] } } })
+  map.addLayer({ id: 'bld', type: 'fill-extrusion', source: 'bld', paint: { 'fill-extrusion-color': C.purple, 'fill-extrusion-height': 60, 'fill-extrusion-opacity': 0.75 } })
+
+  // 구간 번호 표시
+  STATIONS.forEach((s) => {
+    const el = document.createElement('div'); el.className = 'pin' + (s.key === 'center' ? ' amr' : '')
+    el.innerHTML = `<div class="c"><b>${s.n}</b></div><div class="n">${s.name}</div>`
+    el.addEventListener('click', (e) => { e.stopPropagation(); focus(s.key) })
+    s.el = el; new maplibregl.Marker({ element: el, anchor: 'top', offset: [0, -19] }).setLngLat(s.pos).addTo(map)
+  })
+  // 화물차 · 택배차
+  for (let i = 0; i < 10; i++) trucks.push(makeVehicle(PLATES[i], i * MAIN.len / 10, 'truck'))
+  for (let i = 0; i < 3; i++) vans.push(makeVehicle(HUBS[i][0] + '행', i * VAN.len / 3, 'van', HUBS[i]))
+  trucks.forEach((t) => { t.last = STATIONS.reduce((a, s, k) => (s.km != null && s.km <= t.km ? k : a), -1) })
+
+  $('flow').innerHTML = `<button class="ov" data-k="all">전체 보기</button><i>|</i>` + STATIONS.map((s, i) => `<button data-k="${s.key}">${s.n}. ${s.name}</button>` + (i < STATIONS.length - 1 ? '<i>›</i>' : '')).join('')
+  $('flow').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) b.dataset.k === 'all' ? overview() : focus(b.dataset.k) })
+  log('컨트롤타워 가동', `인천신항 → 이천 ${Math.round(MAIN.len)} km · 화물차 10대 · 택배차 3대 추적`, C.cyan)
+  $('loading').style.opacity = 0; setTimeout(() => $('loading').remove(), 700)
+  overview(true)
+  requestAnimationFrame(loop)
+})
+
+function makeVehicle(label, km, kind, hub) {
+  const el = document.createElement('div'); el.className = 'trk'
+  el.innerHTML = `<i></i><span>${label}</span>`; if (hub) el.style.setProperty('--c', hub[1])
+  const mk = new maplibregl.Marker({ element: el, anchor: 'left', offset: [-8, 0] }).setLngLat(kind === 'van' ? at(VAN, km) : at(MAIN, km)).addTo(map)
+  return { el, mk, km, kind, hub, label, v: 72 + Math.random() * 18, flag: null, axles: 4 + (Math.random() < 0.3 ? 1 : 0) }
+}
+
+/* ═══════════ 카메라 ═══════════ */
+function overview(instant) {
+  active = null
+  const b = new maplibregl.LngLatBounds(); MAIN.coords.concat(VAN.coords).forEach((c) => b.extend(c))
+  const cam = map.cameraForBounds(b, { padding: { top: 140, bottom: 140, left: 120, right: 380 } })
+  map.flyTo({ ...cam, pitch: 55, bearing: -12, duration: instant ? 0 : 2200, essential: true })
+  $('panel').classList.add('hide'); STATIONS.forEach((s) => s.el.classList.remove('on'))
+  setDone(MAIN.len); setFlowOn('all')
+}
+const BEARING = { port: -40, tollin: 20, cp1: -25, cp2: 35, tollout: -15, center: 25, hub: -30 }
+function focus(key) {
+  const s = STATIONS.find((x) => x.key === key); active = key
+  map.flyTo({ center: s.pos, zoom: key === 'center' || key === 'port' ? 15.2 : 15.8, pitch: 68, bearing: BEARING[key], duration: 2600, curve: 1.5, essential: true })
+  STATIONS.forEach((x) => x.el.classList.toggle('on', x.key === key)); setFlowOn(key)
+  setDone(s.km == null ? MAIN.len : s.km)
+  renderPanel(); $('panel').classList.remove('hide'); $('hint').style.opacity = 0
+}
+function setDone(km) { map.getSource('done').setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: slice(MAIN, Math.max(km, 0.01)) } }) }
+function setFlowOn(k) { document.querySelectorAll('#flow button').forEach((b) => b.classList.toggle('on', b.dataset.k === k)) }
+function renderPanel() {
+  if (!active) return
+  const s = STATIONS.find((x) => x.key === active), p = PARTS[active], st = stat[active]
+  const third = active === 'cp1' || active === 'cp2' ? ['과적 의심', st.alert, C.amber] : ['접근 중', st.wait, '#fff']
+  $('panel').innerHTML = `
+    <div class="chips"><span class="chip">컨트롤타워</span><span class="chip o">${p.step}</span>${p.amr ? '<span class="chip m">AMR 관제 연동</span>' : ''}</div>
+    <h1>${p.title}</h1><p class="sub">${p.sub}</p><p class="loc">📍 ${s.place}${s.km != null ? ` · 출발 후 ${Math.round(s.km)} km` : ''}</p>
+    <div class="live"><div><b>${st.pass}</b><span>${active === 'hub' ? '출발 택배차' : '오늘 통과'}</span></div><div><b>${st.wait}</b><span>접근 중</span></div><div><b style="color:${third[2]}">${third[1]}</b><span>${third[0]}</span></div></div>
+    <div class="sec"><div class="h">보는 것</div><ul>${p.see.map((x) => `<li>${x}</li>`).join('')}</ul></div>
+    <div class="sec" style="--c:${C.amber}"><div class="h">판단 · 지시</div><ul>${p.act.map((x) => `<li>${x}</li>`).join('')}</ul></div>
+    <div class="sec" style="--c:${C.blue}"><div class="h">다음 구간으로</div><div class="data">${p.data.map((x) => `<span>${x}</span>`).join('')}</div></div>
+    <div class="act">${p.amr ? '<button class="btn m" id="go-amr">AMR 3D 관제 열기</button>' : ''}<button class="btn" id="go-all">전체 보기</button></div>`
+  $('go-all').onclick = () => overview()
+  if ($('go-amr')) $('go-amr').onclick = () => { location.href = '/admin/amr-twin' }
+}
+
+/* ═══════════ 시뮬레이션 ═══════════ */
+function onStation(t, s) {
+  stat[s.key].pass++; K.pass++
+  const r = Math.random()
+  if (s.key === 'port') log('항만 게이트 · 출차 허가', `${t.label} · 예약 확인 · 차단기 개방`, C.green)
+  if (s.key === 'tollin') log('톨게이트 IN · 무정차 통과', `${t.label} · ${t.axles}축 · 요금 ${t.axles}종 · ${Math.round(t.v)} km/h`, C.cyan)
+  if (s.key === 'cp1') {
+    if (r < 0.25) { t.flag = 'over'; stat.cp1.alert++; K.over++; log('검사소 1 · 과적 의심', `${t.label} · 2축 +${12 + Math.floor(Math.random() * 14)}% → 검사소 2 재검사 지시`, C.amber); s.el.classList.add('alert'); setTimeout(() => s.el.classList.remove('alert'), 3000) }
+    else log('검사소 1 · 정상', `${t.label} · 축중 기준 이내`, '#5b6b80')
+  }
+  if (s.key === 'cp2' && t.flag === 'over') {
+    stat.cp2.alert++; const ok = r < 0.7
+    log(ok ? '검사소 2 · 재검사 통과' : '검사소 2 · 차단', ok ? `${t.label} · 재측정 기준 이내 · 관리자 승인` : `${t.label} · 재측정 초과 · 감량 후 재검사`, ok ? C.green : C.red)
+    t.flag = ok ? null : 'hold'; t.hold = 0
+  }
+  if (s.key === 'tollout') log('톨게이트 OUT · 자동 청구', `${t.label} · 운송사 청구 · 허브 D${1 + Math.floor(r * 3)} 배정`, C.blue)
+  if (s.key === 'center') log('허브 도착 → AMR 관제', `${t.label} · 화물 ${18 + Math.floor(r * 12)}건 하적 시작`, C.purple)
+}
+let lastT = performance.now(), lastUi = 0, lastDash = 0
+function loop(now) {
+  const dt = Math.min(0.1, (now - lastT) / 1000); lastT = now
+  const simH = dt * SIM_SPEED / 3600 // 시뮬레이션 시간(시간 단위)
+  STATIONS.forEach((s) => (stat[s.key].wait = 0))
+  const z = map.getZoom()
+  trucks.forEach((t) => {
+    let slow = 1
+    STATIONS.forEach((s) => { if (s.km == null || s.key === 'port') return; const d = Math.abs(t.km - s.km); if (s.key === 'cp1' || s.key === 'cp2' || s.key === 'center') slow = Math.min(slow, 0.25 + 0.75 * Math.min(1, d / 1.5)) })
+    if (t.flag === 'hold') { slow = 0; t.hold += dt; if (t.hold > 8) { t.flag = null; log('검사소 2 · 감량 후 통과', `${t.label} · 재검사 기준 이내`, C.green) } }
+    t.km += t.v * simH * slow
+    STATIONS.forEach((s, i) => {
+      if (s.km == null) return
+      if (t.km >= s.km && t.last < i) { t.last = i; onStation(t, s) }
+      if (t.km < s.km && s.km - t.km < 6) stat[s.key].wait++
+    })
+    if (t.km >= MAIN.len) { t.km = 0; t.last = -1; t.flag = null }
+    t.mk.setLngLat(at(MAIN, t.km))
+    t.el.style.setProperty('--c', t.flag === 'over' ? C.amber : t.flag === 'hold' ? C.red : '#ffffff')
+    t.el.classList.toggle('far', z < 12.5)
+  })
+  vans.forEach((v) => {
+    v.km += 70 * simH
+    if (v.km >= VAN.len) { v.km = 0; v.hub = HUBS[Math.floor(Math.random() * 4)]; v.label = v.hub[0] + '행'; v.el.querySelector('span').textContent = v.label; v.el.style.setProperty('--c', v.hub[1]); stat.hub.pass++; K.van++; log('택배차 출발 · 권역 지시', `${v.label} · 적재 4/4 · 도착 예정 계산`, v.hub[1]) }
+    v.mk.setLngLat(at(VAN, v.km)); v.el.classList.toggle('far', z < 12.5)
+  })
+  if (map.getLayer('route-flow') && now - lastDash > 80) { lastDash = now; const k = (now / 90) % 7; map.setPaintProperty('route-flow', 'line-dasharray', [k < 4 ? 4 - k : 0, 4, 3]) }
+  if (now - lastUi > 500) {
+    lastUi = now; $('clk').textContent = fmt(new Date())
+    $('k-run').textContent = trucks.length + vans.length; $('k-pass').textContent = K.pass; $('k-over').textContent = K.over; $('k-van').textContent = K.van
+    renderPanel()
+  }
+  requestAnimationFrame(loop)
+}
+
+/* 위성 ↔ 지도 */
+$('mode').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return
+  const sat = b.dataset.m === 'sat'
+  ;['sat', 'roads', 'labels'].forEach((id) => map.setLayoutProperty(id, 'visibility', sat ? 'visible' : 'none'))
+  map.setLayoutProperty('street', 'visibility', sat ? 'none' : 'visible')
+  document.querySelectorAll('#mode button').forEach((x) => x.classList.toggle('on', x === b))
+})
+</script>
+</body></html>

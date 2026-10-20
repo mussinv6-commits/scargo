@@ -1,9 +1,9 @@
 // ─────────────────────────────────────────────────────────────
-// S카고 물류센터 AMR 시뮬레이션 코어 (그리기 없음)
+// S카고 허브 AMR 시뮬레이션 코어 (그리기 없음)
 // 평면도 좌표(px, 1000 x 640) 기준으로 동작하고, 3D 렌더러가 미터로 변환해서 그린다.
-//   - 입고: 운송장 OCR로 목적지 허브 확인 → 권역별 랙 보관
-//   - 출고: 허브별 출고 도크 택배차로 이동
-//   - 예지보전: AMR-03 진동 상승 → 고장 예측 → 예비기 교대 → 계획 정비
+//   - 입고: 운송장 OCR로 목적지 권역 확인 → 권역별 랙 보관
+//   - 출고: 권역별 출고 도크 택배차로 이동
+//   - 예지보전: 누적 운반량이 가장 많은 AMR 진동 상승 → 고장 예측 → 관리자 승인 → 예비기 교대 → 계획 정비
 // ─────────────────────────────────────────────────────────────
 export const W = 1000, H = 640
 export const AISLES = [62, 175, 295, 415, 540]
@@ -27,29 +27,51 @@ const VMAX = 84, ACC = 150, VMAX_FL = 56
 
 export const COLORS = { cyan: '#3fe0cc', amber: '#ffb84d', red: '#ff5a5f', green: '#4fdc8a', spare: '#6b7a8a', sky: '#9fd8ff' }
 export const HUBS = [
-  { name: '호남', full: '호남 허브 (광주)', col: '#b48cff' },
-  { name: '강원', full: '강원 허브 (원주)', col: '#5aa8ff' },
-  { name: '영남', full: '영남 허브 (대구)', col: '#ff7eb3' },
+  { name: '인천', full: '인천 권역 (서브터미널)', col: '#b48cff' },
+  { name: '서울', full: '서울 권역 (서브터미널)', col: '#5aa8ff' },
+  { name: '경기', full: '경기 권역 (서브터미널)', col: '#ff7eb3' },
 ]
 export const ZONES = [
   { tag: 'D', name: '냉장', col: COLORS.sky },
-  { tag: 'A', name: '호남', col: HUBS[0].col },
-  { tag: 'B', name: '강원', col: HUBS[1].col },
-  { tag: 'C', name: '영남', col: HUBS[2].col },
+  { tag: 'A', name: '인천', col: HUBS[0].col },
+  { tag: 'B', name: '서울', col: HUBS[1].col },
+  { tag: 'C', name: '경기', col: HUBS[2].col },
 ]
 // 줄 · 면이 실제로 쓰이는지 (냉장 창고 줄은 북쪽 면만)
 export const sideOn = (r, s) => !(r === COLD_ROW && s === 1)
-export const STATE_KO = { idle: '대기', toPick: '픽업 이동', load: '적재 중', toDrop: '운반 중', unload: '하역 중', toMaint: '정비소 이동', maint: '정비 중', toHome: '복귀 중', toRack: '랙 이동', fwork: '랙 작업 중' }
+export const STATE_KO = { charge: '충전 중', idle: '대기', toPick: '픽업 이동', load: '적재 중', toDrop: '운반 중', unload: '하역 중', toMaint: '정비소 이동', maint: '정비 중', toHome: '복귀 중', toRack: '랙 이동', fwork: '랙 작업 중' }
 export const PHASE_T = { 1: '정상 운영', 2: '이상 징후 감지', 3: 'AI 고장 예측', 4: '교대 · 계획 정비', 5: '정상 복귀' }
 export const CAPTIONS = {
-  1: '입고 도크에서 운송장 OCR로 목적지를 읽고, AMR이 권역별 랙 바닥 칸(A 호남 · B 강원 · C 영남 · D 냉장 창고)에 보관합니다. 위 단 보충 재고는 무인 지게차가 내리고 올리며, 출고는 허브별 택배차로 나갑니다.',
+  1: '입고 도크에서 운송장 OCR로 목적지를 읽고, AMR이 권역별 랙 바닥 칸(A 인천 · B 서울 · C 경기 · D 냉장 창고)에 보관합니다. 위 단 보충 재고는 무인 지게차가 내리고 올리며, 출고는 권역별 택배차로 나갑니다.',
   2: 'AMR-03 구동모터 진동이 평소 범위(1.2~2.0 mm/s)를 벗어나기 시작합니다. 무거운 화물을 가장 많이 나른 기체입니다.',
-  3: '진동 추세와 누적 운반 중량으로 고장 시점을 예측합니다. 고장 전에 정비를 예약하고, 예비기 AMR-05를 투입합니다.',
-  4: 'AMR-03은 하던 작업만 마치고 정비 스테이션으로 이동합니다. 그동안 AMR-05가 작업을 이어받아 허브 출고는 멈추지 않습니다.',
+  3: '진동 추세로 남은 수명을 계산합니다. 관리자가 정한 정비 기준 이하로 떨어지면 자동으로 정비를 예약하고 예비기 AMR-05를 투입합니다.',
+  4: 'AMR-03은 하던 작업만 마치고 정비 스테이션으로 이동합니다. 그동안 AMR-05가 작업을 이어받아 권역 출고는 멈추지 않습니다.',
   5: '베어링 교체 후 진동이 정상으로 돌아오고 누적 운반 중량도 초기화됩니다. AMR-05는 대기 위치로 돌아갑니다.',
 }
 export const PIPE_ON = { 1: [0, 1, 2], 2: [2, 3], 3: [3, 4], 4: [4, 5], 5: [4] }
 export const PH_COL = { 1: COLORS.cyan, 2: COLORS.amber, 3: COLORS.amber, 4: COLORS.red, 5: COLORS.green }
+
+// 상품 바코드 (EAN-13) — 최종파일/Scargo_바코드_EAN13버전 과 같은 번호 체계
+//   880(국가) 2610(업체) 14 + 그룹 1~5(100~500번대) + 00~20 + 검증숫자
+export function eanCheck(d12) { let s = 0; for (let i = 0; i < 12; i++) s += +d12[i] * (i % 2 ? 3 : 1); return String((10 - (s % 10)) % 10) }
+export const EAN_LIST = (() => { const o = []; for (let g = 1; g <= 5; g++) for (let n = 0; n <= 20; n++) { const d = '880261014' + g + String(n).padStart(2, '0'); o.push(d + eanCheck(d)) } return o })()
+const EAN_L = ['0001101', '0011001', '0010011', '0111101', '0100011', '0110001', '0101111', '0111011', '0110111', '0001011']
+const EAN_G = ['0100111', '0110011', '0011011', '0100001', '0011101', '0111001', '0000101', '0010001', '0001001', '0010111']
+const EAN_R = ['1110010', '1100110', '1101100', '1000010', '1011100', '1001110', '1010000', '1000100', '1001000', '1110100']
+const EAN_P = ['LLLLLL', 'LLGLGG', 'LLGGLG', 'LLGGGL', 'LGLLGG', 'LGGLLG', 'LGGGLL', 'LGLGLG', 'LGLGGL', 'LGGLGL']
+// 95칸 막대 패턴 (true = 검은 막대)
+export function ean13Bits(code) {
+  const d = String(code).split('').map(Number), par = EAN_P[d[0]]; let b = '101'
+  for (let i = 1; i <= 6; i++) b += (par[i - 1] === 'L' ? EAN_L : EAN_G)[d[i]]
+  b += '01010'; for (let i = 7; i <= 12; i++) b += EAN_R[d[i]]; b += '101'
+  return b.split('').map((x) => x === '1')
+}
+// 번호판 표시: 서울85자6013 → 서울 85자 6013
+export const fmtPlate = (p) => (p ? String(p).replace(/\s/g, '').replace(/^(\D*)(\d{2,3})(\D)(\d{4})$/, (m, a, b, c, d) => (a ? a + ' ' : '') + b + c + ' ' + d) : '')
+
+// 교차로: 통로(가로) × 간선(세로)이 만나는 10곳 — 한 번에 한 대만 지나간다 (예약)
+export const INTER_NODES = [HXL, HXR].flatMap((x) => AISLES.map((y) => ({ x, y, key: x + ':' + y })))
+export const INTER_R = 14 // 교차로 칸 반지름 (px, 0.7m)
 
 export const zoneRow = (c) => (c.handle === '냉장' ? COLD_ROW : c.hub + 1)
 export const tons = (a) => (a.cumKg / 1000).toFixed(2)
@@ -66,6 +88,16 @@ export const lvCol = (lv) => (lv === 'crit' ? COLORS.red : lv === 'warn' ? COLOR
 export function createSim(hooks = {}) {
   const onLog = hooks.onLog || (() => {})
   const onPhase = hooks.onPhase || (() => {})
+  const onEvent = hooks.onEvent || (() => {})   // DB 저장용: ('move' | 'maint' | 'vehicle', 내용)
+  // 입구 · 출구 번호판 OCR 게이트 (웹 관제만 켠다): 트럭이 게이트에서 멈추고 OCR 결과를 기다린다
+  let gate = !!hooks.vehicleGate
+  const GATE_WAIT = 25 // 초 · 이 안에 결과가 없으면 OCR 응답 없음으로 통과
+  const GATE_OFF = 0.3 // 입구 카메라 앞 정지 위치 (도크 쪽으로 가까이 · 화면에서 보이게)
+  const GATE_MIN = 2.5 // 결과가 빨리 와도 이만큼은 게이트에서 멈춰 '인식' 장면을 보여 준다
+  const SAMPLE_IN = ['서울85자6013', '경기90자8118', '인천98바2578'], SAMPLE_OUT = ['부산90배8407', '경남99바4892', '대구80자6850']
+  // 관리자 승인: AI 예측 뒤 바로 교대하지 않고 승인을 기다린다. 응답이 없으면 autoApproveSec 뒤 자동 승인
+  const autoApproveSec = () => (typeof hooks.autoApproveSec === 'function' ? hooks.autoApproveSec() : hooks.autoApproveSec == null ? 20 : hooks.autoApproveSec)
+  const slotName = (sl) => (sl ? 'R' + (sl.r + 1) + '-' + (sl.s ? 'B' : 'A') + (sl.i + 1) : '')
 
   let seed = 11
   const rnd = () => { seed |= 0; seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296 }
@@ -86,7 +118,7 @@ export function createSim(hooks = {}) {
     // 취급 표시: 파손주의 · 취급주의 · 냉장 · 중량물(20kg 이상) · 일반 → 박스 스티커와 운반 속도에 쓰인다
     let handle = c.h()
     if (handle === '일반' && w >= 20) handle = '중량물'
-    return { id, hub: h, cat: c.n, w, size: w < 6 ? 'S' : w < 15 ? 'M' : 'L', handle, loc: null, res: false }
+    return { id, hub: h, cat: c.n, w, size: w < 6 ? 'S' : w < 15 ? 'M' : 'L', handle, loc: null, res: false, ean: EAN_LIST[Math.floor(rnd() * EAN_LIST.length)] }
   }
   function mkCargoForRow(r) { let c; do { c = mkCargo(r === COLD_ROW ? null : r - 1) } while ((r === COLD_ROW) !== (c.handle === '냉장')); return c }
   function fillInTruck(dk, d, n) { dk.cargo = []; for (let k = 0; k < n; k++) { const c = mkCargo(); c.loc = { type: 'inTruck', d }; dk.cargo.push(c) } }
@@ -124,7 +156,10 @@ export function createSim(hooks = {}) {
       v: 0, blocked: 0, dirx: 0, diry: -1, pktAcc: 0.4, cumKg: 5300, vib: 1.1, temp: 41, batt: 82, health: 97, hist: [], maintFlag: false, release: false, deg: 0, ph: 1,
       forkH: 0, reach: 0, fw: null, fx: 0, fy: 0,
     })
-    S.sc = { phase: 1, t: 0, start: 0, degrading: false, rul: null, slope: 0 }
+    S.inter = {}; INTER_NODES.forEach((n) => (S.inter[n.key] = { owner: 0, waiters: 0 }))
+    S.istats = { n: 0, total: 0, max: 0 }
+    S.cfg = S.cfg || { rulAt: 24, chargeAt: 30, chargeTo: 90 }   // 관리자 운영 기준 (앱 · 웹에서 바꾸면 DB로 공유)
+    S.sc = { phase: 1, t: 0, start: 0, degrading: false, rul: null, slope: 0, await: false, awaitT: 0, approvedBy: null, target: 2 }
     addLog('관제 시작 · AMR 4대 가동, 1대 예비 · 무인 지게차 1대', '')
     setPhase(1)
   }
@@ -145,7 +180,7 @@ export function createSim(hooks = {}) {
   }
   function goTo(a, Q, st) { a.path = route(a.cur, Q); a.dest = Q; a.state = st }
 
-  // ── 작업 할당: 목적지 허브 기준 ──
+  // ── 작업 할당: 목적지 권역 기준 ──
   function slotsWhere(fn) { const o = []; S.slots.forEach((r, ri) => r.forEach((s, si) => s.forEach((v, i) => { if (fn(v, ri)) o.push({ r: ri, s: si, i }) }))); return o }
   const slotAt = (sl) => S.slots[sl.r][sl.s][sl.i]
   const slotPt = (sl) => ({ x: SX(sl.i), y: AISLES[sl.r + sl.s], kind: 'rack' })
@@ -184,33 +219,83 @@ export function createSim(hooks = {}) {
     const t = a.task, c = t.box
     if (t.type === 'in') { t.dock.cargo.splice(t.dock.cargo.indexOf(c), 1); S.scans.unshift({ t: S.simT, c }); S.scans = S.scans.slice(0, 4); S.scanVer++ }
     else { const s = slotAt(t.slot); s.st = 0; s.box = null }
-    c.loc = { type: 'amr', a }; a.box = c; a.lastBox = c
+    c.loc = { type: 'amr', a }; a.box = c; a.lastBox = c; a.pickedAt = new Date().toISOString(); a.taskWait = 0
   }
   function doDrop(a) {
     const t = a.task, c = t.box
     if (t.type === 'in') { const s = slotAt(t.slot); s.st = 1; s.box = c; c.loc = { type: 'slot', ...t.slot }; c.res = false }
     else { t.dock.boxes.push(c); t.dock.res--; c.loc = { type: 'outTruck', d: t.dock.hub } }
     a.cumKg += c.w; a.box = null; S.thru++
+    onEvent('move', { code: a.name, waybillNo: c.id, taskType: t.type === 'in' ? 'IN' : 'OUT',
+      fromLoc: t.type === 'in' ? '입고 D' + (t.dk + 1) : slotName(t.slot), toLoc: t.type === 'in' ? slotName(t.slot) : '출고 D' + (t.dock.hub + 4),
+      hub: c.handle === '냉장' ? '냉장' : (HUBS[c.hub] ? HUBS[c.hub].name : null), handleType: c.handle, weightKg: c.w, barcode: c.ean, interWaitSec: Math.round((a.taskWait || 0) * 10) / 10, startedAt: a.pickedAt, finishedAt: new Date().toISOString() })
   }
 
   // ── 도크 ──
+  // ── 입구 · 출구 번호판 OCR ──
+  // d.ocr = { st: 'scan' | 'ok' | 'block' | 'off', plate, photo, conf, kind, exit: null | 'scan' | {plate, ok, conf} }
+  function gateEntry(d, side, k, kind) {
+    if (!gate) { d.ocr = null; return }
+    d.ocr = { st: 'scan', t: 0, exit: null }
+    onEvent('vehicle', { dir: 'ENTRY', side, dock: k, kind })
+  }
+  function gateHold(d, dt, side, k) {
+    if (!d.ocr || d.ocr.st !== 'scan') return
+    d.off = Math.max(d.off, GATE_OFF) // 입구 게이트 앞에서 멈춰서 인식 결과를 기다린다
+    d.ocr.t += dt
+    if (d.ocr.pending && d.ocr.t >= GATE_MIN) { const r = d.ocr.pending; d.ocr.pending = null; applyEntry(side, k, d, r.res) }
+    else if (d.ocr.t > GATE_WAIT) vehicleResult(side, k, null)
+  }
+  function gateExit(d, side, k, kind, boxes) {
+    if (!gate || !d.ocr || !d.ocr.photo) return
+    d.ocr.exit = 'scan'
+    onEvent('vehicle', { dir: 'EXIT', side, dock: k, kind, vehicleNo: d.ocr.photo, boxCount: boxes.length,
+      barcodes: boxes.map((c) => c.ean), destHub: side === 'out' ? HUBS[d.hub].name : null })
+  }
+  // 서버 판정 결과 반영 (r = null 이면 OCR 서버 응답 없음 → 예시 번호로 통과)
+  function vehicleResult(side, k, r, dir = 'ENTRY') {
+    const d = (side === 'out' ? S.outDocks : S.inDocks)[k]; if (!d || !d.ocr) return
+    if (dir === 'EXIT') { d.ocr.exit = r ? { plate: r.plate, ok: r.decision === 'EXIT_OK', conf: r.confidence } : null; return }
+    if (d.ocr.st !== 'scan') return
+    if (d.ocr.t < GATE_MIN) { d.ocr.pending = { res: r }; return } // 최소 정지 시간 뒤에 반영
+    applyEntry(side, k, d, r)
+  }
+  function applyEntry(side, k, d, r) {
+    const where = side === 'out' ? '출고 D' + (k + 4) : '입고 D' + (k + 1)
+    if (!r) {
+      const p = (side === 'out' ? SAMPLE_OUT : SAMPLE_IN)[k % 3]
+      d.ocr = { st: 'off', plate: p, photo: null, conf: null, kind: side === 'out' ? 'COURIER' : 'CARGO', exit: null }
+      return
+    }
+    if (r.decision === 'BLOCK') {
+      d.ocr = { st: 'block', plate: r.plate, photo: r.photoPlate, conf: r.confidence, kind: r.kind, exit: null }
+      if (side === 'in') d.cargo = []; else d.boxes = []
+      d.state = 'leaving'
+      addLog((r.plate ? '미등록 차량 ' + fmtPlate(r.plate) : '번호판 판독 불가') + ' · ' + where + ' 진입 차단', 'crit')
+      return
+    }
+    d.ocr = { st: 'ok', plate: r.plate, photo: r.photoPlate, conf: r.confidence, kind: r.kind, exit: null }
+    addLog('입차 OCR ' + fmtPlate(r.plate) + (r.confidence != null ? ' (' + r.confidence + '%)' : '') + ' · ' + (r.kind === 'COURIER' ? '택배차' : '화물차') + ' → ' + where, '')
+  }
+
   function updDocks(dt) {
     S.inDocks.forEach((d, k) => {
-      if (d.state === 'docked' && d.cargo.length === 0) d.state = 'leaving'
+      if (d.state === 'docked' && d.cargo.length === 0) d.state = 'leaving' // 화물차는 입차 때만 인식 (출차 OCR 은 택배차)
       else if (d.state === 'leaving') { d.off += dt / 2.2; if (d.off >= 1) { d.off = 1; d.state = 'empty'; d.timer = 1.5 + rnd() * 2.5 } }
-      else if (d.state === 'empty') { d.timer -= dt; if (d.timer <= 0) { d.state = 'arriving'; fillInTruck(d, k, 3 + Math.floor(rnd() * 2)) } }
-      else if (d.state === 'arriving') { d.off -= dt / 2.2; if (d.off <= 0) { d.off = 0; d.state = 'docked' } }
+      else if (d.state === 'empty') { d.timer -= dt; if (d.timer <= 0) { d.state = 'arriving'; fillInTruck(d, k, 3 + Math.floor(rnd() * 2)); gateEntry(d, 'in', k, 'CARGO') } }
+      else if (d.state === 'arriving') { d.off -= dt / 2.2; gateHold(d, dt, 'in', k); if (d.off <= 0) { d.off = 0; d.state = 'docked' } }
     })
-    S.outDocks.forEach((d) => {
+    S.outDocks.forEach((d, k) => {
       if (d.state === 'docked' && d.boxes.length >= d.cap && d.res === 0) {
         d.state = 'leaving'
+        gateExit(d, 'out', k, 'COURIER', d.boxes)
         const kg = d.boxes.reduce((s, c) => s + c.w, 0)
         d.boxes.forEach((c) => (c.loc = { type: 'gone', hub: d.hub }))
         S.hubSent[d.hub] += d.boxes.length
-        addLog('D' + (d.hub + 4) + ' ' + HUBS[d.hub].name + ' 허브행 택배차 출발 · ' + d.boxes.length + '건 ' + kg + 'kg', 'hub')
+        addLog('D' + (d.hub + 4) + ' ' + HUBS[d.hub].name + '행 택배차 출발 · ' + d.boxes.length + '건 ' + kg + 'kg', 'hub')
       } else if (d.state === 'leaving') { d.off += dt / 2.2; if (d.off >= 1) { d.off = 1; d.state = 'empty'; d.timer = 1.2 + rnd() * 2 } }
-      else if (d.state === 'empty') { d.timer -= dt; if (d.timer <= 0) { d.state = 'arriving'; d.boxes = [] } }
-      else if (d.state === 'arriving') { d.off -= dt / 2.2; if (d.off <= 0) { d.off = 0; d.state = 'docked' } }
+      else if (d.state === 'empty') { d.timer -= dt; if (d.timer <= 0) { d.state = 'arriving'; d.boxes = []; gateEntry(d, 'out', k, 'COURIER') } }
+      else if (d.state === 'arriving') { d.off -= dt / 2.2; gateHold(d, dt, 'out', k); if (d.off <= 0) { d.off = 0; d.state = 'docked' } }
     })
   }
 
@@ -228,6 +313,55 @@ export function createSim(hooks = {}) {
     }
     return false
   }
+  // ── 교차로 예약 ──
+  // 경로 앞쪽 LOOK 안에 교차로가 있으면 예약을 요청한다. 다른 로봇이 쓰고 있으면 교차로 앞(대기선)에서 멈춘다.
+  // 먼저 온 순서대로 · 3.5초 넘게 막혔는데 상대도 서 있으면(서로 막힘) 양보받고 지나간다.
+  const LOOK = 44, HOLD_R = INTER_R + 6
+  function nextNode(a) {
+    let px = a.x, py = a.y, acc = 0
+    for (const q of a.path) {
+      const seg = Math.hypot(q.x - px, q.y - py)
+      let best = null
+      for (const n of INTER_NODES) {
+        // 선분이 교차로 칸(반지름 INTER_R)을 스치기만 해도 지나가는 것으로 본다
+        const vx = q.x - px, vy = q.y - py, L2 = vx * vx + vy * vy || 1e-6
+        const tt = Math.max(0, Math.min(1, ((n.x - px) * vx + (n.y - py) * vy) / L2))
+        const cxp = px + vx * tt, cyp = py + vy * tt
+        if (Math.hypot(n.x - cxp, n.y - cyp) >= INTER_R) continue
+        if (n === a.iHold && Math.hypot(a.x - n.x, a.y - n.y) < HOLD_R) continue // 이미 들어와 있는 교차로
+        const d = acc + Math.max(0, Math.hypot(cxp - px, cyp - py) - INTER_R)
+        if (d <= LOOK && (!best || d < best.d)) best = { n, d }
+      }
+      if (best) return best
+      acc += seg; px = q.x; py = q.y
+      if (acc > LOOK) break
+    }
+    return null
+  }
+  function interGate(a, dt) {
+    // 지나간 교차로 해제
+    if (a.iHold) { const n = a.iHold; if (Math.hypot(a.x - n.x, a.y - n.y) > HOLD_R) { if (S.inter[n.key].owner === a.id) S.inter[n.key].owner = 0; a.iHold = null } }
+    const nx = a.path.length ? nextNode(a) : null
+    if (!nx) { endWait(a); return Infinity }
+    const slot = S.inter[nx.n.key]
+    if (!slot.owner || slot.owner === a.id) {
+      if (a.iHold && a.iHold !== nx.n && S.inter[a.iHold.key].owner === a.id) S.inter[a.iHold.key].owner = 0
+      slot.owner = a.id; a.iHold = nx.n; endWait(a); return Infinity
+    }
+    // 다른 로봇이 쓰는 중: 교차로 칸 바로 앞(대기선)에 서도록 미리 감속한다
+    const lim = Math.sqrt(2 * ACC * 1.6 * Math.max(0, nx.d - 3))
+    if (nx.d > 4 && (a.v || 0) > 4) return lim
+    // 대기
+    if (!a.iWaitNode) { a.iWaitNode = nx.n; a.iwait = 0 }
+    a.iwait += dt; a.taskWait = (a.taskWait || 0) + dt
+    const owner = S.amrs.find((b) => b.id === slot.owner)
+    if (!owner || (a.iwait > 3.5 && (owner.v || 0) < 1)) { slot.owner = a.id; a.iHold = nx.n; a.iYield = true; endWait(a); return Infinity }
+    return 0
+  }
+  function endWait(a) {
+    if (a.iWaitNode && a.iwait > 0.2) { S.istats.n++; S.istats.total += a.iwait; S.istats.max = Math.max(S.istats.max, a.iwait); a.lastWait = a.iwait; a.lastWaitT = S.simT }
+    a.iWaitNode = null; a.iwait = 0
+  }
   function move(a, dt) {
     if (!a.path.length) { a.v = 0; return }
     const p = a.path[0], dx = p.x - a.x, dy = p.y - a.y, dist = Math.hypot(dx, dy) || 1e-6
@@ -241,7 +375,9 @@ export function createSim(hooks = {}) {
     const remain = a.path.reduce((s, q, i, arr) => s + (i === 0 ? dist : Math.hypot(q.x - arr[i - 1].x, q.y - arr[i - 1].y)), 0)
     if (last || remain < 40) target = Math.min(target, Math.max(14, remain * 2.2))
     if (!last && dist < 22) target = Math.min(target, 38)
-    if (blockedAhead(a, ux, uy)) { target = 0; a.blocked += dt } else a.blocked = Math.max(0, a.blocked - dt * 2)
+    const iLim = interGate(a, dt)
+    if (iLim < target) target = iLim
+    if (iLim === 0) { /* 교차로 대기 */ } else if (blockedAhead(a, ux, uy)) { target = 0; a.blocked += dt } else a.blocked = Math.max(0, a.blocked - dt * 2)
     a.v += Math.max(-ACC * 1.6 * dt, Math.min(ACC * dt, target - a.v))
     if (a.v < 0) a.v = 0
     let rem = a.v * dt
@@ -250,7 +386,7 @@ export function createSim(hooks = {}) {
       if (d <= rem) { a.x = q.x; a.y = q.y; rem -= d; a.path.shift() } else { a.x += (ddx / d) * rem; a.y += (ddy / d) * rem; rem = 0 }
     }
     if (a.v > 3) { const ta = Math.atan2(uy, ux); let df = ta - a.ang; while (df > Math.PI) df -= 2 * Math.PI; while (df < -Math.PI) df += 2 * Math.PI; a.ang += df * Math.min(1, dt * 9) }
-    a.batt = Math.max(35, a.batt - dt * (a.box ? 0.13 : 0.1))
+    a.batt = Math.max(3, a.batt - dt * (a.box ? 0.13 : 0.1))
   }
   function updOffset(a, dt) {
     // 우측 통행: 이동 방향의 오른쪽 차선으로 비켜서 달린다 (정지 시 중앙)
@@ -263,6 +399,7 @@ export function createSim(hooks = {}) {
   function afterTask(a) {
     if (a.maintFlag) { goTo(a, BAY, 'toMaint'); addLog(a.name + ' 작업 완료 → 정비 스테이션 이동', 'crit'); return }
     if (a.release) { a.release = false; a.role = 'spare'; goTo(a, a.home, 'toHome'); addLog(a.name + ' 대기 위치로 복귀', ''); return }
+    if (a.batt <= S.cfg.chargeAt) { a.needCharge = true; goTo(a, a.home, 'toHome'); addLog(a.name + ' 배터리 ' + Math.round(a.batt) + '% (기준 ' + S.cfg.chargeAt + '%) → 충전소 이동', 'warn'); onEvent('charge', { code: a.name, battery: a.batt }); return }
     const t = assign(a)
     if (t) { a.task = t; goTo(a, t.from, 'toPick') } else goTo(a, a.home, 'toHome')
   }
@@ -270,7 +407,7 @@ export function createSim(hooks = {}) {
     a.cur = a.dest; a.v = 0
     if (a.state === 'toPick') { a.state = 'load'; a.timer = a.task.type === 'in' ? 1.4 : 0.9 }
     else if (a.state === 'toDrop') { a.state = 'unload'; a.timer = 0.9 }
-    else if (a.state === 'toMaint') { a.state = 'maint'; a.timer = 7; setPhase(4); addLog(a.name + ' 정비 시작 · 구동모터 베어링 교체', 'crit') }
+    else if (a.state === 'toMaint') { a.state = 'maint'; a.timer = 7; setPhase(4); addLog(a.name + ' 정비 시작 · 구동모터 베어링 교체', 'crit'); onEvent('maint', { code: a.name, eventType: 'START', vibration: a.vib, note: '구동모터 베어링 교체' }) }
     else if (a.state === 'toHome') { a.state = 'idle'; a.wait = 0.6 }
   }
   // ── 무인 지게차: 위 단 보충 재고 ↔ 바닥 칸 ──
@@ -362,9 +499,14 @@ export function createSim(hooks = {}) {
     a.ph += dt
     if (a.kind === 'fl') { updFork(a, dt); sensors(a, dt); return }
     switch (a.state) {
+      case 'charge':
+        a.batt = Math.min(100, a.batt + dt * 1.6)
+        if (a.batt >= S.cfg.chargeTo) { a.state = 'idle'; a.needCharge = false; a.wait = 0.4; addLog(a.name + ' 충전 완료 ' + Math.round(a.batt) + '% · 작업 복귀', 'ok') }
+        break
       case 'idle':
         a.batt = Math.min(100, a.batt + dt * 0.8)
         if (a.release) { a.release = false; a.role = 'spare' }
+        if ((a.needCharge || a.batt <= S.cfg.chargeAt) && !a.maintFlag) { a.state = 'charge'; a.needCharge = true; break }
         a.wait -= dt
         if (a.wait <= 0) {
           a.wait = 0.6
@@ -398,6 +540,7 @@ export function createSim(hooks = {}) {
     a.deg = 0; a.maintFlag = false; a.health = 98; a.temp = 40; a.cumKg = 0
     S.sc.degrading = false; S.sc.rul = null
     addLog(a.name + ' 정비 완료 · 진동 정상, 누적 운반 초기화', 'ok')
+    onEvent('maint', { code: a.name, eventType: 'DONE', vibration: a.vib, note: '정비 완료 · 진동 정상' })
     setPhase(5)
     goTo(a, a.home, 'toHome')
     S.amrs[4].release = true
@@ -406,21 +549,60 @@ export function createSim(hooks = {}) {
   // ── 예지보전 시나리오 ──
   function slopeOf(h) { const v = h.filter((x) => x != null).slice(-20); if (v.length < 5) return 0; const n = v.length; let sx = 0, sy = 0, sxy = 0, sxx = 0; v.forEach((y, i) => { sx += i; sy += y; sxy += i * y; sxx += i * i }); return (n * sxy - sx * sy) / (n * sxx - sx * sx) / 0.2 }
   function scenario(dt) {
-    const sc = S.sc, T = S.amrs[2], SP = S.amrs[4]
+    const sc = S.sc, SP = S.amrs[4]
     sc.t += dt
-    if (sc.phase === 1 && !sc.degrading && sc.t - sc.start > 9) sc.degrading = true
+    if (sc.phase === 1 && !sc.degrading && sc.t - sc.start > 9) { sc.target = pickTarget(); sc.degrading = true }
+    const T = S.amrs[sc.target]
     if (sc.degrading && T.state !== 'maint') T.deg = Math.min(5.2, T.deg + dt * 0.27)
-    if (sc.phase === 1 && T.deg > 1.2) { setPhase(2); addLog('AMR-03 진동 이상 감지 · 평소 대비 +' + Math.round((T.vib / 1.55 - 1) * 100) + '%', 'warn') }
-    if (sc.phase === 2 && T.deg > 2.5) {
+    if (sc.phase === 1 && T.deg > 1.2) { setPhase(2); addLog(T.name + ' 진동 이상 감지 · 평소 대비 +' + Math.round((T.vib / 1.55 - 1) * 100) + '%', 'warn'); onEvent('maint', { code: T.name, eventType: 'WARN', vibration: T.vib, note: '진동 이상 감지' }) }
+    // 남은 수명(시간): 진동이 고장 기준 7.1 mm/s 에 닿기까지 · 이상 감지 뒤 계속 계산
+    if (sc.phase >= 2 && sc.phase <= 3 && T.state !== 'maint') sc.rul = Math.max(1, Math.round(((5.55 - T.deg) / 0.27) * 4))
+    if (sc.phase === 2 && sc.rul != null && sc.rul <= S.cfg.rulAt) {
       sc.slope = Math.max(0.08, slopeOf(T.hist))
-      sc.rul = Math.max(6, Math.round(((7.1 - T.vib) / sc.slope) * 4))
       setPhase(3)
-      addLog('AI 예측 · 베어링 마모(누적 ' + tons(T) + 't 운반), 고장까지 약 ' + sc.rul + '시간', 'crit')
-      T.maintFlag = true; SP.role = 'active'; SP.wait = 0.2
-      addLog('정비 예약 · 예비기 AMR-05 투입', 'warn')
+      addLog('AI 예측 · ' + T.name + ' 남은 수명 약 ' + sc.rul + '시간 (정비 기준 ' + S.cfg.rulAt + '시간 이하)', 'crit')
+      onEvent('maint', { code: T.name, eventType: 'PREDICT', vibration: T.vib, rulHours: sc.rul, slope: sc.slope, cumKg: T.cumKg, note: '고장 예측 · 기준 ' + S.cfg.rulAt + '시간 이하 → 자동 정비 예약' })
+      sc.await = true; approve('자동 (기준 ' + S.cfg.rulAt + '시간 이하)')
     }
     if (sc.phase === 3 && sc.rul != null) sc.slope = Math.max(0.08, slopeOf(T.hist) || sc.slope)
     if (sc.phase === 5 && sc.t - sc.start > 9) { setPhase(1); addLog('정상 운영 · 다음 주기 모니터링', '') }
+  }
+
+  // 고장 대상: 가동 중인 AMR-01~04 중 누적 운반량(정비 후)이 가장 많은 로봇 — 많이 쓴 로봇이 먼저 마모된다
+  function pickTarget() {
+    let best = 0
+    for (let i = 0; i < 4; i++) { const a = S.amrs[i]; if (a.role === 'active' && a.state !== 'maint' && a.cumKg > S.amrs[best].cumKg) best = i }
+    return best
+  }
+  // 운영 기준 바꾸기 (관리자) — 정비 기준은 6~60시간, 충전 기준은 10~80%
+  function setCfg(c) {
+    if (!c) return
+    if (c.rulAt != null) S.cfg.rulAt = Math.max(6, Math.min(60, Math.round(c.rulAt)))
+    if (c.chargeAt != null) S.cfg.chargeAt = Math.max(10, Math.min(80, Math.round(c.chargeAt)))
+  }
+  // 정비 예약 확정 · 예비기 투입 (기준에 걸리면 자동)
+  function approve(by) {
+    const sc = S.sc, T = S.amrs[sc.target], SP = S.amrs[4]
+    if (!sc.await) return false
+    sc.await = false; sc.approvedBy = by || '관리자'
+    T.maintFlag = true; SP.role = 'active'; SP.wait = 0.2
+    addLog('정비 승인 (' + sc.approvedBy + ') · 예비기 AMR-05 투입', 'warn')
+    onEvent('maint', { code: T.name, eventType: 'APPROVE', by: sc.approvedBy, vibration: T.vib, note: '정비 승인 · 예비기 AMR-05 투입' })
+    return true
+  }
+  // 다른 화면(웹 · 앱)이 DB에 남긴 상태를 따라간다: 고장 예측 · 승인을 맞춘다
+  function follow(r) {
+    const sc = S.sc
+    if (!r) return
+    // 웹(현장)이 고른 고장 로봇에 맞춘다
+    if (r.code && sc.phase < 3) { const i = S.amrs.findIndex((a) => a.name === r.code); if (i >= 0 && i < 4 && i !== sc.target) { S.amrs[sc.target].deg = 0; sc.target = i } }
+    const T = S.amrs[sc.target]
+    if ((r.pending || r.approved) && sc.phase < 3 && T.state !== 'maint') {
+      // 현장(웹)이 이미 정비를 잡았으면 이 화면도 같은 단계로 맞춘다: 남은 수명이 기준 바로 아래가 되게
+      T.deg = Math.max(T.deg, Math.min(5.2, 5.56 - (S.cfg.rulAt * 0.27) / 4)); sc.degrading = true
+      if (sc.phase < 2) setPhase(2)
+    }
+    if (r.approved && sc.await) approve(r.approvedBy || '관리자')
   }
 
   function step(dt) {
@@ -444,5 +626,8 @@ export function createSim(hooks = {}) {
   }
 
   init()
-  return { S, init, step, locText }
+  return { S, init, step, locText, approve, follow, setCfg, vehicleResult, setVehicleGate: (v) => { gate = !!v } }
 }
+
+// 단계 설명 문구 속 로봇 이름을 실제 고장 대상으로 바꿔서 돌려준다
+export function captionOf(S) { const T = S.amrs[S.sc.target == null ? 2 : S.sc.target]; return CAPTIONS[S.sc.phase].replace(/AMR-03/g, T.name) }

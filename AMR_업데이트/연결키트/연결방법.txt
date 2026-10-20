@@ -1,0 +1,70 @@
+﻿허브 AMR 연결키트 - 새 웹 · 백엔드 프로젝트에 붙이는 방법
+==========================================================
+이 폴더는 AMR_업데이트\5_연결키트_만들기.bat 을 실행하면 노트북의 최신 파일로 다시 채워집니다.
+(이 안내문과 OCR서버_실행.bat 은 그대로 남아요)
+
+폴더 구성
+----------------------------------------------------------
+1_웹\components\amr      → 새 프론트(Vue 3)의 src\components\amr 에 통째로 복사
+1_웹\screens              → AdminAmrTwin.vue 를 관리자 화면 폴더에 복사
+2_백엔드\amr              → 새 Spring Boot 의 src\main\java\com\scargo\amr 에 통째로 복사
+3_앱\amr-app              → 그대로 둠 (앱은 웹과 따로 빌드 · 서버 주소만 맞추면 됨)
+4_OCR서버                  → gate_api.py + 모델(ocr_model_attn · runs) + 허브 사진
+OCR서버_실행.bat           → 4_OCR서버 를 8001 포트로 실행
+
+
+1. 웹 붙이기 (Vue 3 + Vite)
+----------------------------------------------------------
+① 패키지: three 0.160 필요
+     npm install three@0.160.0
+② 파일 복사: components\amr 폴더 + AdminAmrTwin.vue
+③ 라우터에 화면 한 줄 추가 (관리자 전용 메뉴 아래)
+     import AdminAmrTwin from "@/components/admin/screens/AdminAmrTwin.vue";
+     { path: "amr-twin", name: "admin-amr-twin", component: AdminAmrTwin }
+   → 관리자(ADMIN) 로그인한 사람만 들어오는 경로(meta: requiresAdmin) 안에 넣을 것
+④ 서버 주소: 기본은 http://localhost:8080
+   다른 주소면 프론트 .env 에  VITE_AMR_API=http://서버주소:8080
+
+
+2. 백엔드 붙이기 (Spring Boot 3 + JPA + PostgreSQL)
+----------------------------------------------------------
+① 파일 복사: amr 폴더를 com\scargo\amr 로 (패키지 이름이 다르면 package 줄을 바꿀 것)
+② 보안 설정(SecurityConfig) 두 군데
+   - AMR 경로는 Spring Security 에서 열어 두기 (잠금은 AMR 쪽 인터셉터가 대신 함)
+       .requestMatchers("/api/amr/**").permitAll()
+   - CORS 허용 주소에 앱 · 웹 주소 추가
+       http://localhost:5173, http://localhost:5175, http://localhost, https://localhost, capacitor://localhost
+       (allowCredentials = true 유지: 웹이 관리자 로그인 쿠키를 같이 보냄)
+③ 관리자 판정: 로그인 후 SecurityContext 에 ROLE_ADMIN 권한이 들어 있어야 웹이 통과함
+   (지금 팀 프로젝트는 SessionAuthenticationFilter 가 넣어 줌 - 새 프로젝트도 같은 방식이면 그대로 동작)
+④ OCR 서버 주소 (기본값 그대로면 생략 가능)  application.yml
+     amr:
+       ocr:
+         base: http://localhost:8001
+⑤ DB: 테이블은 JPA 가 자동으로 만듦 (spring.jpa.hibernate.ddl-auto: update)
+   AMR 테이블 12개
+     hubs · amr_robots · amr_telemetry · amr_predictions · amr_maintenance
+     hub_events · amr_settings · amr_task_logs
+     hub_vehicles · hub_vehicle_logs
+     amr_otp_keys · amr_auth_tokens
+   등록 차량(화물차 7 · 택배차 4)은 처음 실행할 때 자동으로 들어감
+
+
+3. OCR 서버
+----------------------------------------------------------
+① 아나콘다 yolo 환경(ultralytics · easyocr · torch)이 있어야 함
+② OCR서버_실행.bat 실행 → "준비 완료" 뜨면 끝 (fastapi · uvicorn 은 처음에 자동 설치)
+③ DB 접속: 비밀번호는 PGPASSWORD 환경변수 (기본 1234)
+
+
+4. 앱
+----------------------------------------------------------
+① 3_앱\amr-app 에서 app_build.bat (npm install → 빌드 → Android Studio 열림 → ▶ 실행)
+② 앱을 켜고 웹 AMR 화면 오른쪽 위 [QR] 버튼의 QR 을 찍으면 서버 주소 + 로그인이 한 번에 됨
+   (QR 이 안 되면 6자리 입력, 서버 주소는 잠금 화면의 [서버 설정])
+
+
+확인 순서
+----------------------------------------------------------
+백엔드 실행 → OCR서버_실행.bat → 웹 (관리자 로그인 → AMR 화면) → 웹 배지 "DB 연결" · "OCR 연결" 확인
+→ 앱 QR 로그인 → 앱 홈에 같은 상태가 보이면 연결 완료

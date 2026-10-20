@@ -117,10 +117,10 @@
   background: #f8fafc;
 }
 .notif-item.unread {
-  background: rgba(255, 107, 0, 0.06);
+  background: rgba(201, 151, 47, 0.06);
 }
 .notif-item.unread:hover {
-  background: rgba(255, 107, 0, 0.1);
+  background: rgba(201, 151, 47, 0.1);
 }
 
 .notif-item-top {
