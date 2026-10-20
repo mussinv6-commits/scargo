@@ -46,3 +46,15 @@ amr-app/android/app/build/
 amr-app/android/.gradle/
 amr-app/android/local.properties
 *.apk
+
+# 26.10.20 추가: 문서/영상/정리 파일 제외
+*.pptx
+기술정리/
+메모/
+발표자료/
+회고_QA/
+영상/
+화면_미리보기/
+_안쓰는파일/
+정리하기.bat
+폴더정리.bat
