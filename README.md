@@ -1,6 +1,6 @@
 # 🚛 SafeCargo (SCargo)
 
-> 화물차 게이트 OCR · 검사소 과적 검사 · 출차 관리 통합 시스템
+> 화물차 게이트 OCR · 검사소 과적 검사 · 출차 관리 + 허브 AMR 관제(S-Bot) 통합 시스템
 > 팀 **못먹어도 S카고** — 도로교통 예지보전 팀 프로젝트
 
 게이트에서 화물차 번호판을 AI로 인식해 입차시키고, 검사소에서 축중을 계량해 과적을 판정한 뒤, **과적 검사를 통과한 차량만 출차**시키는 항만·야드용 화물차 관리 시스템입니다.
@@ -38,14 +38,43 @@
 
 ---
 
+## 🤖 S-Bot · 허브 AMR 관제
+
+허브(물류센터) 안에서 AMR(자율 이송 로봇)이 컨테이너·화물을 옮기는 모습을 **3D 디지털 트윈**으로 관제하는 영역입니다. S Cargo(화물차 게이트·과적)와 화면·관리자 계정이 분리되어 있습니다.
+
+| 기능 | 내용 |
+|---|---|
+| 허브 3D 관제 | Three.js 로 허브 구역·AMR·차량 위치를 실시간 표시 |
+| 입출고 흐름 | 게이트 수신함 사진 → 차량 입고 → AMR 이송 → 구역 적재 |
+| 예지보전 | AMR·장비 상태 기반 점검/이상 징후 표시 |
+| 관리자 앱 | `amr-app` (Capacitor Android, "S-Bot 관제") 로 현장에서 확인 |
+
+### 화면 구성 (S Group)
+| 경로 | 화면 | 접근 |
+|---|---|---|
+| `/` | S Group 메인 (로그인, 계열사 선택) | 누구나 |
+| `/scargo` | S Cargo (게이트·과적·관리자·사업자·기사) | S Cargo 계정 |
+| `/sbot` | S-Bot 허브 AMR 관제 | S-Bot 관리자 전용 |
+
+### 관리자 계정 (서버 시작 시 자동 생성)
+| 구분 | 아이디 | 비밀번호 | 접근 범위 |
+|---|---|---|---|
+| S Cargo 관리자 | `admin` | `admin1234` | S Cargo 관리자 화면만 |
+| S-Bot 관리자 | `sbot` | `sbot1234` | S-Bot 화면만 (S Cargo 접근 차단) |
+
+> 현재 분리는 화면(라우터) 기준입니다.
+
+---
+
 ## 🛠 기술 스택
 
 | 구분 | 사용 기술 |
 |---|---|
-| Frontend | Vue 3 (`<script setup>`), Vite, Axios, Leaflet / OpenStreetMap |
+| Frontend | Vue 3 (`<script setup>`), Vite, Axios, Leaflet / OpenStreetMap, Three.js (허브 3D) |
+| App | Capacitor Android (`amr-app`, S-Bot 관제) |
 | Backend | Spring Boot 3.3, Spring Security(세션), JPA, PostgreSQL |
 | AI / OCR | Python, FastAPI, YOLO11, CRNN(Attention), OpenCV, PyTorch |
-| DB | PostgreSQL (`scargo`) |
+| DB | PostgreSQL (`scargo`) — 전체 스크립트: `Scargo_1차2라통합DB테이블/Scargo_최종DB_FINAL_20261020.txt` |
 
 ---
 
@@ -54,7 +83,8 @@
 ```
 SCargo/
 ├─ backend/scargo/   # Spring Boot 백엔드 (포트 8080)
-├─ frontend/         # Vue 프론트엔드 (포트 5173)
+├─ frontend/         # Vue 프론트엔드 (포트 5173) - S Group / S Cargo / S-Bot
+├─ amr-app/          # S-Bot 관제 Android 앱 (Capacitor)
 └─ python/           # 게이트 OCR 서버 gate_api.py (포트 8001)
    └─ 게이트_수신함/   # 게이트 카메라 사진이 들어오는 폴더
 ```
@@ -94,7 +124,7 @@ npm run dev
 | 항목 | 내용 |
 |---|---|
 | JDK | 17 |
-| PostgreSQL | DB `scargo` 생성 (접속 정보는 `application.yml`) — 테이블은 첫 실행 시 자동 생성 |
+| PostgreSQL | DB `scargo` 생성 후 `Scargo_최종DB_FINAL_20261020.txt` 실행 (접속 정보는 `application.yml`, `ddl-auto: none`). 기존 DB 는 `column_fix.sql` 만 실행 |
 | Python | `conda create -n yolo python=3.10` → `pip install -r python/requirements.txt` |
 
 ---
