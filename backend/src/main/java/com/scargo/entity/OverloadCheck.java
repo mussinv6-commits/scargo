@@ -33,16 +33,16 @@ public class OverloadCheck {
     @Column(name = "usage_purpose", length = 50)
     private String usagePurpose; // 차량 용도/목적
 
-    @Column(name = "empty_vehicle_weight")
+    @Column(name = "empty_weight_kg")
     private Integer emptyVehicleWeight; // 공차중량 (kg)
 
-    @Column(name = "total_weight")
+    @Column(name = "total_weight_kg")
     private Integer totalWeight; // 총중량 (kg)
 
-    @Column(name = "max_payload")
+    @Column(name = "max_payload_kg")
     private Integer maxPayload; // 최대적재량 (kg)
 
-    @Column(name = "vgm_weight")
+    @Column(name = "vgm_kg")
     private Integer vgmWeight; // VGM 총중량 (kg)
 
     // 차축 및 타이어 사양

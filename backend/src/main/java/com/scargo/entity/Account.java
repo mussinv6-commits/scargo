@@ -32,13 +32,27 @@ public class Account {
     @Column(name = "user_pw", nullable = false, length = 255)
     private String userPw;
 
+    // 기본값 없이 계정 생성 시 지정
     @Enumerated(EnumType.STRING)
-    @Builder.Default
     @Column(name = "user_type", nullable = false, length = 30)
-    private UserType userType = UserType.GENERAL;
+    private UserType userType;
 
+    // 직접 소속된 운영 계열사
+    // NULL 허용, ADMIN은 DB CHECK 제약으로 필수
+    @Column(name = "operating_company_id")
+    private Long operatingCompanyId;
+
+    // 소속 운송사
     @Column(name = "company_id")
     private Long companyId;
+
+    // HUB_OP의 소속 허브
+    @Column(name = "hub_id")
+    private Long hubId;
+
+    // CENTER_OP의 소속 지역센터
+    @Column(name = "center_id")
+    private Long centerId;
 
     @Column(name = "phone_num", length = 20)
     private String phoneNum;
@@ -47,13 +61,21 @@ public class Account {
     private String businessNo;
 
     // DB의 DEFAULT CURRENT_TIMESTAMP 사용
-    @Column(name = "created_at", insertable = false, updatable = false)
+    @Column(
+            name = "created_at",
+            nullable = false,
+            insertable = false,
+            updatable = false
+    )
     private OffsetDateTime createdAt;
 
     public enum UserType {
-        GENERAL,
-        CORPORATE_PENDING,
-        CORPORATE_APPROVED,
-        ADMIN
+        ADMIN,
+        CONTROL,
+        HUB_OP,
+        CENTER_OP,
+        CONTAINER_DRIVER,
+        LINEHAUL_DRIVER,
+        CORPORATE_APPROVED
     }
 }

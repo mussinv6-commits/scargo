@@ -2,13 +2,6 @@ spring:
   application:
     name: scargo
 
-  # 26.10.06 추가: DevTools 자동 재시작 끄기
-  # (STS 에서 파일이 바뀔 때마다 백엔드가 몰래 재시작 → 로그인 세션이 날아가 "로그인이 필요합니다"가 반복되던 원인)
-  # 코드를 고친 뒤에는 STS 에서 직접 재시작(Relaunch)하면 됨
-  devtools:
-    restart:
-      enabled: false
-
   # PostgreSQL 연결 설정
   datasource:
     url: jdbc:postgresql://localhost:5432/scargo
@@ -19,7 +12,7 @@ spring:
   # JPA 및 Hibernate 설정
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: none # 26.10.20 11차 DB는 SQL로 만든 팀 테이블이라 Hibernate 가 수정하지 않게 함 (우리 테이블은 우리테이블_추가.sql)
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
@@ -41,5 +34,3 @@ server:
   servlet:
     session:
       persistent: false
-      # 26.10.06 추가: 기본 30분 → 12시간 (시연 중 가만히 있어도 로그인이 풀리지 않게)
-      timeout: 12h
