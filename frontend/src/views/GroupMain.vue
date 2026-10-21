@@ -42,10 +42,10 @@
     <p v-else class="hint">들어갈 곳을 선택하세요</p>
     <div class="cards">
       <button type="button" class="card" @click="go('/scargo')">
-        <b>S CARGO</b><span>항만·화물 운송 플랫폼</span>
+        <div class="ti"><svg class="ic" viewBox="-24 -24 48 48"><circle r="22" fill="#0b1d36" stroke="url(#gg)" stroke-width="1.6"/><g transform="translate(-17,-13) scale(.34)"><path d="M0 8 H62 V52 H0Z" fill="#fff"/><path d="M62 20 H88 L100 36 V52 H62Z" fill="#fff"/><path d="M70 26 H84 L92 36 H70Z" fill="#0b1d36"/><circle cx="22" cy="56" r="10" fill="#fff" stroke="#0b1d36" stroke-width="4"/><circle cx="80" cy="56" r="10" fill="#fff" stroke="#0b1d36" stroke-width="4"/><path d="M-4 4 A52 52 0 0 1 104 4" fill="none" stroke="#ff9f1c" stroke-width="7" stroke-linecap="round" transform="translate(0,2) scale(.8) translate(10,4)"/></g></svg><b>S CARGO</b></div><span>항만·화물 운송 플랫폼</span>
       </button>
       <button type="button" class="card" @click="go('/sbot')">
-        <b>S-BOT</b><span>허브 자율 이송 로봇 관제</span>
+        <div class="ti"><svg class="ic" viewBox="-24 -24 48 48"><circle r="22" fill="#0b1d36" stroke="url(#gg)" stroke-width="1.6"/><g transform="translate(-15,-14) scale(.26)"><path d="M18 52 A47 47 0 0 1 112 52" fill="none" stroke="#ff9f1c" stroke-width="9" stroke-linecap="round" transform="translate(0,-4)"/><rect x="46" y="30" width="38" height="26" rx="4" fill="#fff"/><path d="M46 43h38M65 30v26" stroke="#0b1d36" stroke-width="3"/><rect x="22" y="58" width="86" height="30" rx="9" fill="#fff"/><circle cx="40" cy="96" r="11" fill="#fff"/><circle cx="90" cy="96" r="11" fill="#fff"/></g></svg><b>S-BOT</b></div><span>허브 자율 이송 로봇 관제</span>
       </button>
     </div>
   </div>
@@ -142,7 +142,9 @@ function logout() {
 .login .join:hover { color: #f1e2b8; }
 .hint { margin: 2.4vh 0 0; color: #b9a574; letter-spacing: .25em; font-size: 13px; }
 .cards { display: flex; gap: 16px; margin-top: 2.4vh; flex-wrap: wrap; justify-content: center; }
-.card { width: 240px; padding: 12px 16px; border-radius: 14px; border: 1px solid rgba(216,169,78,.55); background: rgba(11,29,54,.7); color: #f1e2b8; cursor: pointer; transition: .2s; }
+.card { width: 250px; padding: 10px 16px; border-radius: 14px; border: 1px solid rgba(216,169,78,.55); background: rgba(11,29,54,.7); color: #f1e2b8; cursor: pointer; transition: .2s; }
+.card .ti { display: flex; align-items: center; justify-content: center; gap: 12px; }
+.card .ic { width: 36px; height: 36px; flex-shrink: 0; }
 .card b { display: block; letter-spacing: .3em; font-size: 14px; }
 .card span { display: block; margin-top: 6px; font-size: 12px; color: #9fb0c6; }
 .card:hover { transform: translateY(-3px); border-color: #f6e4b0; background: rgba(23,50,88,.9); }
