@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"><title>물류센터 관제 3D 미리보기</title>
+<style>
+*{box-sizing:border-box}body{margin:0;overflow:hidden;background:#0a1730;font-family:'Malgun Gothic',sans-serif;color:#e9ebef}
+#top{position:absolute;left:16px;top:12px;color:#f3d27a;font-weight:700;font-size:18px}
+#note{position:absolute;right:16px;top:14px;color:#98a0ad;font-size:12px}
+#hint{position:absolute;left:16px;bottom:14px;color:#98a0ad;font-size:12px}
+#panel{position:absolute;right:16px;top:44px;width:310px;background:rgba(24,28,35,.93);border:1px solid #2a3a58;border-radius:10px;padding:14px;font-size:12px;display:none}
+#panel h3{margin:0 0 10px;color:#f3d27a;font-size:15px}
+.k{display:flex;gap:6px;margin-bottom:10px}.k div{flex:1;background:#222833;border-radius:6px;padding:6px 8px}.k small{color:#98a0ad;display:block}.k b{font-size:15px}
+.sec{color:#98a0ad;margin:10px 0 4px}
+.bars{display:flex;align-items:flex-end;gap:5px;height:70px;border-bottom:1px solid #2a3a58}.bars i{flex:1;background:#5b82c4;border-radius:2px 2px 0 0;position:relative}.bars i.pk{background:#f3d27a}
+.lab{display:flex;gap:5px;color:#98a0ad;font-size:10px}.lab span{flex:1;text-align:center}
+.row{display:flex;align-items:center;gap:8px;margin:4px 0}.row span{width:54px}.row div{height:9px;border-radius:3px;background:#5b82c4}.row em{font-style:normal}
+.row.g div{background:#f0a800}.row.t div{background:#f3d27a}.row.t span,.row.t em{color:#f3d27a;font-weight:700}
+.tk{border-top:1px solid #2a3a58;margin-top:10px;padding-top:6px;line-height:1.7}
+</style></head><body>
+<div id="top">물류센터 관제</div><div id="note">예시 데이터 · 1톤 택배차 기준</div><div id="hint">센터 건물을 클릭하면 정보가 열려요 · 드래그 회전 / 휠 확대</div>
+<div id="panel"></div>
+<script src="shared.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+// ---- 센터 데이터 (예시) : 실제는 shipment_legs / hub_dispatches / toll_payments 에서 조회 ----
+const CEN=[
+ {id:'GG',name:'경기 물류센터',x:14,z:-14,col:0x4aa3ff,css:'#4aa3ff',trk:['11가 1001','11가 1002','11가 1003'],done:1,items:58,hr:[2,4,7,9,10,8,5,3],cat:[24,17,11,6],trips:6,jae:1900,min:1820},
+ {id:'SE',name:'서울 물류센터',x:-42,z:18,col:0xf0a800,css:'#f0a800',trk:['12가 3456','34나 7890','56다 1234'],done:2,items:73,hr:[3,5,8,12,9,6,4,2],cat:[30,22,14,7],trips:6,jae:2330,min:2200},
+ {id:'IC',name:'인천 물류센터',x:-20,z:-52,col:0x4cc38a,css:'#4cc38a',trk:['78라 2001','90마 2002'],done:1,items:41,hr:[1,3,5,7,8,6,4,2],cat:[16,12,8,5],trips:4,jae:3210,min:3100}
+];
+const HRL=[6,8,10,12,14,16,18,20], CATL=['전자제품','의류','식품','기타'];
+const W=()=>innerWidth, H=()=>innerHeight;
+const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setPixelRatio(devicePixelRatio);renderer.setSize(W(),H());renderer.shadowMap.enabled=true;document.body.appendChild(renderer.domElement);
+const AN=renderer.capabilities.getMaxAnisotropy();
+const scene=new THREE.Scene();scene.background=new THREE.Color(0x9cc3ee);scene.fog=new THREE.Fog(0xcfe0f2,130,430);
+const cam=new THREE.PerspectiveCamera(45,W()/H(),.1,600);cam.position.set(-8,88,84);
+const ctl=new THREE.OrbitControls(cam,renderer.domElement);ctl.target.set(-10,0,-8);ctl.maxPolarAngle=1.45;ctl.enableDamping=true;
+const hemi=new THREE.HemisphereLight(0xffffff,0x6f7f6a,.95);scene.add(hemi);
+const sun=new THREE.DirectionalLight(0xaec4ff,.8);sun.position.set(30,60,25);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);Object.assign(sun.shadow.camera,{left:-60,right:60,top:50,bottom:-50,near:1,far:200});sun.shadow.bias=-.0006;scene.add(sun);
+// ---- 바닥/도로 질감: 허브물류관제3D.html 과 동일 (잔디 + 아스팔트 노이즈 텍스처) ----
+function noiseTex(base,lite,dark,size,speck,rx,ry){const c=document.createElement('canvas');c.width=c.height=size;const g=c.getContext('2d');g.fillStyle=base;g.fillRect(0,0,size,size);
+ for(let k=0;k<26;k++){const x=Math.random()*size,y=Math.random()*size,r=size*(.08+Math.random()*.2),gg=g.createRadialGradient(x,y,0,x,y,r);const cc=Math.random()<.5?lite:dark;gg.addColorStop(0,cc+'33');gg.addColorStop(1,cc+'00');g.fillStyle=gg;g.fillRect(x-r,y-r,r*2,r*2)}
+ for(let i=0;i<speck;i++){g.fillStyle=(Math.random()<.5?lite:dark)+(Math.random()<.5?'55':'99');g.fillRect(Math.random()*size,Math.random()*size,1+Math.random()*2,1+Math.random()*2)}
+ const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(rx,ry);t.anisotropy=AN;return t}
+const grassTex=noiseTex('#6b8a4e','#9bb86a','#3f5a33',256,2600,120,120),asphTex=noiseTex('#4a4c51','#8a8d94','#1d1e22',256,2400,1,1);
+const asphMats=[];function asphMat(rx,ry){const t=asphTex.clone();t.needsUpdate=true;t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(rx,ry);t.anisotropy=AN;const m=new THREE.MeshLambertMaterial({map:t,color:0xffffff});asphMats.push(m);return m}
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(900,900),new THREE.MeshLambertMaterial({map:grassTex,color:0xffffff}));ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;scene.add(ground);
+const hillMat=new THREE.MeshLambertMaterial({color:0x5d7a55}),lineWhite=new THREE.MeshBasicMaterial({color:0xe9e9e9,side:THREE.DoubleSide});
+(function(){let sd=11;const r=()=>{sd=(sd*16807)%2147483647;return sd/2147483647};
+ for(let i=0;i<46;i++){const a=Math.PI*(1.05+r()*.9),R=170+r()*110;const h=new THREE.Mesh(new THREE.SphereGeometry(1,18,10),hillMat);h.scale.set(40+r()*60,14+r()*26,30+r()*40);h.position.set(Math.cos(a)*R*1.5,0,Math.sin(a)*R*.9-30);scene.add(h)}})();
+function box(w,h,d,color,x,y,z){const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),new THREE.MeshLambertMaterial({color}));m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;scene.add(m);return m}
+const winMats=[];
+function wallMat(len,h,css){const cw=512,ch=Math.max(96,Math.round(cw*h/len));const c=document.createElement('canvas');c.width=cw;c.height=ch;const g=c.getContext('2d');
+ for(let x=0;x<cw;x+=10){g.fillStyle=(x/10)%2?'#a7acb6':'#bcc1c9';g.fillRect(x,0,10,ch)}
+ g.fillStyle='#6f7580';g.fillRect(0,ch*.9,cw,ch*.1);g.fillStyle=css;g.fillRect(0,ch*.58,cw,ch*.1);
+ const e=document.createElement('canvas');e.width=cw;e.height=ch;const q=e.getContext('2d');q.fillStyle='#000';q.fillRect(0,0,cw,ch);
+ const n=Math.max(3,Math.round(len/2.4)),ww=cw/n*.55,wh=ch*.13;
+ for(let i=0;i<n;i++){const x0=(i+.2)*cw/n,y0=ch*.14;g.fillStyle='#27384f';g.fillRect(x0,y0,ww,wh);if(Math.random()<.7){q.fillStyle='#ffd98a';q.fillRect(x0,y0,ww,wh)}}
+ const t=new THREE.CanvasTexture(c),te=new THREE.CanvasTexture(e);t.anisotropy=AN;
+ const m=new THREE.MeshLambertMaterial({map:t,emissive:0xffffff,emissiveMap:te,emissiveIntensity:.03});winMats.push(m);return m}
+function label(text,color,scale){const c=document.createElement('canvas');c.width=512;c.height=128;const g=c.getContext('2d');g.fillStyle='rgba(8,12,24,.85)';g.fillRect(0,20,512,88);g.strokeStyle=color;g.lineWidth=4;g.strokeRect(2,22,508,84);g.fillStyle='#fff';g.font='700 52px "Noto Sans KR","Malgun Gothic",sans-serif';g.textAlign='center';g.textBaseline='middle';g.fillText(text,256,66);
+ const s=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c),depthTest:false}));s.scale.set(scale*4,scale,1);s.renderOrder=5;return s}
+// ---- 센터 3곳 (건물/하역구/야적장은 허브 HTML 의 building() 방식 그대로, 하역구는 앞쪽(+z)) ----
+const pick=[];
+CEN.forEach(c=>{
+ const w=14,d=9,h=4.2,css=c.css,x=c.x,z=c.z;
+ const yard=new THREE.Mesh(new THREE.PlaneGeometry(24,22),asphMat(5,4.6));yard.rotation.x=-Math.PI/2;yard.position.set(x,.015,z+3);yard.receiveShadow=true;scene.add(yard);
+ const roof=new THREE.MeshLambertMaterial({color:0x8d939c}),mz=wallMat(w,h,css),mx=wallMat(d,h,css);
+ const bm=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),[mx,mx,roof,roof,mz,mz]);bm.position.set(x,h/2,z);bm.castShadow=true;bm.receiveShadow=true;scene.add(bm);bm.userData.c=c;pick.push(bm);
+ box(w+.1,.35,.25,0xa5abb4,x,h+.17,z-d/2);box(w+.1,.35,.25,0xa5abb4,x,h+.17,z+d/2);box(.25,.35,d,0xa5abb4,x-w/2,h+.17,z);box(.25,.35,d,0xa5abb4,x+w/2,h+.17,z);
+ box(2.2,.8,1.6,0x9aa0a8,x+w*.18,h+.4,z+d*.2);box(1.6,.6,1.6,0x9aa0a8,x-w*.2,h+.3,z-d*.18);
+ [-4,0,4].forEach(dx=>{box(3.0,2.4,.25,0x353b46,x+dx,1.2,z+d/2+.05);box(3.5,.2,1.1,0x4a505c,x+dx,2.7,z+d/2+.55);box(3.0,.12,.22,0xe3b505,x+dx,.12,z+d/2+.14)});
+ const lb=label(c.name,css,1.9);lb.position.set(x,h+3.4,z);scene.add(lb);
+ const f=new THREE.Group();f.position.set(x,.16,z+3);scene.add(f);
+ [[0,-11.3,24.4,.4],[0,11.3,24.4,.4],[-12.2,0,.4,22.4],[12.2,0,.4,22.4]].forEach(a=>{const m=new THREE.Mesh(new THREE.BoxGeometry(a[2],.12,a[3]),new THREE.MeshBasicMaterial({color:0xf3d27a,transparent:true,opacity:0}));m.position.set(a[0],0,a[1]);f.add(m)});
+ c.frame=f;
+});
+// ---- 실제 입지처럼 꾸미기: 물류센터는 시가지 바깥쪽. 택배차는 곤지암 허브 → 간선도로 → 센터별 진입로 → 출입구 → 앞마당(하역구) ----
+// 서울 양재동(도시 외곽 · 경부고속도로 뒤편 · 양재천) / 경기 화성 정남(농지 · 소규모 공장) / 인천 남동공단 고잔동(공단 · 서해)
+let sd=7;const rnd=()=>{sd=(sd*16807)%2147483647;return sd/2147483647};
+const TZ=44; // 간선도로 z 위치 (모든 센터 진입로가 여기로 합류)
+const inYard=(x,z,o,m)=>Math.abs(x-o.x)<12+m&&Math.abs(z-(o.z+3))<11+m;
+const onRoad=(x,z,o,m)=>Math.abs(x-o.x)<4+m&&z>o.z+10&&z<TZ+4;
+const onTrunk=(z,m)=>Math.abs(z-TZ)<7+m;
+const ok=(x,z,w,d)=>{const m=Math.max(w,d)/2+2;return !CEN.some(o=>inYard(x,z,o,m)||onRoad(x,z,o,m))&&!onTrunk(z,m)};
+function patch(x,z,w,d,mat,y){const m=new THREE.Mesh(new THREE.PlaneGeometry(w,d),mat);m.rotation.x=-Math.PI/2;m.position.set(x,y||.03,z);m.receiveShadow=true;scene.add(m);return m}
+const lineW=new THREE.MeshBasicMaterial({color:0xe9e9e9,side:2}),lineY=new THREE.MeshBasicMaterial({color:0xe3b505,side:2});
+function lane(x,z,len,vertical,mat){for(let i=1;i<len;i+=3){const d=new THREE.Mesh(new THREE.PlaneGeometry(vertical?.2:1.4,vertical?1.4:.2),mat||lineW);d.rotation.x=-Math.PI/2;d.position.set(vertical?x:x-len/2+i,.07,vertical?z-len/2+i:z);scene.add(d)}}
+const treeM=new THREE.MeshLambertMaterial({color:0x2f6b3a}),trunkM=new THREE.MeshLambertMaterial({color:0x5a4030});
+function tree(x,z,s){s=s||1;const a=new THREE.Mesh(new THREE.CylinderGeometry(.18*s,.24*s,1.2*s,6),trunkM);a.position.set(x,.6*s,z);const b=new THREE.Mesh(new THREE.ConeGeometry(1.3*s,3.4*s,8),treeM);b.position.set(x,2.6*s,z);b.castShadow=true;scene.add(a,b)}
+const bulbM=new THREE.MeshBasicMaterial({color:0x8a8f99}),lampSprites=[];
+const glowTex=(()=>{const c=document.createElement('canvas');c.width=c.height=64;const g=c.getContext('2d'),r=g.createRadialGradient(32,32,0,32,32,32);r.addColorStop(0,'rgba(255,233,168,1)');r.addColorStop(.35,'rgba(255,220,140,.45)');r.addColorStop(1,'rgba(255,220,140,0)');g.fillStyle=r;g.fillRect(0,0,64,64);return new THREE.CanvasTexture(c)})();
+function lamp(x,z){box(.14,3.4,.14,0x555a66,x,1.7,z);const b=new THREE.Mesh(new THREE.BoxGeometry(.7,.14,.3),bulbM);b.position.set(x,3.45,z);scene.add(b);
+ const s=new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex,transparent:true,opacity:0,depthWrite:false,blending:THREE.AdditiveBlending}));s.position.set(x,3.3,z);s.scale.set(7,7,1);scene.add(s);lampSprites.push(s);
+ const pool=new THREE.Mesh(new THREE.CircleGeometry(3.2,16),new THREE.MeshBasicMaterial({map:glowTex,transparent:true,opacity:0,depthWrite:false,blending:THREE.AdditiveBlending}));pool.rotation.x=-Math.PI/2;pool.position.set(x,.09,z);scene.add(pool);lampSprites.push(pool)}
+function tag(txt,css,x,y,z,w){const l=label(txt,css);l.position.set(x,y,z);l.scale.set(w*4,w,1);scene.add(l)}
+const shed=[0x9aa3ad,0xb4a58c,0x8e99a6];
+// 디테일 있는 건물: 창문 줄무늬 벽 · 옥상 난간 · 옥상 설비 · 출입문 · 필요하면 층 띠
+function bld(x,z,w,d,h,css,roofC,door){
+ const roof=new THREE.MeshLambertMaterial({color:roofC||0x8d939c}),mz=wallMat(w,h,css),mx=wallMat(d,h,css);
+ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),[mx,mx,roof,roof,mz,mz]);m.position.set(x,h/2,z);m.castShadow=true;m.receiveShadow=true;scene.add(m);
+ const pc=0xa5abb4;box(w+.1,.35,.25,pc,x,h+.17,z-d/2);box(w+.1,.35,.25,pc,x,h+.17,z+d/2);box(.25,.35,d,pc,x-w/2,h+.17,z);box(.25,.35,d,pc,x+w/2,h+.17,z);
+ box(Math.min(2.2,w*.28),.8,Math.min(1.6,d*.22),0x9aa0a8,x+w*.18,h+.4,z-d*.15);box(1.2,.6,1.2,0x9aa0a8,x-w*.2,h+.3,z+d*.12);
+ if(h>9)box(1.6,2,1.6,0x8d939c,x,h+1,z); // 계단실/기계실
+ if(door){box(2.2,2.2,.2,0x2a3140,x,1.1,z+d/2+.05);box(3,.25,1,0x4a505c,x,2.4,z+d/2+.5)}
+}
+const GG=CEN[0],SE=CEN[1],IC=CEN[2];
+// 간선도로: 곤지암 허브 방면(동쪽)에서 들어와 서쪽으로 이어진다
+patch(2,TZ,150,12,asphMat(26,2),.03);box(150,.4,.3,0x8a8f99,2,.2,TZ-6);box(150,.4,.3,0x8a8f99,2,.2,TZ+6);lane(2,TZ,148,false,lineY);
+for(let x=-66;x<=70;x+=12){lamp(x,TZ-7);lamp(x+6,TZ+7)}
+tag('곤지암 허브 방면 →','#f3d27a',66,4.5,TZ,1.3);
+// 센터 공통: 앞마당 · 주차선 · 울타리 · 출입구(경비실) · 진입로
+CEN.forEach(c=>{
+ patch(c.x,c.z+3,24,22,asphMat(6,5.4),.02);
+ for(let i=-4;i<=4;i++){const s=new THREE.Mesh(new THREE.PlaneGeometry(.15,3.4),lineW);s.rotation.x=-Math.PI/2;s.position.set(c.x+i*2.4,.06,c.z+10.2);scene.add(s)}
+ box(24,1.2,.25,0x8a8f99,c.x,.6,c.z-8);box(.25,1.2,22,0x8a8f99,c.x-12,.6,c.z+3);box(.25,1.2,22,0x8a8f99,c.x+12,.6,c.z+3);
+ box(9,1.2,.25,0x8a8f99,c.x-7.5,.6,c.z+14);box(9,1.2,.25,0x8a8f99,c.x+7.5,.6,c.z+14);
+ box(.5,3.4,.5,0xc9962f,c.x-3.4,1.7,c.z+14);box(.5,3.4,.5,0xc9962f,c.x+3.4,1.7,c.z+14);box(7.3,.5,.5,0xe9eef8,c.x,3.5,c.z+14);
+ box(2.2,2.4,2.2,0xcfd4dc,c.x+6.5,1.2,c.z+12.6);box(2.4,.25,2.4,0x4a505c,c.x+6.5,2.5,c.z+12.6);box(1.2,.9,.1,0x9fc4e8,c.x+6.5,1.5,c.z+11.45); // 경비실
+ tag('출입구','#f3d27a',c.x,5.2,c.z+14,1.1);
+ const len=TZ-(c.z+14);patch(c.x,c.z+14+len/2,7,len,asphMat(2,Math.max(2,len/5)),.03);lane(c.x,c.z+14+len/2,len,true,lineY);
+ for(let z=c.z+20;z<TZ-8;z+=14){lamp(c.x-4.5,z);lamp(c.x+4.5,z+7)}
+});
+// 서울 양재동: 도시 외곽 — 양옆에 중층 건물
+const cityC=['#8a93a3','#b09a78','#6f86a6','#8f98a4','#a88f78'];
+[[-26,-6,9,8,12],[26,-6,8,9,16],[-26,10,9,9,10],[28,12,8,8,14],[26,28,9,8,9],[-12,34,8,7,8],[-26,-16,8,8,18],[26,-14,9,8,11]].forEach((a,i)=>{const x=SE.x+a[0],z=SE.z+a[1];if(ok(x,z,a[2],a[3])&&Math.abs(x-(SE.x-36))>7)bld(x,z,a[2],a[3],a[4],cityC[i%5],0x8d939c,true)});
+for(let i=0;i<8;i++){const x=SE.x-26+i*9,z=SE.z+34;if(ok(x,z,2,2)&&Math.abs(x-(SE.x))>6)tree(x,z,.8)}
+// 경기 화성 정남: 외곽 농공지대 — 소규모 공장 · 숲
+[[-30,-4,12,8],[32,-6,14,8],[-32,22,10,7],[34,24,12,7]].forEach((a,i)=>{const x=GG.x+a[0],z=GG.z+a[1];if(ok(x,z,a[2],a[3]))bld(x,z,a[2],a[3],4.5,['#6d747e','#8a6a4a','#5f7a8c','#7a7f88'][i],shed[i%3],true)});
+for(let i=0;i<40;i++){const x=GG.x+(rnd()-.5)*100,z=GG.z+(rnd()-.5)*84;if(ok(x,z,3,3)&&Math.hypot(x-GG.x,z-(GG.z+3))>17)tree(x,z,.9+rnd()*.6)}
+// 인천 남동공단 고잔동: 공단 공장
+[[-32,0,12,8],[-32,16,12,8],[32,0,12,8],[32,16,12,8],[-48,8,11,8],[48,8,11,8]].forEach((a,i)=>{const x=IC.x+a[0],z=IC.z+a[1];if(ok(x,z,a[2],a[3]))bld(x,z,a[2],a[3],5.5,['#6d747e','#5f7a8c','#8a6a4a'][i%3],shed[i%3],true)});
+for(let i=0;i<10;i++){const x=IC.x+(rnd()-.5)*70,z=IC.z+20+rnd()*10;if(ok(x,z,3,3))tree(x,z,.7)}
+function setSel(c,on){c.frame.children.forEach(m=>m.material.opacity=on?1:0)}
+// ---- 주간/야간 (허브 HTML 의 updEnv 방식) ----
+const mixc=(a,b,n)=>new THREE.Color(a).lerp(new THREE.Color(b),n);
+function updEnv(n){scene.background=mixc('#9cc3ee','#0c1834',n);scene.fog.color.copy(mixc('#cfe0f2','#0c1834',n));ground.material.color.copy(mixc('#ffffff','#1a2038',n));hillMat.color.copy(mixc('#6f8d66','#0f1830',n));hemi.color.copy(mixc('#ffffff','#7f9fe0',n));hemi.groundColor.copy(mixc('#6f7f6a','#0e1424',n));hemi.intensity=.95-.7*n;sun.intensity=.9-.72*n;sun.color.copy(mixc('#ffffff','#7f95d0',n));asphMats.forEach(m=>m.color.copy(mixc('#ffffff','#3b4260',n)));winMats.forEach(m=>m.emissiveIntensity=.03+.9*n);bulbM.color.copy(mixc('#8a8f99','#fff1c0',n));lampSprites.forEach(s=>s.material.opacity=n*.85)}
+const bar=document.createElement('div');bar.style.cssText='position:absolute;left:16px;top:44px;display:flex;border:1px solid #2a3a58;border-radius:7px;overflow:hidden';
+const bs=['주간','야간'].map((t,i)=>{const b=document.createElement('button');b.textContent=t;b.style.cssText='border:0;padding:6px 14px;cursor:pointer;font:inherit;font-size:13px';b.onclick=()=>setMode(i);bar.appendChild(b);return b});
+function setMode(n){updEnv(n);bs.forEach((b,i)=>{b.style.background=i==n?'#f3d27a':'#222833';b.style.color=i==n?'#14203a':'#98a0ad';b.style.fontWeight=i==n?'700':'400'})}
+document.body.appendChild(bar);setMode(0);
+// 카메라 이동: 센터를 누르면 그 센터로 부드럽게 다가가고, '전체 보기'로 처음 시점으로 돌아간다
+let fly=null;
+function flyTo(p,t){fly={p0:cam.position.clone(),t0:ctl.target.clone(),p1:p,t1:t,s:performance.now(),d:1100}}
+const OV={p:new THREE.Vector3(-8,88,84),t:new THREE.Vector3(-10,0,-8)};
+function focus(c){flyTo(new THREE.Vector3(c.x+16,36,c.z+44),new THREE.Vector3(c.x,2,c.z))}
+const ob=document.createElement('button');ob.textContent='전체 보기';ob.style.cssText='position:absolute;left:150px;top:44px;border:1px solid #2a3a58;border-radius:7px;background:#222833;color:#e6eff7;padding:6px 14px;cursor:pointer;font:inherit;font-size:13px';ob.onclick=()=>flyTo(OV.p.clone(),OV.t.clone());document.body.appendChild(ob);
+// ---- 패널 ----
+const P=document.getElementById('panel'),F=n=>n.toLocaleString();
+// 센터 정보는 공용 데이터(shared.js: 택배 이동 화면이 도착할 때마다 기록)를 읽는다. 없으면 예시값.
+const KEYS={GG:'GGI',SE:'SEL',IC:'ICN'};let cur=null;
+function data(c){const s=window.SBOT&&SBOT.load().centers[KEYS[c.id]];if(s)return s;const base=(c.jae+c.min)*c.trips;return {trips:c.trips,items:c.items,base,fin:Math.round(base*.5),hr:c.hr,cat:c.cat,trucks:c.trk.map((n,i)=>({no:n,state:i<c.done?'입고 완료':'이동 중',items:0}))}}
+function show(c){cur=c;CEN.forEach(o=>setSel(o,false));setSel(c,true);
+ const s=data(c),mx=Math.max(1,...s.hr),cm=Math.max(1,...s.cat),dis=s.base-s.fin,done=s.trucks.filter(t=>t.state==='입고 완료').length,avg=Math.round(s.base/Math.max(1,s.trips));
+ P.style.display='block';P.innerHTML=`<h3>${c.name} · 오늘</h3>
+ <div class="k"><div><small>배정 택배차</small><b>${s.trucks.length}대</b></div><div><small>입고 완료</small><b>${done}대</b></div><div><small>운송 물품</small><b>${s.items}건</b></div></div>
+ <div class="sec">시간대별 입고 (건)</div><div class="bars">${s.hr.map(v=>`<i class="${v==mx?'pk':''}" style="height:${v/mx*100}%"></i>`).join('')}</div><div class="lab">${HRL.map(h=>`<span>${h}</span>`).join('')}</div>
+ <div class="sec">운송 물품 구성</div>${s.cat.map((v,i)=>`<div class="row"><span>${CATL[i]}</span><div style="width:${v/cm*130}px"></div><em>${v}</em></div>`).join('')}
+ <div class="sec">하루 합산 통행료 (${s.trips}회 · 1회 기본 ${F(avg)}원)</div>
+ <div class="row"><span>기본 요금</span><div style="width:130px"></div><em>${F(s.base)}</em></div>
+ <div class="row g"><span>심야할인 50%</span><div style="width:${dis/Math.max(1,s.base)*130}px"></div><em>-${F(dis)}</em></div>
+ <div class="row t"><span>확정</span><div style="width:${s.fin/Math.max(1,s.base)*130}px"></div><em>${F(s.fin)}</em></div>
+ <div class="tk"><div class="sec" style="margin:0">배정 택배차</div>${s.trucks.map(t=>`${t.no} · ${t.state}${t.items?' · '+t.items+'건':''}`).join('<br>')}</div>`}
+setInterval(()=>{if(cur)show(cur)},1500);addEventListener('storage',()=>{if(cur)show(cur)});
+const ray=new THREE.Raycaster(),mv=new THREE.Vector2();let dn=null;
+renderer.domElement.addEventListener('pointerdown',e=>dn=[e.clientX,e.clientY]);
+renderer.domElement.addEventListener('pointerup',e=>{if(!dn||Math.hypot(e.clientX-dn[0],e.clientY-dn[1])>5)return;mv.set(e.clientX/W()*2-1,-(e.clientY/H())*2+1);ray.setFromCamera(mv,cam);const h=ray.intersectObjects(pick)[0];if(h){show(h.object.userData.c);focus(h.object.userData.c)}});
+addEventListener('resize',()=>{renderer.setSize(W(),H());cam.aspect=W()/H();cam.updateProjectionMatrix()});
+const qc=new URLSearchParams(location.search).get('c');{const c0=CEN.find(c=>c.id===({GGI:'GG',SEL:'SE',ICN:'IC'})[qc]);show(c0||CEN[1]);if(c0)focus(c0)}
+(function loop(){requestAnimationFrame(loop);if(fly){let k=Math.min(1,(performance.now()-fly.s)/fly.d);k=k<.5?4*k*k*k:1-Math.pow(-2*k+2,3)/2;cam.position.lerpVectors(fly.p0,fly.p1,k);ctl.target.lerpVectors(fly.t0,fly.t1,k);if(k>=1)fly=null}ctl.update();renderer.render(scene,cam)})();
+</script></body></html>

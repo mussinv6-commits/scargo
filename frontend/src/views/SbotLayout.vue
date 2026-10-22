@@ -3,8 +3,12 @@
   <div class="sb-shell">
     <header class="sb-top">
       <RouterLink to="/sbot" class="sb-brand"><img :src="logo" alt="S-Bot" /></RouterLink>
-      <span class="sb-title">허브 AMR 관제</span>
+      <span class="sb-title">S-Bot 대시보드</span>
       <nav class="sb-nav">
+        <RouterLink to="/sbot">대시보드</RouterLink>
+        <RouterLink to="/sbot/hub">허브 관제</RouterLink>
+        <RouterLink to="/sbot/move">택배 이동</RouterLink>
+        <RouterLink to="/sbot/center">물류센터</RouterLink>
         <RouterLink to="/">홈</RouterLink>
         <span class="sb-user" v-if="authState.user">{{ authState.user.userName }}님</span>
         <a href="#" @click.prevent="logout">로그아웃</a>
@@ -15,6 +19,7 @@
 </template>
 
 <script setup>
+import { onMounted } from "vue";
 import { useRouter } from "vue-router";
 import axios from "axios";
 import { authState, clearLogin } from "@/auth/authState.js";
@@ -22,6 +27,13 @@ import { API_BASE } from "@/utils/apiBase.js";
 import logo from "@/assets/sbot_logo.png";
 
 const router = useRouter();
+// 26.10.22: 센터별 입고 · 통행료 공용 데이터(대시보드 · 택배 이동 · 물류센터 공유). S-Bot 화면이 열려 있는 동안 자동으로 진행된다
+onMounted(() => {
+  if (window.SBOT) return;
+  const s = document.createElement("script");
+  s.src = "/sbot3d/shared.js";
+  document.head.appendChild(s);
+});
 function logout() {
   axios.post(`${API_BASE}/api/accounts/logout`, {}, { withCredentials: true })
     .catch(() => {})

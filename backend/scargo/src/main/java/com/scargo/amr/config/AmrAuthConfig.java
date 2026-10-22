@@ -1,6 +1,7 @@
 package com.scargo.amr.config;
 
 import com.scargo.amr.service.AmrAuthService;
+import com.scargo.security.AuthenticatedAccountPrincipal;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -32,6 +33,11 @@ public class AmrAuthConfig implements WebMvcConfigurer {
         Authentication a = SecurityContextHolder.getContext().getAuthentication();
         if (a == null || !a.isAuthenticated()) return null;
         boolean admin = a.getAuthorities().stream().anyMatch((g) -> "ROLE_ADMIN".equals(g.getAuthority()));
+        // 26.10.22 S-Bot 관리자: 아이디가 sbot 으로 시작하면 (계정 권한이 ADMIN 이 아니어도) AMR · S-Bot API 를 쓸 수 있다
+        if (!admin && a.getPrincipal() instanceof AuthenticatedAccountPrincipal p && p.getUserId() != null
+                && p.getUserId().toLowerCase().startsWith("sbot")) {
+            admin = true;
+        }
         return admin ? a.getName() : null;
     }
 

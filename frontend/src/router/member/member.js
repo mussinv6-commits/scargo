@@ -4,6 +4,8 @@ import home from "@/components/home.vue"; // @/ 기본경로인 src가 된다
 import GroupMain from "@/views/GroupMain.vue"; // 26.10.20 추가: S그룹 메인
 import SbotLayout from "@/views/SbotLayout.vue"; // 26.10.20 추가: S-Bot 전용 셸
 import AdminAmrTwin from "@/components/admin/screens/AdminAmrTwin.vue";
+import SbotDashboard from "@/views/SbotDashboard.vue"; // 26.10.22 추가: S-Bot 대시보드
+import SbotFrame from "@/views/SbotFrame.vue"; // 26.10.22 추가: 택배 이동/물류센터 3D 화면
 import login from "@/components/member/login.vue";
 import regi from "../../components/member/regi.vue";
 // 26.09.16: driver.vue(대시보드)는 MY/차량 화면(driver/screens/MyPage.vue)으로 기능 통합 후 제거.
@@ -24,7 +26,12 @@ export default [
         path:'/sbot', // 26.10.20: S-Bot 은 S Cargo 관리자 화면과 분리 (관리자 전용)
         component:SbotLayout,
         meta:{ requiresSbotAdmin:true },
-        children:[{ path:'', name:'sbot', component:AdminAmrTwin }]
+        children:[
+            { path:'', name:'sbot', component:SbotDashboard }, // 26.10.22: /sbot 은 대시보드, 허브 AMR 관제는 /sbot/hub
+            { path:'hub', name:'sbot-hub', component:AdminAmrTwin },
+            { path:'move', name:'sbot-move', component:SbotFrame, props:{ page:'move', title:'택배 이동' } },
+            { path:'center', name:'sbot-center', component:SbotFrame, props:{ page:'center', title:'물류센터 관제' } },
+        ]
     },
     {
         path:'/login',

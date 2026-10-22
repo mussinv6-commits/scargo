@@ -27,6 +27,7 @@
       <path d="M 30.6 -65.7 A 40 40 0 1 0 0 0 A 40 40 0 1 1 -30.6 65.7" fill="none" stroke="#0b1d36" stroke-width="1.6" stroke-linecap="round"/>
       <circle cx="30.6" cy="-65.7" r="4.2" fill="#0b1d36" stroke="url(#gg2)" stroke-width="1.6"/>
       <circle cx="-30.6" cy="65.7" r="4.2" fill="#0b1d36" stroke="url(#gg2)" stroke-width="1.6"/>
+      <circle r="74" fill="transparent" style="cursor:pointer" @click="openCredits"><title>S GROUP 연혁</title></circle>
     </svg>
     <p v-if="msg" class="msg">{{ msg }}</p>
     <h1 class="name">S&nbsp;GROUP</h1>
@@ -48,15 +49,82 @@
         <div class="ti"><svg class="ic" viewBox="-24 -24 48 48"><circle r="22" fill="#0b1d36" stroke="url(#gg)" stroke-width="1.6"/><g transform="translate(-15,-14) scale(.26)"><path d="M18 52 A47 47 0 0 1 112 52" fill="none" stroke="#ff9f1c" stroke-width="9" stroke-linecap="round" transform="translate(0,-4)"/><rect x="46" y="30" width="38" height="26" rx="4" fill="#fff"/><path d="M46 43h38M65 30v26" stroke="#0b1d36" stroke-width="3"/><rect x="22" y="58" width="86" height="30" rx="9" fill="#fff"/><circle cx="40" cy="96" r="11" fill="#fff"/><circle cx="90" cy="96" r="11" fill="#fff"/></g></svg><b>S-BOT</b></div><span>허브 자율 이송 로봇 관제</span>
       </button>
     </div>
+    <div v-if="credits" class="cred" @click="credits=false">
+      <canvas ref="fx" class="fx"></canvas>
+      <button type="button" class="cclose" @click.stop="credits=false">닫기 ✕</button>
+      <div class="roll" @animationend="endCard()">
+        <p class="c-logo">S&nbsp;GROUP</p>
+        <p class="c-slogan">{{ SLOGAN }}</p>
+        <template v-for="sec in CREDITS" :key="sec.title">
+          <h3>{{ sec.title }}</h3>
+          <p v-for="(l,i) in sec.lines" :key="i" :class="{ 'c-row': l.length===2 }">
+            <template v-if="l.length===2"><b>{{ l[0] }}</b><span>{{ l[1] }}</span></template>
+            <template v-else>{{ l[0] }}</template>
+          </p>
+        </template>
+        <p class="c-end">S&nbsp;GROUP</p>
+      </div>
+      <div v-if="ended" class="endcard">
+        <div class="et">
+          <h2>못먹어도 S카고</h2>
+          <i></i>
+          <p>AI 기반 항만 화물차 예지보전 시스템</p>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { computed, ref } from "vue";
+import { computed, ref, nextTick, onBeforeUnmount } from "vue";
 import { useRouter } from "vue-router";
 import axios from "axios";
 import { authState, clearLogin, setLogin } from "@/auth/authState.js";
 import { API_BASE } from "@/utils/apiBase.js";
+
+
+// ===== 회사 연혁(엔딩 크레딧) - 문구는 여기서 수정 =====
+const SLOGAN = "CONNECTING EVERY FLOW OF LOGISTICS";
+const CREDITS = [
+  { title: "ABOUT", lines: [["화물 운송부터 허브 자동화까지, 물류의 모든 흐름을 하나로 잇습니다"], ["창립", "2026년 10월 1일"], ["구성", "S CARGO · S-BOT"]] },
+  { title: "VISION", lines: [["항만에서 집 앞까지, 끊김 없는 스마트 물류"]] },
+  { title: "CORE VALUES", lines: [["연결", "모든 흐름을 하나로"], ["정확", "데이터로 판정한다"], ["도전", "못 먹어도 고"]] },
+  { title: "HISTORY", lines: [["2026.09", "프로젝트 시작 · 번호판 인식 모델 설계 · 인천신항 방문"], ["2026.10.01", "S Group 창립 · 화물차 번호판 인식 · 게이트 입차"], ["2026.10.07", "1차 발표"], ["2026.10.13", "2차 범위 확정 · 하이패스 방식 결정"], ["2026.10.15", "허브 AMR 관제 도입"], ["2026.10.20", "S Group 메인 출범 · S Cargo / S-Bot 분리"]] },
+  { title: "TEAM", lines: [["CEO", "최길웅"], ["CIO", "김태수"], ["COO", "정예지"], ["CSO", "이한솔"]] },
+];
+const credits = ref(false);
+const ended = ref(false);
+const fx = ref(null);
+let endTimer = null, raf = 0;
+function startFx() {
+  const c = fx.value; if (!c) return;
+  const ctx = c.getContext("2d");
+  const W = (c.width = window.innerWidth), H = (c.height = window.innerHeight);
+  const ps = Array.from({ length: 120 }, () => ({ x: Math.random() * W, y: Math.random() * H, r: Math.random() * 3 + 0.8, v: Math.random() * 0.35 + 0.08, a: Math.random() * 0.6 + 0.2, t: Math.random() * 6 }));
+  let tm = 0;
+  const loop = () => {
+    if (!fx.value) return;
+    tm += 0.012; ctx.clearRect(0, 0, W, H);
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    for (let i = 0; i < 5; i++) {
+      const x = W * (0.1 + i * 0.22) + Math.sin(tm + i) * 40;
+      const g = ctx.createLinearGradient(x, 0, x + W * 0.25, H);
+      g.addColorStop(0, "rgba(70,140,210,.20)"); g.addColorStop(1, "rgba(70,140,210,0)");
+      ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x + 90, 0); ctx.lineTo(x + W * 0.25 + 160, H); ctx.lineTo(x + W * 0.25, H); ctx.fill();
+    }
+    ctx.restore();
+    for (const p of ps) {
+      p.y -= p.v; p.x += Math.sin(tm + p.t) * 0.15; if (p.y < -5) { p.y = H + 5; p.x = Math.random() * W; }
+      ctx.globalAlpha = p.a * (0.6 + 0.4 * Math.sin(tm * 2 + p.t));
+      ctx.fillStyle = "#cfe6ff"; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 6.283); ctx.fill();
+    }
+    ctx.globalAlpha = 1; raf = requestAnimationFrame(loop);
+  };
+  loop();
+}
+function openCredits() { ended.value = false; credits.value = true; nextTick(startFx); }
+function endCard() { ended.value = true; clearTimeout(endTimer); endTimer = setTimeout(() => { credits.value = false; }, 7000); }
+onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(endTimer); });
 
 const router = useRouter();
 const msg = ref("");
@@ -148,4 +216,23 @@ function logout() {
 .card b { display: block; letter-spacing: .3em; font-size: 14px; }
 .card span { display: block; margin-top: 6px; font-size: 12px; color: #9fb0c6; }
 .card:hover { transform: translateY(-3px); border-color: #f6e4b0; background: rgba(23,50,88,.9); }
+
+.cred { position: fixed; inset: 0; z-index: 50; overflow: hidden; background: #070f1d url('@/assets/end_scene.jpg') center / cover no-repeat; cursor: pointer; }
+.fx { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.cclose { position: absolute; top: 16px; right: 22px; z-index: 2; background: transparent; color: #f1e2b8; border: 1px solid rgba(216,169,78,.5); border-radius: 999px; padding: 6px 14px; cursor: pointer; }
+.roll { position: absolute; left: 50%; top: 0; width: min(640px, 90vw); transform: translate(-50%, 100vh); text-align: center; color: #e9d9ad; animation: roll 30s linear forwards; padding-bottom: 40vh; }
+.endcard { position: absolute; inset: 0; z-index: 1; background: rgba(7,15,29,.55); display: flex; align-items: center; justify-content: center; animation: endIn 2s ease forwards; }
+.et { text-align: center; color: #fff; opacity: 0; animation: endIn 2s ease 1.2s forwards; }
+.et h2 { margin: 0; font-size: 44px; font-weight: 700; letter-spacing: .06em; }
+.et i { display: block; width: 150px; height: 2px; margin: 14px auto; background: #d8a94e; }
+.et p { margin: 0; font-size: 15px; color: #b9c8dc; letter-spacing: .12em; }
+@keyframes endIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes roll { from { transform: translate(-50%, 100vh); } to { transform: translate(-50%, -100%); } }
+.roll h3 { margin: 90px 0 22px; font-family: "Cormorant Garamond", "Times New Roman", serif; font-weight: 500; letter-spacing: .5em; font-size: 20px; color: #d8a94e; }
+.roll p { margin: 10px 0; font-size: 17px; line-height: 1.7; letter-spacing: .06em; }
+.c-logo, .c-end { font-family: "Cormorant Garamond", "Times New Roman", serif; font-size: 44px !important; letter-spacing: .6em !important; color: #f1e2b8; margin-top: 40px !important; }
+.c-slogan { letter-spacing: .3em !important; font-size: 13px !important; color: #8f9cb0; }
+.c-row { display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center; margin: 18px 0 !important; }
+.c-row b { min-width: 0; font-weight: 500; letter-spacing: .25em; color: #f1e2b8; }
+.c-row span { color: #c9d3e3; font-size: 15px; }
 </style>
