@@ -215,6 +215,15 @@ export function createSim(hooks = {}) {
     if (full < 0.25) preferIn = true
     return preferIn ? tryIn(a) || tryOut(a) : tryOut(a) || tryIn(a)
   }
+  function dropBrokenTask(a) {
+    const t = a.task
+    if (t) {
+      if (t.type === 'out' && t.slot) { const sl = slotAt(t.slot); if (sl && sl.st === 3) sl.st = sl.box ? 1 : 0 }
+      if (t.dock && t.dock.res > 0) t.dock.res--
+    }
+    a.task = null; a.box = a.box || null
+    afterTask(a)
+  }
   function doPick(a) {
     const t = a.task, c = t.box
     if (t.type === 'in') { t.dock.cargo.splice(t.dock.cargo.indexOf(c), 1); S.scans.unshift({ t: S.simT, c }); S.scans = S.scans.slice(0, 4); S.scanVer++ }
@@ -449,6 +458,8 @@ export function createSim(hooks = {}) {
     return [P('turn', 0.7), P('in', 0.7), P('grab', 0.5), P('out', 0.7), P('up', up), P('in', 0.7), P('drop', 0.4), P('out', 0.7), P('down', up)]
   }
   function flWork(a, dt) {
+    // 26.10.24 방어: 작업 계획(fw)이 없거나 끝난 상태로 fwork 에 들어오면 시뮬레이션 전체가 멈추므로 대기로 복귀시킨다
+    if (!a.fw || !a.task || !a.fw.list[a.fw.idx]) { a.fw = null; a.task = null; a.forkH = 0; a.reach = 0; a.state = 'idle'; a.wait = 1; return }
     const fw = a.fw, ph = fw.list[fw.idx], t = a.task
     fw.t += dt
     const k = Math.min(1, fw.t / ph.d)
@@ -463,12 +474,18 @@ export function createSim(hooks = {}) {
     const sl = slotAt(t.slot), u = upperAt(t.slot.r, t.slot.s, t.slot.i, t.lv), c = t.box
     if (ph.k === 'grab') {
       if (t.type === 'repl') { u.box = null } else { sl.box = null }
-      c.loc = { type: 'amr', a }; a.box = c; a.lastBox = c; S.upperVer++
+      c.loc = { type: 'amr', a }; a.box = c; a.lastBox = c; a.pickedAt = new Date().toISOString(); S.upperVer++
     }
     if (ph.k === 'drop') {
       if (t.type === 'repl') { sl.box = c; sl.st = 1; c.loc = { type: 'slot', ...t.slot }; u.res = false; addLog('FL-01 보충 · ' + ZONES[t.slot.r].tag + '-' + String(t.slot.i + 1).padStart(2, '0') + ' ' + (t.lv + 2) + '단 → 바닥 칸', '') }
       else { u.box = c; u.res = false; sl.st = 0; c.loc = { type: 'upper', ...t.slot, lv: t.lv }; addLog('FL-01 적치 · 바닥 칸 → ' + ZONES[t.slot.r].tag + '-' + String(t.slot.i + 1).padStart(2, '0') + ' ' + (t.lv + 2) + '단', '') }
       a.cumKg += c.w; a.box = null; S.upperVer++
+      // 지게차 작업(보충/적치) 1건도 운반 기록으로 남긴다 → 대시보드 장비별 처리 현황에 FL-01 이 나온다
+      const up = ZONES[t.slot.r].tag + '-' + String(t.slot.i + 1).padStart(2, '0') + ' ' + (t.lv + 2) + '단'
+      onEvent('move', { code: a.name, waybillNo: c.id, taskType: t.type === 'repl' ? 'OUT' : 'IN',
+        fromLoc: t.type === 'repl' ? up : '바닥 칸', toLoc: t.type === 'repl' ? '바닥 칸' : up,
+        hub: c.handle === '냉장' ? '냉장' : (HUBS[c.hub] ? HUBS[c.hub].name : null), handleType: c.handle, weightKg: c.w, barcode: c.ean,
+        interWaitSec: 0, startedAt: a.pickedAt, finishedAt: new Date().toISOString() })
     }
     fw.idx++; fw.t = 0; fw.from = a.forkH
     if (fw.idx >= fw.list.length) { a.fw = null; a.task = null; a.forkH = 0; a.reach = 0; a.state = 'idle'; a.wait = 0.8 }
@@ -488,7 +505,7 @@ export function createSim(hooks = {}) {
           // 랙 방향 (s=0: 통로 남쪽 랙, s=1: 통로 북쪽 랙)
           const s = a.task.slot.s
           a.fx = 0; a.fy = s === 0 ? 1 : -1
-          a.state = 'fwork'; a.fw = { list: flPlan(a), idx: 0, t: 0, from: 0, face: Math.atan2(a.fy, a.fx) }
+          a.fw = { list: flPlan(a), idx: 0, t: 0, from: 0, face: Math.atan2(a.fy, a.fx) }; a.state = 'fwork'
         }
         break
       case 'fwork': flWork(a, dt); break
@@ -516,8 +533,13 @@ export function createSim(hooks = {}) {
         break
       case 'toPick': case 'toDrop': case 'toMaint': case 'toHome':
         move(a, dt); if (!a.path.length) arrive(a); break
-      case 'load': a.timer -= dt; if (a.timer <= 0) { doPick(a); goTo(a, a.task.to, 'toDrop') } break
-      case 'unload': a.timer -= dt; if (a.timer <= 0) { doDrop(a); a.task = null; afterTask(a) } break
+      // 26.10.24 방어: 집으러 가는 사이 대상 화물이 사라진 작업(task.box 없음)은 오류로 시뮬레이션을 멈추지 말고 취소한다
+      case 'load': a.timer -= dt; if (a.timer <= 0) {
+        if (!a.task || !a.task.box) { dropBrokenTask(a); break }
+        doPick(a); goTo(a, a.task.to, 'toDrop') } break
+      case 'unload': a.timer -= dt; if (a.timer <= 0) {
+        if (!a.task || !a.box) { dropBrokenTask(a); break }
+        doDrop(a); a.task = null; afterTask(a) } break
       case 'maint': a.timer -= dt; if (a.timer <= 0) repair(a); break
     }
     sensors(a, dt)

@@ -3,6 +3,8 @@ export const COMPANY_MENU = [
   { to: '/company', label: '대시보드', icon: 'bi-house-door-fill', exact: true },
   { to: '/company/mapping', label: '운송 관리', icon: 'bi-truck' },
   { to: '/company/container-locations', label: '컨테이너 위치 조회', icon: 'bi-geo-alt' },
+  { to: '/company/inspections', label: '컨테이너 점검표', icon: 'bi-clipboard-check' }, // 26.10.23
+  { to: '/company/gate-reservations', label: '게이트 사전 예약', icon: 'bi-calendar-check' }, // 26.10.24
   { to: '/company/trucks/new', label: '차량 관리', icon: 'bi-truck-front' },
   { to: '/company/drivers', label: '기사 관리', icon: 'bi-person-badge' },
   { to: '/company/info', label: '업체 정보', icon: 'bi-building' },

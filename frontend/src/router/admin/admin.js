@@ -16,6 +16,14 @@ import AdminProfile from "@/components/admin/screens/AdminProfile.vue";
 import AdminNoticeList from "@/components/admin/screens/AdminNoticeList.vue";
 import AdminNoticeDetail from "@/components/admin/screens/AdminNoticeDetail.vue";
 import AdminNoticeForm from "@/components/admin/screens/AdminNoticeForm.vue";
+import AdminInspections from "@/components/admin/screens/AdminInspections.vue"; // 26.10.23 컨테이너 점검표
+import AdminDailyReport from "@/components/admin/screens/AdminDailyReport.vue"; // 26.10.24 일일 처리량 보고서
+import AdminOpsBoard from "@/components/admin/screens/AdminOpsBoard.vue"; // 26.10.24 운영 현황판
+import AdminIncidents from "@/components/admin/screens/AdminIncidents.vue"; // 26.10.24 예외·사고 접수
+import AdminOpsCenter from "@/components/admin/screens/AdminOpsCenter.vue"; // 26.10.24 운영 센터(탭 묶음)
+import AdminKpi from "@/components/admin/screens/AdminKpi.vue"; // 26.10.24
+import AdminGateReservations from "@/components/admin/screens/AdminGateReservations.vue"; // 26.10.24
+import AdminCenterReceipts from "@/components/admin/screens/AdminCenterReceipts.vue"; // 26.10.23 지역센터 인수 확정
 import AdminAmrTwin from "@/components/admin/screens/AdminAmrTwin.vue"; // 26.10.08 추가: 허브 AMR 3D 관제
 
 // 관리자 전용 화면 묶음. 실제 접근 제어(로그인/ADMIN 권한 체크)는
@@ -32,6 +40,14 @@ export default [
       { path: "trucks", name: "admin-trucks", component: AdminTrucks },
       { path: "containers", name: "admin-containers", component: AdminContainers },
       { path: "container-locations", name: "admin-container-locations", component: AdminContainerLocations },
+      { path: "inspections", name: "admin-inspections", component: AdminInspections },
+      { path: "daily-report", name: "admin-daily-report", component: AdminDailyReport }, // 26.10.24
+      { path: "ops-board", name: "admin-ops-board", component: AdminOpsBoard }, // 26.10.24
+      { path: "incidents", name: "admin-incidents", component: AdminIncidents }, // 26.10.24
+      { path: "ops-center", name: "admin-ops-center", component: AdminOpsCenter }, // 26.10.24
+      { path: "kpi", name: "admin-kpi", component: AdminKpi }, // 26.10.24
+      { path: "gate-reservations", name: "admin-gate-reservations", component: AdminGateReservations }, // 26.10.24
+      { path: "center-receipts", name: "admin-center-receipts", component: AdminCenterReceipts },
       { path: "yards", name: "admin-yards", component: AdminYards },
       { path: "loading-locations", name: "admin-loading-locations", component: AdminLoadingLocations },
       { path: "loading-records", name: "admin-loading-records", component: AdminLoadingRecords },

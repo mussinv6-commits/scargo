@@ -7,6 +7,7 @@ import DispatchList from "@/components/driver/screens/DispatchList.vue";
 import Settlement from "@/components/driver/screens/Settlement.vue";
 import MyPage from "@/components/driver/screens/MyPage.vue";
 import DriverInfo from "@/components/driver/screens/DriverInfo.vue";
+import ContainerInspection from "@/components/driver/screens/ContainerInspection.vue"; // 26.10.23 컨테이너 점검표
 
 export default [
   {
@@ -19,6 +20,7 @@ export default [
       { path: "dispatch-list", name: "driver-app-dispatch-list", component: DispatchList },
       { path: "settlement", name: "driver-app-settlement", component: Settlement },
       { path: "my-page", name: "driver-app-my-page", component: MyPage },
+      { path: "inspection", name: "driver-app-inspection", component: ContainerInspection }, // 26.10.23 컨테이너 기사 7-point 점검
       { path: "faq", name: "driver-app-faq", component: DriverInfo, meta: { title: "자주 묻는 질문" } },
       { path: "support", name: "driver-app-support", component: DriverInfo, meta: { title: "고객센터 문의" } },
       { path: "terms", name: "driver-app-terms", component: DriverInfo, meta: { title: "약관 및 정책" } },

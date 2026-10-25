@@ -8,6 +8,7 @@ import com.scargo.amr.repository.AmrRobotRepository;
 import com.scargo.amr.repository.AmrTaskLogRepository;
 import com.scargo.amr.repository.AmrTelemetryRepository;
 import com.scargo.amr.repository.HubVehicleLogRepository;
+import com.scargo.amr.security.AmrAccessPolicy.Access;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,9 +34,9 @@ public class AmrKpiService {
     private final HubVehicleLogRepository vehicleLogRepo;
 
     @Transactional
-    public Map<String, Object> saveTask(TaskRequest req) {
+    public Map<String, Object> saveTask(Long hubId, TaskRequest req) {
         AmrTaskLog t = new AmrTaskLog();
-        t.setHubId(amr.hubId()); t.setRobotCode(req.code() == null ? "-" : req.code());
+        t.setHubId(amr.hub(hubId, Access.MANAGE)); t.setRobotCode(req.code() == null ? "-" : req.code());
         t.setTaskType("OUT".equalsIgnoreCase(req.taskType()) ? "OUT" : "IN");
         t.setWaybillNo(req.waybillNo()); t.setBarcode(req.barcode()); t.setDestHub(req.hub()); t.setHandleType(req.handleType());
         t.setWeightKg(req.weightKg()); t.setFromLoc(req.fromLoc()); t.setToLoc(req.toLoc()); t.setInterWaitSec(req.interWaitSec());
@@ -46,8 +47,8 @@ public class AmrKpiService {
     }
 
     @Transactional(readOnly = true)
-    public KpiView kpi() {
-        Long hub = amr.hubId();
+    public KpiView kpi(Long hubId) {
+        Long hub = amr.hub(hubId, Access.VIEW);
         ZonedDateTime now = ZonedDateTime.now(KST);
         OffsetDateTime today0 = now.toLocalDate().atStartOfDay(KST).toOffsetDateTime();
         OffsetDateTime yest0 = today0.minusDays(1), yestNow = now.toOffsetDateTime().minusDays(1);

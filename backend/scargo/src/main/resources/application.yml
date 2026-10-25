@@ -2,11 +2,27 @@ spring:
   application:
     name: scargo
 
+  # 26.10.24 기본 dev 프로필: 시드 계정(admin01 등) 비밀번호를 test1234 로 맞춤. 운영에서는 SCARGO_PROFILE 로 바꿀 것
+  profiles:
+    active: ${SCARGO_PROFILE:dev}
+
+  # 26.10.24 로컬 DB 접속 설정 파일(선택): 실행 폴더(backend/scargo)의 application-local.yml 이 있으면 읽는다
+  #  (application-local.yml.example 참고, 공유 금지). 이 파일 값이 아래 SCARGO_DB_* 환경변수 값보다 우선
+  config:
+    import: optional:file:./application-local.yml
+
+  # 26.10.24 사진 첨부(점검표 손상 사진): 사진 1장 5MB, 한 번에 6MB까지
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
+
   # PostgreSQL 연결 설정
+  # 26.10.24 팀 공유본: 접속 정보는 환경변수로 지정 (README 11장). 기본 대상은 작업 DB scargo (DB 하나만 사용), 비밀번호 기본값 없음
   datasource:
-    url: jdbc:postgresql://localhost:5432/scargo
-    username: postgres
-    password: '1234'
+    url: ${SCARGO_DB_URL:jdbc:postgresql://localhost:5432/scargo}
+    username: ${SCARGO_DB_USERNAME:postgres}
+    password: ${SCARGO_DB_PASSWORD:1234} # 26.10.24 병합: 기존 로컬 비밀번호 기본값 유지 (환경변수 · application-local.yml 로 덮어쓰기)
     driver-class-name: org.postgresql.Driver
 
   # JPA 및 Hibernate 설정
@@ -34,3 +50,11 @@ server:
   servlet:
     session:
       persistent: false
+
+# 26.10.24 업로드 파일(점검표 사진) 저장 폴더 - 실행 폴더 기준, 환경변수 SCARGO_UPLOAD_DIR 로 바꿀 수 있음
+scargo:
+  upload-dir: ${SCARGO_UPLOAD_DIR:./uploads}
+  # 26.10.24 백업 표시용 (scargo_backup.bat 이 만든 .dump 파일의 최신 시각을 화면에 보여준다)
+  backup:
+    dir: ${SCARGO_BACKUP_DIR:../../백업}
+    schedule: ${SCARGO_BACKUP_SCHEDULE:매일 02:00 자동 백업 · 최근 7일 보관}

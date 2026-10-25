@@ -4,7 +4,7 @@ import { useRouter, useRoute } from "vue-router";
 import axios from "axios";
 import Main from "./views/Main.vue";
 import NotificationBell from "@/components/common/NotificationBell.vue";
-import { authState, clearLogin } from "@/auth/authState.js";
+import { authState, clearLogin, isDriverType } from "@/auth/authState.js";
 import { API_BASE } from "@/utils/apiBase.js";
 import { ADMIN_MENU } from "@/components/admin/adminMenu.js";
 import { COMPANY_MENU } from "@/components/company/companyMenu.js";
@@ -17,7 +17,7 @@ const route = useRoute();
 const isAdmin = computed(() => authState.user?.userType === "ADMIN" && authState.user?.adminScope !== "SBOT");
 const isCorporateApproved = computed(() => authState.user?.userType === "CORPORATE_APPROVED");
 const isCorporatePending = computed(() => authState.user?.userType === "CORPORATE_PENDING");
-const isDriver = computed(() => authState.user?.userType === "GENERAL");
+const isDriver = computed(() => isDriverType(authState.user?.userType)); // 26.10.22 통합: CONTAINER_DRIVER · LINEHAUL_DRIVER 도 기사
 
 // 26.09.30 수정: 로그인 유형 표시가 어색하던 문제 → 이름 옆 작은 배지로 정리
 const roleBadge = computed(() => {
@@ -70,10 +70,21 @@ const roleMenu = computed(() => {
         { to: "/driver/app/dispatch-list", label: "배차목록" },
         { to: "/driver/app/settlement", label: "정산/매출" },
         { to: "/driver/app/my-page", label: "MY/차량" },
+        // 26.10.23 컨테이너 점검표는 컨테이너 운송기사(CONTAINER_DRIVER)만
+        ...(authState.user?.userType === "CONTAINER_DRIVER" ? [{ to: "/driver/app/inspection", label: "컨테이너 점검표" }] : []),
         { to: "/driver/app/faq", label: "자주 묻는 질문" },
         { to: "/driver/app/support", label: "고객센터 문의" },
         { to: "/driver/app/terms", label: "약관 및 정책" },
       ]],
+    };
+  }
+  // 26.10.23 지역센터 관제사: 센터 인수 확정
+  if (authState.user?.userType === "CENTER_OP") {
+    return {
+      label: "지역센터",
+      icon: "bi-box-arrow-in-down",
+      base: "/center",
+      groups: [[{ to: "/center/receipts", label: "센터 인수 확정" }]],
     };
   }
   return null;

@@ -42,3 +42,9 @@ out/
 .project
 .classpath
 src/main/resources/firebase/service-account.json
+
+# 각자 PC 전용 DB 접속 설정 (비밀번호 포함) — 공유 금지
+application-local.yml
+
+# 점검표 사진 업로드 폴더
+uploads/

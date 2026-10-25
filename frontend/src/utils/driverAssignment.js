@@ -1,3 +1,4 @@
+import { toDate } from '@/utils/serverTime.js' // 26.10.23 서버 시각(epoch 초) → Date
 // 기사 배차 = 사업자 차량-컨테이너 매핑 → loading_records
 // (/api/dispatches 는 합본 백엔드에 없음)
 import axios from 'axios'
@@ -104,6 +105,6 @@ export function assignmentStatusLabel(status) {
 
 export function formatDateTime(iso) {
   if (!iso) return '-'
-  const d = new Date(iso)
+  const d = toDate(iso)
   return `${d.getMonth() + 1}.${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }

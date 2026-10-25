@@ -163,33 +163,50 @@ public class OverloadService {
     }
 
     // 3. 전체 목록 조회 (페이징)
-    public Page<OverloadCheckResponse> getAllChecks(Pageable pageable) {
-        return overloadCheckRepository.findAll(pageable)
+    // 26.10.22 수정: companyId가 있으면 그 업체 차량의 검사만 (null = 전체, 관리자용)
+    public Page<OverloadCheckResponse> getAllChecks(Long companyId, Pageable pageable) {
+        return (companyId == null
+                ? overloadCheckRepository.findAll(pageable)
+                : overloadCheckRepository.findByTruckCompanyId(companyId, pageable))
                 .map(OverloadCheckResponse::new);
     }
 
-    // 4. 차량 번호별 검색 (페이징)
+    // 4. 차량 번호별 조회 (페이징)
+    // 26.10.22 수정: 부분 검색 → 완전 일치. 권한 확인한 차량 외의 기록이 섞여 나오지 않게 함
     public Page<OverloadCheckResponse> getChecksByVehicleNo(String vehicleNo, Pageable pageable) {
-        return overloadCheckRepository.findByVehicleNoContaining(vehicleNo, pageable)
+        return overloadCheckRepository.findByVehicleNo(vehicleNo, pageable)
                 .map(OverloadCheckResponse::new);
     }
 
     // 5. 위반(과적) 차량 목록 조회 (페이징)
-    public Page<OverloadCheckResponse> getViolationChecks(Pageable pageable) {
-        return overloadCheckRepository.findByIsViolationTrue(pageable)
+    public Page<OverloadCheckResponse> getViolationChecks(Long companyId, Pageable pageable) {
+        return (companyId == null
+                ? overloadCheckRepository.findByIsViolationTrue(pageable)
+                : overloadCheckRepository.findViolationsByTruckCompanyId(companyId, pageable))
                 .map(OverloadCheckResponse::new);
     }
 
     // 6. 불합격(isPassed = false) 차량 목록 조회 (페이징)
-    public Page<OverloadCheckResponse> getFailedChecks(Pageable pageable) {
-        return overloadCheckRepository.findByIsPassedFalse(pageable)
+    public Page<OverloadCheckResponse> getFailedChecks(Long companyId, Pageable pageable) {
+        return (companyId == null
+                ? overloadCheckRepository.findByIsPassedFalse(pageable)
+                : overloadCheckRepository.findFailedByTruckCompanyId(companyId, pageable))
                 .map(OverloadCheckResponse::new);
     }
 
     // 7. 기간별 조회 (페이징)
-    public Page<OverloadCheckResponse> getChecksBetween(OffsetDateTime start, OffsetDateTime end, Pageable pageable) {
-        return overloadCheckRepository.findByCheckedAtBetween(start, end, pageable)
+    public Page<OverloadCheckResponse> getChecksBetween(Long companyId, OffsetDateTime start, OffsetDateTime end, Pageable pageable) {
+        return (companyId == null
+                ? overloadCheckRepository.findByCheckedAtBetween(start, end, pageable)
+                : overloadCheckRepository.findBetweenByTruckCompanyId(companyId, start, end, pageable))
                 .map(OverloadCheckResponse::new);
+    }
+
+    // 26.10.22 추가: 권한 검사용 - 검사 기록의 차량번호
+    public String getVehicleNo(Long checkId) {
+        return overloadCheckRepository.findById(checkId)
+                .map(OverloadCheck::getVehicleNo)
+                .orElseThrow(() -> new IllegalArgumentException("해당 과적 검사 기록을 찾을 수 없습니다. id=" + checkId));
     }
 
     // 8. 재검증(Retry) 처리 - 감량 후 재측정 시 retryCount 증가 및 결과 반영

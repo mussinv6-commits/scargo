@@ -5,6 +5,8 @@ import com.scargo.amr.entity.HubVehicle;
 import com.scargo.amr.entity.HubVehicleLog;
 import com.scargo.amr.repository.HubVehicleLogRepository;
 import com.scargo.amr.repository.HubVehicleRepository;
+import com.scargo.amr.security.AmrAccessPolicy;
+import com.scargo.amr.security.AmrAccessPolicy.Access;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
@@ -28,19 +30,21 @@ import java.util.*;
 //  2) 여기서 1차 OCR 서버(gate_api.py :8001 /hub/scan, YOLO + CRNN)를 호출해 번호판을 읽고
 //  3) hub_vehicles(등록 차량)로 차종 판정: 화물차 → 입고 도크 / 택배차 → 출고 도크 / 미등록 → 차단
 //  4) hub_vehicle_logs 에 기록 → state 로 앱 · 웹이 2초 안에 같이 본다
+// 26.10.22 허브별 권한: 스캔 · 씰 확인은 MANAGE, 기록 · 사진 조회는 VIEW (AmrAccessPolicy)
 @Service
 public class HubVehicleService implements ApplicationRunner {
 
     private final AmrService amr;
+    private final AmrAccessPolicy access;
     private final HubVehicleRepository vehicleRepo;
     private final HubVehicleLogRepository logRepo;
     private final String ocrBase;
     private final RestTemplate rest;
     private final JdbcTemplate jdbc;
 
-    public HubVehicleService(AmrService amr, HubVehicleRepository vehicleRepo, HubVehicleLogRepository logRepo, JdbcTemplate jdbc,
+    public HubVehicleService(AmrService amr, AmrAccessPolicy access, HubVehicleRepository vehicleRepo, HubVehicleLogRepository logRepo, JdbcTemplate jdbc,
                              @Value("${amr.ocr.base:http://localhost:8001}") String ocrBase) {
-        this.amr = amr; this.vehicleRepo = vehicleRepo; this.logRepo = logRepo; this.jdbc = jdbc; this.ocrBase = ocrBase;
+        this.amr = amr; this.access = access; this.vehicleRepo = vehicleRepo; this.logRepo = logRepo; this.jdbc = jdbc; this.ocrBase = ocrBase;
         SimpleClientHttpRequestFactory f = new SimpleClientHttpRequestFactory();
         f.setConnectTimeout(2000);
         f.setReadTimeout(20000); // CPU 인식은 첫 호출에 몇 초 걸릴 수 있음
@@ -114,8 +118,8 @@ public class HubVehicleService implements ApplicationRunner {
     }
 
     @SuppressWarnings("unchecked")
-    public VehicleView scan(VehicleScanRequest req) {
-        Long hub = amr.hubId();
+    public VehicleView scan(Long hubId, VehicleScanRequest req) {
+        Long hub = amr.hub(hubId, Access.MANAGE);
         String dir = "EXIT".equalsIgnoreCase(req.direction()) ? "EXIT" : "ENTRY";
         String kind = "COURIER".equalsIgnoreCase(req.kind()) ? "COURIER" : "CARGO";
         UriComponentsBuilder b = UriComponentsBuilder.fromUriString(ocrBase + "/hub/scan")
@@ -157,14 +161,14 @@ public class HubVehicleService implements ApplicationRunner {
             log.setDecision(!reg.isPresent() ? "BLOCK" : sealMissing ? "HOLD" : "ALLOW");
             if (sealMissing) {
                 log.setSealStatus("MISSING");
-                amr.event(null, "CRIT", "씰 미등록 차량 게이트 대기 · " + plate + confTxt + " (기사 앱에서 씰 등록 필요)");
+                amr.event(hub, null, "CRIT", "씰 미등록 차량 게이트 대기 · " + plate + confTxt + " (기사 앱에서 씰 등록 필요)");
             } else if (reg.isPresent()) {
                 boolean courier = "COURIER".equals(reg.get().getVehicleKind());
                 if (!courier) log.setSealStatus("PENDING"); // 도크 도착 후 씰 확인 대기
                 String to = courier ? "출고 D" + (req.dock() == null ? "" : req.dock() + 4) : "입고 D" + (req.dock() == null ? "" : req.dock() + 1);
-                amr.event(null, "INFO", "입차 OCR " + plate + confTxt + " · " + (courier ? "택배차" : "화물차") + " → " + to);
+                amr.event(hub, null, "INFO", "입차 OCR " + plate + confTxt + " · " + (courier ? "택배차" : "화물차") + " → " + to);
             } else {
-                amr.event(null, "CRIT", plate == null ? "입차 번호판 판독 불가 · 차단 (사진 " + log.getPhotoPlate() + ")"
+                amr.event(hub, null, "CRIT", plate == null ? "입차 번호판 판독 불가 · 차단 (사진 " + log.getPhotoPlate() + ")"
                         : "미등록 차량 차단 · " + plate + confTxt);
             }
         } else {
@@ -176,7 +180,7 @@ public class HubVehicleService implements ApplicationRunner {
             boolean ok = plate != null && plate.equals(expected);
             log.setDecision(ok ? "EXIT_OK" : "MISMATCH");
             String n = req.boxCount() == null ? "" : " · " + req.boxCount() + "건";
-            amr.event(null, ok ? "DISPATCH" : "WARN", ok ? "출차 OCR " + plate + confTxt + " · " + (req.destHub() == null ? "" : req.destHub() + "행") + n
+            amr.event(hub, null, ok ? "DISPATCH" : "WARN", ok ? "출차 OCR " + plate + confTxt + " · " + (req.destHub() == null ? "" : req.destHub() + "행") + n
                     : "출차 번호 불일치 · 입차 " + expected + " / 인식 " + (plate == null ? "판독 불가" : plate));
         }
         return view(logRepo.save(log));
@@ -187,6 +191,7 @@ public class HubVehicleService implements ApplicationRunner {
     //  - 사진 주소는 DB에 남은 OCR 서버 주소의 경로만 쓰고, 서버는 설정된 ocrBase 로 고정 (다른 주소로 못 보냄)
     public byte[] photo(Long id) {
         HubVehicleLog l = logRepo.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "기록 없음"));
+        access.requireHub(l.getHubId(), Access.VIEW);
         String u = l.getImageUrl();
         int i = u == null ? -1 : u.indexOf("/hub-images/");
         if (i < 0) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "사진 없음");
@@ -204,6 +209,8 @@ public class HubVehicleService implements ApplicationRunner {
     //  일치 → 씰 확인 완료 / 불일치 · 기준 없음 → 하차 대기 + 긴급 알림 (관리자 앱)
     public VehicleView sealCheck(Long id, String input) {
         HubVehicleLog l = logRepo.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "기록 없음"));
+        Long hub = l.getHubId();
+        access.requireHub(hub, Access.MANAGE);
         if (!"ENTRY".equals(l.getDirection()) || l.getRecognizedPlate() == null)
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "씰은 입차 기록에서만 확인합니다");
         String in = input == null ? "" : input.replace(" ", "").trim().toUpperCase();
@@ -214,22 +221,24 @@ public class HubVehicleService implements ApplicationRunner {
         sealEvent(plate, in);
         if (ref == null || ref.isBlank()) {
             l.setSealStatus("MISSING"); l.setDecision("HOLD");
-            amr.event(null, "CRIT", "기준 씰 번호 없음 · 하차 보류 · " + plate + " (수동 확인 필요)");
+            amr.event(hub, null, "CRIT", "기준 씰 번호 없음 · 하차 보류 · " + plate + " (수동 확인 필요)");
         } else if (ref.equalsIgnoreCase(in)) {
             l.setSealStatus("OK");
-            amr.event(null, "INFO", "씰 대조 일치 · 하차 가능 · " + plate + " · " + in);
+            amr.event(hub, null, "INFO", "씰 대조 일치 · 하차 가능 · " + plate + " · " + in);
         } else {
             l.setSealStatus("MISMATCH"); l.setDecision("HOLD");
-            amr.event(null, "CRIT", "씰 불일치 · 하차 보류 · " + plate + " · 입력 " + in);
+            amr.event(hub, null, "CRIT", "씰 불일치 · 하차 보류 · " + plate + " · 입력 " + in);
         }
         return view(logRepo.save(l));
     }
 
-    public List<VehicleView> recent(int limit) {
-        return logRepo.findByHubIdOrderByLogIdDesc(amr.hubId(), PageRequest.of(0, Math.max(1, Math.min(limit, 100)))).stream().map(HubVehicleService::view).toList();
+    public List<VehicleView> recent(Long hubId, int limit) {
+        return logRepo.findByHubIdOrderByLogIdDesc(amr.hub(hubId, Access.VIEW), PageRequest.of(0, Math.max(1, Math.min(limit, 100)))).stream().map(HubVehicleService::view).toList();
     }
 
+    // 등록 차량부는 허브 공통 (조회 권한만 확인)
     public List<RegistryView> registry() {
+        amr.hub(null, Access.VIEW);
         return vehicleRepo.findAll().stream().map(v -> new RegistryView(v.getPlateNo(), v.getVehicleKind(), v.getCarrier(), v.getMemo())).toList();
     }
 

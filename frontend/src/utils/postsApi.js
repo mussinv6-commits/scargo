@@ -4,6 +4,7 @@
 // - PostResponse 에 작성자 이름이 없어서 accountId → 이름을 /api/accounts/{id} 로 조회해 캐싱
 import axios from 'axios'
 import { API_BASE } from './apiBase'
+import { toDate } from './serverTime.js'
 import { authState } from '@/auth/authState.js'
 
 export const postsApi = axios.create({ baseURL: `${API_BASE}/api/v1/posts`, withCredentials: true })
@@ -75,6 +76,15 @@ export async function withAuthors(list) {
 
 export function fmtDate(d, withTime = false) {
   if (!d) return ''
+  // 26.10.24 팀 반영(예지님 fix_1630): 작성일이 epoch 초 숫자(예: 1792814482.68)로 와서 숫자가 그대로 보이던 문제
+  //  → 숫자 · 배열이면 serverTime.toDate 로 바꿔 YYYY-MM-DD (HH:mm) 로 표시
+  if (typeof d === 'number' || Array.isArray(d) || /^\d+(\.\d+)?$/.test(String(d))) {
+    const t = toDate(typeof d === 'string' ? Number(d) : d)
+    if (!t || isNaN(t)) return ''
+    const p = (n) => String(n).padStart(2, '0')
+    const day = `${t.getFullYear()}-${p(t.getMonth() + 1)}-${p(t.getDate())}`
+    return withTime ? `${day} ${p(t.getHours())}:${p(t.getMinutes())}` : day
+  }
   const s = String(d).replace('T', ' ')
   return withTime ? s.substring(0, 16) : s.substring(0, 10)
 }

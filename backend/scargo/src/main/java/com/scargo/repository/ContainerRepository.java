@@ -1,7 +1,11 @@
 package com.scargo.repository;
 
 import com.scargo.entity.Container;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -9,6 +13,17 @@ import java.util.Optional;
 
 @Repository
 public interface ContainerRepository extends JpaRepository<Container, String> {
+
+    // 26.10.22 추가: 매핑 변경 시 같은 컨테이너를 동시에 두 차량에 배정하지 않도록 행 잠금 조회
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT c FROM Container c WHERE c.containerNo = :containerNo")
+    Optional<Container> findForUpdate(@Param("containerNo") String containerNo);
+
+    // 26.10.22 추가: ADMIN · CONTROL 용 전체 업체 배정 가능 컨테이너 (소속 업체가 없는 컨테이너는 배정 불가라 제외)
+    List<Container> findByCompanyIdIsNotNullAndAssignedVehicleNoIsNull();
+
+    // 26.10.22 추가: ADMIN · CONTROL 용 전체 업체 현재 매핑 목록
+    List<Container> findByAssignedVehicleNoIsNotNull();
 
     // 특정 소속 업체의 전체 컨테이너 목록 조회
     List<Container> findByCompanyId(Long companyId);

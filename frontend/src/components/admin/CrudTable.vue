@@ -7,6 +7,7 @@
       </div>
       <div class="crud-toolbar-right">
         <slot name="toolbar-extra" />
+        <button v-if="exportable && rows.length" class="btn-admin" @click="exportRows">Excel 내보내기</button>
         <button v-if="creatable" class="btn-admin btn-admin-primary" @click="openCreate">
           + 신규 등록
         </button>
@@ -155,14 +156,17 @@
 </template>
 
 <script setup>
+import { toDate } from '@/utils/serverTime.js' // 26.10.23 서버 시각(epoch 초) → Date
 import { computed, reactive, ref, watch } from 'vue'
 import { friendlyError, emptyToNull } from '@/utils/apiHelpers'
 import AdminPager from '@/components/admin/AdminPager.vue'
+import { exportExcel } from '@/utils/exportExcel.js' // 26.10.24
 
 const props = defineProps({
   title: { type: String, required: true },
   columns: { type: Array, required: true },
   rows: { type: Array, default: () => [] },
+  exportable: { type: Boolean, default: true }, // 26.10.24 Excel(CSV) 내보내기 버튼
   idKey: { type: String, default: 'id' },
   formFields: { type: Array, default: () => [] },
   loading: { type: Boolean, default: false },
@@ -243,6 +247,12 @@ function resetForm() {
   })
 }
 
+// 26.10.24 화면에 보이는 목록 전체(페이지 나누기 전)를 Excel(CSV)로 내려받기
+function exportRows() {
+  const cols = props.columns.map((c) => (c.type === 'date' ? { ...c, formatter: (v) => formatDate(v) } : c))
+  exportExcel(props.title, cols, props.rows)
+}
+
 function openCreate() {
   editingRow.value = null
   formError.value = ''
@@ -276,7 +286,7 @@ function closeModal() {
 
 function formatDate(d) {
   if (!d) return '-'
-  const date = new Date(d)
+  const date = toDate(d)
   return isNaN(date.getTime()) ? d : date.toLocaleString('ko-KR')
 }
 
@@ -337,6 +347,18 @@ function confirmDelete(row) {
   if (confirm(`[${label}] 항목을 삭제하시겠습니까?\n삭제한 데이터는 되돌릴 수 없습니다.`) && props.onDelete) {
     props.onDelete(row[props.idKey], row)
   }
+}
+
+// 26.10.24 수정: 템플릿이 쓰는데 정의가 없던 입력 핸들러 (숫자 칸에서 키를 누를 때마다 콘솔 오류가 나던 문제)
+//  숫자 칸에서는 지수 표기(e)와 + 기호를 막고, 음수가 필요 없는 칸(min >= 0)은 - 도 막는다
+function onNumberKeydown(field, event) {
+  if (field.type !== 'number') return
+  const blocked = ['e', 'E', '+']
+  if (field.min !== undefined && Number(field.min) >= 0) blocked.push('-')
+  if (blocked.includes(event.key)) event.preventDefault()
+}
+function onNumberInput() {
+  // 값 검증은 제출할 때 한 번에 한다 (fieldErrors)
 }
 </script>
 

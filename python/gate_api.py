@@ -81,6 +81,7 @@ import random
 import re
 import shutil
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Optional
@@ -270,9 +271,9 @@ def get_db_connection():
     return pg8000.connect(
         host=os.environ.get("PGHOST", "localhost"),
         port=int(os.environ.get("PGPORT", "5432")),
-        database=os.environ.get("PGDATABASE", "scargo"),
+        database=os.environ.get("PGDATABASE", "scargo"),  # 26.10.24 팀 공유본: 기본 대상 = 새로 설치한 시연 DB
         user=os.environ.get("PGUSER", "postgres"),
-        password=os.environ.get("PGPASSWORD", "1234")
+        password=os.environ.get("PGPASSWORD", "1234")  # 26.10.24 병합: 기존 로컬 기본값 유지 (환경변수 PGPASSWORD 로 덮어쓰기)
     )
 
 
@@ -588,6 +589,7 @@ class HubScanResult(BaseModel):
 
 _HUB_BAG = {}   # kind -> 아직 안 쓴 번호판 차례 목록
 _HUB_LAST = {}  # kind -> 직전에 나온 번호판
+_HUB_LOCK = threading.Lock()  # 26.10.22: FastAPI 는 def 엔드포인트를 여러 스레드에서 동시에 돌려서, 차례 목록을 고칠 때 잠근다
 
 
 @app.post("/hub/scan", response_model=HubScanResult)
@@ -625,24 +627,25 @@ def hub_scan(direction: ScanType = ScanType.ENTRY, kind: str = "CARGO",
         # 26.10.20: 무작위 대신 "한 바퀴 돌리기" - 사진을 섞어 차례로 쓰고, 다 쓰면 다시 섞는다.
         #           같은 차가 연달아 나오지 않고, 동시에 두 대가 같은 사진을 뽑지도 않는다.
         by_stem = {p.stem.replace(" ", ""): p for p in cands}
-        bag = _HUB_BAG.setdefault(kind, [])
-        bag[:] = [k for k in bag if k in by_stem]
-        path = None
-        for _ in range(2):
-            for k in list(bag):
-                if k not in skip:
-                    path = by_stem[k]
-                    bag.remove(k)
+        with _HUB_LOCK:  # 26.10.22: 동시 요청이 같은 목록을 고치다 remove 에서 ValueError(500) 나지 않게
+            bag = _HUB_BAG.setdefault(kind, [])
+            bag[:] = [k for k in bag if k in by_stem]
+            path = None
+            for _ in range(2):
+                for k in list(bag):
+                    if k not in skip:
+                        path = by_stem[k]
+                        bag.remove(k)
+                        break
+                if path:
                     break
-            if path:
-                break
-            bag[:] = list(by_stem.keys())
-            random.shuffle(bag)
-            if _HUB_LAST.get(kind) in bag and len(bag) > 1 and bag[0] == _HUB_LAST.get(kind):
-                bag.append(bag.pop(0))
-        if path is None:
-            path = random.choice(cands)
-        _HUB_LAST[kind] = path.stem.replace(" ", "")
+                bag[:] = list(by_stem.keys())
+                random.shuffle(bag)
+                if _HUB_LAST.get(kind) in bag and len(bag) > 1 and bag[0] == _HUB_LAST.get(kind):
+                    bag.append(bag.pop(0))
+            if path is None:
+                path = random.choice(cands)
+            _HUB_LAST[kind] = path.stem.replace(" ", "")
     try:
         result = recognize_one(path)
     except Exception:

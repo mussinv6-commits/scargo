@@ -22,6 +22,10 @@
             <line x1="3" y1="12" x2="3.01" y2="12"></line>
             <line x1="3" y1="18" x2="3.01" y2="18"></line>
           </template>
+          <template v-else-if="t.icon === 'check'">
+            <path d="M9 11l3 3L22 4"></path>
+            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+          </template>
           <template v-else-if="t.icon === 'won'">
             <line x1="12" y1="1" x2="12" y2="23"></line>
             <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
@@ -38,15 +42,19 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import { useRoute } from 'vue-router'
+import { authState } from '@/auth/authState.js'
 
 const route = useRoute()
-const tabs = [
+// 26.10.23 컨테이너 운송기사는 '점검' 탭(컨테이너 점검표)을 추가로 본다
+const tabs = computed(() => [
   { to: '/driver/app/status', label: '운송현황', icon: 'truck' },
   { to: '/driver/app/dispatch-list', label: '배차목록', icon: 'list' },
+  ...(authState.user?.userType === 'CONTAINER_DRIVER' ? [{ to: '/driver/app/inspection', label: '점검', icon: 'check' }] : []),
   { to: '/driver/app/settlement', label: '정산', icon: 'won' },
   { to: '/driver/app/my-page', label: 'MY/차량', icon: 'user' },
-]
+])
 const isActive = (to) => route.path === to
 </script>
 

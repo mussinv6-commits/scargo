@@ -1,3 +1,4 @@
+import { toDate } from '@/utils/serverTime.js' // 26.10.23 서버 시각(epoch 초) → Date
 import axios from 'axios'
 import { API_BASE } from './apiBase'
 
@@ -86,7 +87,7 @@ export function splitTodayAndPast(rows) {
   const todayRows = []
   const pastRows = []
   rows.forEach((r) => {
-    if (r.loadedAt && dateKey(new Date(r.loadedAt)) === today) todayRows.push(r)
+    if (r.loadedAt && dateKey(toDate(r.loadedAt)) === today) todayRows.push(r)
     else pastRows.push(r)
   })
   return { todayRows, pastRows }
@@ -94,7 +95,7 @@ export function splitTodayAndPast(rows) {
 
 export function formatLoadedAt(iso) {
   if (!iso) return '-'
-  const d = new Date(iso)
+  const d = toDate(iso)
   const p = (n) => String(n).padStart(2, '0')
   return `${d.getFullYear()}.${p(d.getMonth() + 1)}.${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
 }

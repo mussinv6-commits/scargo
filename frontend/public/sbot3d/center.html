@@ -2,9 +2,9 @@
 <html lang="ko"><head><meta charset="utf-8"><title>물류센터 관제 3D 미리보기</title>
 <style>
 *{box-sizing:border-box}body{margin:0;overflow:hidden;background:#0a1730;font-family:'Malgun Gothic',sans-serif;color:#e9ebef}
-#top{position:absolute;left:16px;top:12px;color:#f3d27a;font-weight:700;font-size:18px}
+#top{position:absolute;left:16px;top:12px;color:#f3d27a;font-weight:700;font-size:18px;background:rgba(10,18,36,.88);border:1px solid #2a3a58;border-radius:8px;padding:6px 14px;box-shadow:0 2px 10px rgba(0,0,0,.35)}
 #note{position:absolute;right:16px;top:14px;color:#98a0ad;font-size:12px}
-#hint{position:absolute;left:16px;bottom:14px;color:#98a0ad;font-size:12px}
+#hint{position:absolute;left:16px;bottom:14px;color:#e9ebef;font-size:12px;background:rgba(10,18,36,.85);border:1px solid #2a3a58;border-radius:7px;padding:5px 10px}
 #panel{position:absolute;right:16px;top:44px;width:310px;background:rgba(24,28,35,.93);border:1px solid #2a3a58;border-radius:10px;padding:14px;font-size:12px;display:none}
 #panel h3{margin:0 0 10px;color:#f3d27a;font-size:15px}
 .k{display:flex;gap:6px;margin-bottom:10px}.k div{flex:1;background:#222833;border-radius:6px;padding:6px 8px}.k small{color:#98a0ad;display:block}.k b{font-size:15px}
@@ -14,8 +14,9 @@
 .row{display:flex;align-items:center;gap:8px;margin:4px 0}.row span{width:54px}.row div{height:9px;border-radius:3px;background:#5b82c4}.row em{font-style:normal}
 .row.g div{background:#f0a800}.row.t div{background:#f3d27a}.row.t span,.row.t em{color:#f3d27a;font-weight:700}
 .tk{border-top:1px solid #2a3a58;margin-top:10px;padding-top:6px;line-height:1.7}
+.mut2{font-size:11px;color:#8d9bb0;margin:-2px 0 6px 2px}
 </style></head><body>
-<div id="top">물류센터 관제</div><div id="note">예시 데이터 · 1톤 택배차 기준</div><div id="hint">센터 건물을 클릭하면 정보가 열려요 · 드래그 회전 / 휠 확대</div>
+<div id="top">물류센터 관제</div><div id="hint">센터 건물을 클릭하면 정보가 열려요 · 드래그 회전 / 휠 확대</div>
 <div id="panel"></div>
 <script src="shared.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
@@ -134,31 +135,36 @@ function setSel(c,on){c.frame.children.forEach(m=>m.material.opacity=on?1:0)}
 // ---- 주간/야간 (허브 HTML 의 updEnv 방식) ----
 const mixc=(a,b,n)=>new THREE.Color(a).lerp(new THREE.Color(b),n);
 function updEnv(n){scene.background=mixc('#9cc3ee','#0c1834',n);scene.fog.color.copy(mixc('#cfe0f2','#0c1834',n));ground.material.color.copy(mixc('#ffffff','#1a2038',n));hillMat.color.copy(mixc('#6f8d66','#0f1830',n));hemi.color.copy(mixc('#ffffff','#7f9fe0',n));hemi.groundColor.copy(mixc('#6f7f6a','#0e1424',n));hemi.intensity=.95-.7*n;sun.intensity=.9-.72*n;sun.color.copy(mixc('#ffffff','#7f95d0',n));asphMats.forEach(m=>m.color.copy(mixc('#ffffff','#3b4260',n)));winMats.forEach(m=>m.emissiveIntensity=.03+.9*n);bulbM.color.copy(mixc('#8a8f99','#fff1c0',n));lampSprites.forEach(s=>s.material.opacity=n*.85)}
-const bar=document.createElement('div');bar.style.cssText='position:absolute;left:16px;top:44px;display:flex;border:1px solid #2a3a58;border-radius:7px;overflow:hidden';
-const bs=['주간','야간'].map((t,i)=>{const b=document.createElement('button');b.textContent=t;b.style.cssText='border:0;padding:6px 14px;cursor:pointer;font:inherit;font-size:13px';b.onclick=()=>setMode(i);bar.appendChild(b);return b});
-function setMode(n){updEnv(n);bs.forEach((b,i)=>{b.style.background=i==n?'#f3d27a':'#222833';b.style.color=i==n?'#14203a':'#98a0ad';b.style.fontWeight=i==n?'700':'400'})}
-document.body.appendChild(bar);setMode(0);
+// 하루 시계: 택배 이동 화면과 같은 시각(localStorage sbot_clock)을 따른다. 이동 화면이 꺼져 있으면 낮 12시부터 혼자 흐른다
+const T0=Date.now(),pad2=v=>String(v).padStart(2,'0');
+function nightF(h){if(h>=19.5||h<5.5)return 1;if(h>=7.5&&h<17.5)return 0;if(h>=17.5)return (h-17.5)/2;return 1-(h-5.5)/2}
+function curTod(){try{let c=JSON.parse(localStorage.getItem('sbot_clock')||'null');if(!(c&&typeof c.tod==='number'&&typeof c.rate==='number')){c={tod:12,at:Date.now(),rate:.2};localStorage.setItem('sbot_clock',JSON.stringify(c))}return(((c.tod+(Date.now()-c.at)/1000*c.rate)%24)+24)%24}catch(e){return(12+(Date.now()-T0)/1000*.2)%24}}
+const clk=document.createElement('span');clk.style.cssText='margin-left:12px;font-size:14px;font-weight:600;color:#e9ebef';document.getElementById('top').appendChild(clk);
+let lastN=-1;
+function envTick(){const h=curTod(),n=nightF(h);clk.textContent='시각 '+pad2(Math.floor(h))+':'+pad2(Math.floor(h%1*60))+(n>.5?' · 밤':' · 낮');if(Math.abs(n-lastN)<.01)return;lastN=n;updEnv(n)}
+setInterval(envTick,400);envTick();
 // 카메라 이동: 센터를 누르면 그 센터로 부드럽게 다가가고, '전체 보기'로 처음 시점으로 돌아간다
 let fly=null;
 function flyTo(p,t){fly={p0:cam.position.clone(),t0:ctl.target.clone(),p1:p,t1:t,s:performance.now(),d:1100}}
 const OV={p:new THREE.Vector3(-8,88,84),t:new THREE.Vector3(-10,0,-8)};
 function focus(c){flyTo(new THREE.Vector3(c.x+16,36,c.z+44),new THREE.Vector3(c.x,2,c.z))}
-const ob=document.createElement('button');ob.textContent='전체 보기';ob.style.cssText='position:absolute;left:150px;top:44px;border:1px solid #2a3a58;border-radius:7px;background:#222833;color:#e6eff7;padding:6px 14px;cursor:pointer;font:inherit;font-size:13px';ob.onclick=()=>flyTo(OV.p.clone(),OV.t.clone());document.body.appendChild(ob);
+const ob=document.createElement('button');ob.textContent='전체 보기';ob.style.cssText='position:absolute;left:16px;top:60px;border:1px solid #2a3a58;border-radius:7px;background:#222833;color:#e6eff7;padding:6px 14px;cursor:pointer;font:inherit;font-size:13px';ob.onclick=()=>flyTo(OV.p.clone(),OV.t.clone());document.body.appendChild(ob);
 // ---- 패널 ----
 const P=document.getElementById('panel'),F=n=>n.toLocaleString();
 // 센터 정보는 공용 데이터(shared.js: 택배 이동 화면이 도착할 때마다 기록)를 읽는다. 없으면 예시값.
 const KEYS={GG:'GGI',SE:'SEL',IC:'ICN'};let cur=null;
 function data(c){const s=window.SBOT&&SBOT.load().centers[KEYS[c.id]];if(s)return s;const base=(c.jae+c.min)*c.trips;return {trips:c.trips,items:c.items,base,fin:Math.round(base*.5),hr:c.hr,cat:c.cat,trucks:c.trk.map((n,i)=>({no:n,state:i<c.done?'입고 완료':'이동 중',items:0}))}}
 function show(c){cur=c;CEN.forEach(o=>setSel(o,false));setSel(c,true);
- const s=data(c),mx=Math.max(1,...s.hr),cm=Math.max(1,...s.cat),dis=s.base-s.fin,done=s.trucks.filter(t=>t.state==='입고 완료').length,avg=Math.round(s.base/Math.max(1,s.trips));
+ const s=data(c),mx=Math.max(1,...s.hr),cm=Math.max(1,...s.cat),dis=s.base-s.fin,nb=Math.min(s.base,s.nb||0),nightN=Math.min(s.trips,s.nn||0),dayN=s.trips-nightN,nightAmt=Math.max(0,nb-dis),dayAmt=Math.max(0,s.base-nb),done=s.trucks.filter(t=>t.state==='입고 완료').length,avg=Math.round(s.base/Math.max(1,s.trips));
  P.style.display='block';P.innerHTML=`<h3>${c.name} · 오늘</h3>
  <div class="k"><div><small>배정 택배차</small><b>${s.trucks.length}대</b></div><div><small>입고 완료</small><b>${done}대</b></div><div><small>운송 물품</small><b>${s.items}건</b></div></div>
  <div class="sec">시간대별 입고 (건)</div><div class="bars">${s.hr.map(v=>`<i class="${v==mx?'pk':''}" style="height:${v/mx*100}%"></i>`).join('')}</div><div class="lab">${HRL.map(h=>`<span>${h}</span>`).join('')}</div>
  <div class="sec">운송 물품 구성</div>${s.cat.map((v,i)=>`<div class="row"><span>${CATL[i]}</span><div style="width:${v/cm*130}px"></div><em>${v}</em></div>`).join('')}
- <div class="sec">하루 합산 통행료 (${s.trips}회 · 1회 기본 ${F(avg)}원)</div>
- <div class="row"><span>기본 요금</span><div style="width:130px"></div><em>${F(s.base)}</em></div>
- <div class="row g"><span>심야할인 50%</span><div style="width:${dis/Math.max(1,s.base)*130}px"></div><em>-${F(dis)}</em></div>
- <div class="row t"><span>확정</span><div style="width:${s.fin/Math.max(1,s.base)*130}px"></div><em>${F(s.fin)}</em></div>
+ <div class="sec">하루 합산 통행료 (${s.trips}회)</div>
+ <div class="row"><span>주간 ${dayN}회</span><div style="width:${dayAmt/Math.max(1,s.base)*130}px"></div><em>${F(dayAmt)}원</em></div>
+ <div class="row g"><span>심야 ${nightN}회</span><div style="width:${nightAmt/Math.max(1,s.base)*130}px"></div><em>${F(nightAmt)}원</em></div>
+ <div class="mut2">${nightN>0?`심야 기본 ${F(nb)}원 - 할인 ${F(dis)}원`:'심야 통과 없음'} · 주간은 기본 요금 그대로</div>
+ <div class="row t"><span>합계</span><div style="width:${s.fin/Math.max(1,s.base)*130}px"></div><em>${F(s.fin)}원</em></div>
  <div class="tk"><div class="sec" style="margin:0">배정 택배차</div>${s.trucks.map(t=>`${t.no} · ${t.state}${t.items?' · '+t.items+'건':''}`).join('<br>')}</div>`}
 setInterval(()=>{if(cur)show(cur)},1500);addEventListener('storage',()=>{if(cur)show(cur)});
 const ray=new THREE.Raycaster(),mv=new THREE.Vector2();let dn=null;
@@ -166,5 +172,44 @@ renderer.domElement.addEventListener('pointerdown',e=>dn=[e.clientX,e.clientY]);
 renderer.domElement.addEventListener('pointerup',e=>{if(!dn||Math.hypot(e.clientX-dn[0],e.clientY-dn[1])>5)return;mv.set(e.clientX/W()*2-1,-(e.clientY/H())*2+1);ray.setFromCamera(mv,cam);const h=ray.intersectObjects(pick)[0];if(h){show(h.object.userData.c);focus(h.object.userData.c)}});
 addEventListener('resize',()=>{renderer.setSize(W(),H());cam.aspect=W()/H();cam.updateProjectionMatrix()});
 const qc=new URLSearchParams(location.search).get('c');{const c0=CEN.find(c=>c.id===({GGI:'GG',SEL:'SE',ICN:'IC'})[qc]);show(c0||CEN[1]);if(c0)focus(c0)}
-(function loop(){requestAnimationFrame(loop);if(fly){let k=Math.min(1,(performance.now()-fly.s)/fly.d);k=k<.5?4*k*k*k:1-Math.pow(-2*k+2,3)/2;cam.position.lerpVectors(fly.p0,fly.p1,k);ctl.target.lerpVectors(fly.t0,fly.t1,k);if(k>=1)fly=null}ctl.update();renderer.render(scene,cam)})();
+// ---- 택배차 운행 (26.10.25): 곤지암 허브 → 간선도로 → 센터 진입로 → 출입구 → 앞마당 → 후면(뒷문) 도킹 → 하역 → 출차 ----
+// 차량 앞(운전석)은 로컬 +z, 뒷문은 -z. 도크로는 뒷문이 먼저 들어가게 후진해서 붙는다
+const TRP=80, TR=[];
+function mkTruck(c,plate){
+ const g=new THREE.Group(),L=(w,h,d,col,x,y,z)=>{const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),new THREE.MeshLambertMaterial({color:col}));m.position.set(x,y,z);m.castShadow=true;g.add(m);return m};
+ L(2.5,2.5,3.7,0xf4f6f8,0,2.05,-0.75);            // 짐칸
+ L(2.56,.5,3.7,c.col,0,1.15,-0.75);               // 센터 색 띠
+ L(2.5,.1,.1,0x2a3140,0,2.05,-2.62);              // 뒷문 틈
+ L(2.3,1.9,1.5,0xe9edf2,0,1.75,1.85);             // 운전석
+ L(2.0,.7,.06,0x9fc4e8,0,2.2,2.62);               // 앞유리
+ L(2.5,.35,5.5,0x3a3f4a,0,.75,.1);                // 하부
+ [[-1.25,-1.4],[1.25,-1.4],[-1.25,1.5],[1.25,1.5]].forEach(a=>{const w=new THREE.Mesh(new THREE.CylinderGeometry(.5,.5,.35,12),new THREE.MeshLambertMaterial({color:0x15171c}));w.rotation.z=Math.PI/2;w.position.set(a[0],.5,a[1]);g.add(w)});
+ const lb=label(plate,c.css,.9);lb.position.set(0,4.4,0);g.add(lb);
+ g.visible=false;scene.add(g);return g}
+function kf(c,dx,idx){
+ const X=c.x,Z=c.z,s=[],sp=12;let t=0;const add=(x,z,h,dur)=>{if(s.length){const p=s[s.length-1];t+=dur!=null?dur:Math.hypot(x-p.x,z-p.z)/sp}s.push({t,x,z,h})};
+ // 26.10.25 수정: 일반도로에서는 앞을 보고 곡선으로 꺾어 진입로로 → 앞마당에서 U턴 → 뒷문부터 후진으로 도크에 붙음 → 앞으로 출차
+ //  차는 자기 방향(h)으로만 움직인다. 옆으로 미끄러지지 않도록 모든 구간을 '직진 · 원호'로 이어 붙인다 (도크 3곳마다 미리 계산한 값)
+ const PI=Math.PI, R=2.8, sgp={"-4":{s:-1,phi:3.14,L:5.9,Rr:3.5},"0":{s:-1,phi:2.02,L:.5,Rr:3.5},"4":{s:1,phi:2.38,L:2.1,Rr:3.5}}[dx]||{s:-1,phi:3.14,L:5.9,Rr:3.5};
+ const pp={x:1.6,z:14,h:-PI}, H0=sgp.s<0?0:-2*PI;
+ const seg=(g,dist,dh)=>{const n=Math.max(1,Math.ceil(dist/.8)),ds=dist/n;for(let i=0;i<n;i++){pp.h+=dh/n/2;pp.x+=g*Math.sin(pp.h)*ds;pp.z+=g*Math.cos(pp.h)*ds;pp.h+=dh/n/2;add(X+pp.x,Z+pp.z,pp.h,ds/(g>0?10:4.5))}};
+ add(78,TZ+2.2,-PI/2);add(X+6,TZ+2.2,-PI/2);                             // 간선도로를 달려 진입로 앞까지
+ add(X+3.0,TZ+0.8,-PI*0.75,1.0);add(X+1.6,TZ-2.2,-PI,.8);                // 앞을 보고 곡선으로 꺾어 진입로로
+ add(X+1.6,Z+16,-PI);add(X+1.6,Z+14,-PI);                                // 진입로를 따라 출입구 통과
+ seg(1,R*sgp.phi,sgp.s<0?sgp.phi:-sgp.phi);                              // 앞마당에서 U턴
+ seg(-1,sgp.L,0);                                                        // 뒤로 직진
+ {const dh=H0-pp.h;seg(-1,Math.abs(dh)*sgp.Rr,dh)}                       // 후진하며 방향을 맞춰 도크에 뒷문을 붙임
+ pp.h=H0;pp.x=dx;pp.z=8.1;s[s.length-1].x=X+dx;s[s.length-1].z=Z+8.1;s[s.length-1].h=H0;
+ const hold=t+8;s.push({t:hold,x:X+dx,z:Z+8.1,h:H0});t=hold;             // 하역
+ {const D=-1.6-dx;if(Math.abs(D)>.05){const be=Math.acos(1-Math.abs(D)/(2*4.5)),sn=D>0?1:-1;seg(1,4.5*be,sn*be);seg(1,4.5*be,-sn*be)}} // 앞으로 나가며 출차 차선으로
+ pp.h=H0;seg(1,(TZ-5.5-Z)-pp.z,0);                                       // 출차 차선을 따라 간선도로 쪽으로
+ seg(1,3.3*PI/2,PI/2);add(78,TZ-2.2,H0+PI/2);                            // 허브 방면으로 돌아감
+ return s}
+CEN.forEach(c=>{c.trk.forEach((p,i)=>{const dx=[-4,0,4][i%3];TR.push({c,m:mkTruck(c,p),k:kf(c,dx,i),off:i*TRP/c.trk.length+(c.id==='SE'?0:c.id==='GG'?22:44)})})});
+const lerpA=(a,b,u)=>a+(b-a)*u;
+function truckStep(){const now=performance.now()/1000;TR.forEach(o=>{const tt=((now+o.off)%TRP),K=o.k,end=K[K.length-1].t;if(tt>end){o.m.visible=false;return}
+ let i=0;while(i<K.length-2&&tt>K[i+1].t)i++;const a=K[i],b=K[i+1],u=b.t>a.t?Math.min(1,Math.max(0,(tt-a.t)/(b.t-a.t))):1;
+ o.m.visible=true;o.m.position.set(lerpA(a.x,b.x,u),0,lerpA(a.z,b.z,u));o.m.rotation.y=lerpA(a.h,b.h,u)})}
+
+(function loop(){requestAnimationFrame(loop);truckStep();if(fly){let k=Math.min(1,(performance.now()-fly.s)/fly.d);k=k<.5?4*k*k*k:1-Math.pow(-2*k+2,3)/2;cam.position.lerpVectors(fly.p0,fly.p1,k);ctl.target.lerpVectors(fly.t0,fly.t1,k);if(k>=1)fly=null}ctl.update();renderer.render(scene,cam)})();
 </script></body></html>

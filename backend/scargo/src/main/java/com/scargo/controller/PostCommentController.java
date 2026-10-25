@@ -13,7 +13,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-// 게시글 댓글 및 대댓글 관리 API 컨트롤러
 @RestController
 @RequestMapping("/api/comments")
 @RequiredArgsConstructor
@@ -21,35 +20,44 @@ public class PostCommentController {
 
     private final PostCommentService commentService;
 
-    // 댓글 및 대댓글 등록 (로그인된 모든 사용자 가능)
+    // POST /api/comments: 로그인 사용자의 댓글·대댓글 등록
     @PostMapping
-    @PreAuthorize("hasAnyRole('GENERAL', 'CORPORATE_PENDING', 'CORPORATE_APPROVED', 'ADMIN')")
-    public ResponseEntity<PostCommentResponse> createComment(@Valid @RequestBody PostCommentCreateRequest request) {
-        PostCommentResponse response = commentService.createComment(request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<PostCommentResponse> createComment(
+            @Valid @RequestBody PostCommentCreateRequest request
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(commentService.createComment(request));
     }
 
-    // 특정 게시글의 전체 댓글 목록 조회 (SecurityConfig에서 permitAll() 또는 로그인 회원 조회)
+    // GET /api/comments/post/{postId}: 게시글의 댓글 목록 조회
     @GetMapping("/post/{postId}")
-    public ResponseEntity<List<PostCommentResponse>> getCommentsByPostId(@PathVariable("postId") Long postId) {
-        List<PostCommentResponse> comments = commentService.getCommentsByPostId(postId);
-        return ResponseEntity.ok(comments);
+    public ResponseEntity<List<PostCommentResponse>> getCommentsByPostId(
+            @PathVariable("postId") Long postId
+    ) {
+        return ResponseEntity.ok(
+                commentService.getCommentsByPostId(postId)
+        );
     }
 
-    // 댓글 수정 (로그인된 모든 사용자 가능)
+    // PUT /api/comments/{commentId}: 댓글 수정, Service에서 작성자 본인 확인
     @PutMapping("/{commentId}")
-    @PreAuthorize("hasAnyRole('GENERAL', 'CORPORATE_PENDING', 'CORPORATE_APPROVED', 'ADMIN')")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<PostCommentResponse> updateComment(
             @PathVariable("commentId") Long commentId,
-            @Valid @RequestBody PostCommentUpdateRequest request) {
-        PostCommentResponse response = commentService.updateComment(commentId, request);
-        return ResponseEntity.ok(response);
+            @Valid @RequestBody PostCommentUpdateRequest request
+    ) {
+        return ResponseEntity.ok(
+                commentService.updateComment(commentId, request)
+        );
     }
 
-    // 댓글 삭제 (로그인된 모든 사용자 가능)
+    // DELETE /api/comments/{commentId}: 댓글 삭제, Service에서 본인 또는 ADMIN 확인
     @DeleteMapping("/{commentId}")
-    @PreAuthorize("hasAnyRole('GENERAL', 'CORPORATE_PENDING', 'CORPORATE_APPROVED', 'ADMIN')")
-    public ResponseEntity<Void> deleteComment(@PathVariable("commentId") Long commentId) {
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<Void> deleteComment(
+            @PathVariable("commentId") Long commentId
+    ) {
         commentService.deleteComment(commentId);
         return ResponseEntity.noContent().build();
     }

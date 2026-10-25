@@ -35,6 +35,10 @@ public class AmrOtpKey {
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
 
+    // 26.10.22 추가: 이 키가 쓰이는 허브. NULL = 관리자(ADMIN)가 만든 전체 허브용 키 (manual_amr_hub_scope_261022.sql)
+    @Column(name = "hub_id")
+    private Long hubId;
+
     @Column(name = "revoked_at")
     private OffsetDateTime revokedAt;
 }

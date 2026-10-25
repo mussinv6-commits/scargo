@@ -1,3 +1,4 @@
+import { toDate } from '@/utils/serverTime.js' // 26.10.23 서버 시각(epoch 초) → Date
 import { computed, ref } from 'vue'
 
 function startOfDay(d) {
@@ -58,7 +59,7 @@ export const viewDateRelativeLabel = computed(() => {
 
 export function isSameViewDay(value) {
   if (!value) return false
-  const x = new Date(value)
+  const x = toDate(value)
   if (Number.isNaN(x.getTime())) return false
   const t = viewDate.value
   return x.getFullYear() === t.getFullYear() && x.getMonth() === t.getMonth() && x.getDate() === t.getDate()

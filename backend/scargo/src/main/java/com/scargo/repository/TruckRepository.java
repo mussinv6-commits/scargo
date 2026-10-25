@@ -3,7 +3,11 @@ package com.scargo.repository;
 import com.scargo.entity.Truck;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -11,6 +15,11 @@ import java.util.Optional;
 
 @Repository
 public interface TruckRepository extends JpaRepository<Truck, String> {
+
+    // 26.10.22 추가: 매핑 변경 시 같은 차량에 컨테이너가 동시에 두 개 배정되지 않도록 행 잠금 조회
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT t FROM Truck t WHERE t.vehicleNo = :vehicleNo")
+    Optional<Truck> findForUpdate(@Param("vehicleNo") String vehicleNo);
 
     // 특정 업체의 모든 차량 조회
     List<Truck> findByCompany_CompanyId(Long companyId);

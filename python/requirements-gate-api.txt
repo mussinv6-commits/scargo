@@ -1,0 +1,16 @@
+# SCARGO 번호판 OCR 서버(gate_api.py) 실행용 — 2026-10-24 팀 공유본
+# 확인한 환경: Python 3.10.21 (Anaconda env "yolo"), 아래 버전이 실제로 설치되어 동작하던 버전
+# GPU(CUDA) 용 torch 가 필요하면 https://pytorch.org 안내대로 torch / torchvision 을 먼저 설치
+torch==2.14.0
+torchvision==0.29.0
+ultralytics==8.4.166
+easyocr==1.7.2
+opencv-python==5.0.0.93
+numpy==2.2.6
+pillow==12.3.0
+fastapi==0.142.1
+uvicorn[standard]==0.54.0
+pydantic==2.13.5
+pg8000==1.31.5
+requests==2.34.2
+aiofiles

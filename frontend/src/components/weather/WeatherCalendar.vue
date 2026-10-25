@@ -98,7 +98,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 
-const API_KEY = '6b144ee4dd2306755be21d9f00eb8850'
+const API_KEY = import.meta.env.VITE_WEATHER_API_KEY || '6b144ee4dd2306755be21d9f00eb8850' // 팀 공유본: frontend/.env.local 에 VITE_WEATHER_API_KEY 지정 (README 11장)
 
 const city = ref('Seoul')
 const loading = ref(false)

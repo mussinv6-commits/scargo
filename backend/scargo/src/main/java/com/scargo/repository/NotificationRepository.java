@@ -35,7 +35,9 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     Page<Notification> findByCompanyIdOrderByCreatedAtDesc(Long companyId, Pageable pageable);
 
     // 7. 특정 계정의 특정 알림 유형별 필터링 조회 (최신순)
-    List<Notification> findByAccountIdAndNotificationTypeOrderByCreatedAtDesc(Long accountId, NotificationType notificationType);
+    // 26.10.23 수정: 엔티티의 notificationType 은 문자열 컬럼이라 enum 으로 조회하면 Hibernate 타입 불일치(InvalidDataAccessApiUsage)로
+    //  유형별 필터 API 가 항상 400 이었다 → 문자열(enum 이름)로 조회
+    List<Notification> findByAccountIdAndNotificationTypeOrderByCreatedAtDesc(Long accountId, String notificationType);
 
     // 8. 특정 계정의 '안 읽은' 알림 개수 조회 - 상단 뱃지 카운트용
     long countByAccountIdAndIsReadFalse(Long accountId);

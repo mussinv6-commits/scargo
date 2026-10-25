@@ -49,6 +49,7 @@
 </template>
 
 <script setup>
+import { toDate } from '@/utils/serverTime.js' // 26.10.23 서버 시각(epoch 초) → Date
 import AdminPageHeader from '@/components/admin/AdminPageHeader.vue'
 import AdminPager from '@/components/admin/AdminPager.vue'
 import { computed, onMounted, ref, watch } from 'vue'
@@ -71,7 +72,7 @@ function statusTone(s) {
 }
 
 function formatDate(d) {
-  return d ? new Date(d).toLocaleString('ko-KR') : '-'
+  return d ? toDate(d).toLocaleString('ko-KR') : '-'
 }
 
 function dayBounds() {

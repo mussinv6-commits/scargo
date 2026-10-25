@@ -155,6 +155,7 @@
 </template>
 
 <script setup>
+import { toDate } from '@/utils/serverTime.js' // 26.10.23 서버 시각(epoch 초) → Date
 import { computed, onMounted, ref } from 'vue'
 import DonutChart from '@/components/common/DonutChart.vue'
 import { adminApi, pickErrorMessage } from '@/utils/adminApi'
@@ -187,7 +188,7 @@ const gates = ref([])
 
 function isViewDay(d) {
   if (!d) return false
-  const x = new Date(d)
+  const x = toDate(d)
   const t = viewDate.value
   return x.getFullYear() === t.getFullYear() && x.getMonth() === t.getMonth() && x.getDate() === t.getDate()
 }
@@ -308,7 +309,7 @@ const hourly = computed(() => {
   const counts = Object.fromEntries(hours.map((h) => [h, 0]))
   const bump = (d) => {
     if (!d || !isViewDay(d)) return
-    const h = new Date(d).getHours()
+    const h = toDate(d).getHours()
     const bucket = hours.reduce((best, x) => (Math.abs(x - h) < Math.abs(best - h) ? x : best), 0)
     counts[bucket] += 1
   }
@@ -341,7 +342,7 @@ function hourHeight(v) {
 
 function fmtTime(d) {
   if (!d) return '--:--'
-  return new Date(d).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })
+  return toDate(d).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })
 }
 
 const recentEvents = computed(() => {
@@ -393,7 +394,7 @@ const recentEvents = computed(() => {
   })
   return rows
     .filter((e) => isViewDay(e.at))
-    .sort((a, b) => new Date(b.at) - new Date(a.at))
+    .sort((a, b) => toDate(b.at) - toDate(a.at))
     .slice(0, 6)
 })
 

@@ -415,6 +415,7 @@
 </template>
 
 <script setup>
+import { toDate } from '@/utils/serverTime.js' // 26.10.23 서버 시각(epoch 초) → Date
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import AdminPageHeader from '@/components/admin/AdminPageHeader.vue'
 import WeighbridgeRouteMap from '@/components/admin/WeighbridgeRouteMap.vue' // 26.10.02 추가: 이동 경로 지도
@@ -954,7 +955,7 @@ function axlePct(v) {
 }
 function hhmm(iso) {
   if (!iso) return '-'
-  const d = new Date(iso)
+  const d = toDate(iso)
   const t = d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })
   // 26.10.06: 지난날 재계량 대기 기록은 날짜도 함께 표시
   return d.toDateString() === new Date().toDateString() ? t : `${d.getMonth() + 1}/${d.getDate()} ${t}`

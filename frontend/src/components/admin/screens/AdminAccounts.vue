@@ -14,6 +14,12 @@
             <option value="CORPORATE_PENDING">기업회원(승인대기)</option>
             <option value="CORPORATE_APPROVED">기업회원(승인완료)</option>
             <option value="GENERAL">일반회원(기사)</option>
+            <!-- 26.10.22 통합: 구간별 권한 -->
+            <option value="CONTAINER_DRIVER">컨테이너 운송기사</option>
+            <option value="LINEHAUL_DRIVER">간선 운송기사</option>
+            <option value="CONTROL">통합 관제사</option>
+            <option value="HUB_OP">허브 관제사</option>
+            <option value="CENTER_OP">지역센터 관제사</option>
             <option value="ADMIN">관리자</option>
           </select>
         </div>
@@ -120,6 +126,7 @@
 </template>
 
 <script setup>
+import { toDate } from '@/utils/serverTime.js' // 26.10.23 서버 시각(epoch 초) → Date
 import AdminPageHeader from '@/components/admin/AdminPageHeader.vue'
 import AdminPager from '@/components/admin/AdminPager.vue'
 import { computed, onMounted, ref, watch } from 'vue'
@@ -169,11 +176,16 @@ function typeLabel(t) {
     GENERAL: '일반회원(기사)',
     CORPORATE_PENDING: '기업회원(승인대기)',
     CORPORATE_APPROVED: '기업회원(승인완료)',
+    CONTAINER_DRIVER: '컨테이너 운송기사',
+    LINEHAUL_DRIVER: '간선 운송기사',
+    CONTROL: '통합 관제사',
+    HUB_OP: '허브 관제사',
+    CENTER_OP: '지역센터 관제사',
   }[t] || t
 }
 
 function formatDate(d) {
-  return d ? new Date(d).toLocaleDateString('ko-KR') : '-'
+  return d ? toDate(d).toLocaleDateString('ko-KR') : '-'
 }
 
 async function fetchAccounts() {

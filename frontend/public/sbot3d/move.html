@@ -24,17 +24,18 @@ canvas{display:block;width:100%;height:100%}
 .st{font-variant-numeric:tabular-nums}
 .pop{position:absolute;pointer-events:none;background:#0b0d10;border:1px solid var(--red);border-radius:8px;padding:8px 10px;font-size:12px;line-height:1.5;transform:translate(-50%,-120%);opacity:0;transition:opacity .2s;white-space:nowrap}
 .pop.on{opacity:1}
+.plt{display:inline-block;margin:3px 0;padding:1px 8px;background:#f2c230;color:#111;border:1px solid #1a1a1a;border-radius:3px;font-weight:700;letter-spacing:.5px}
 .row{cursor:pointer}.row.sel{background:#232832;margin:0 -8px;padding-left:8px;padding-right:8px;border-radius:6px}.fare{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}.big{font-size:26px;font-weight:700;color:#f6d98a;text-align:right;font-variant-numeric:tabular-nums;margin:6px 0}.mut{font-size:11.5px;color:var(--mute);line-height:1.5}.lg i{display:inline-block;width:18px;height:3px;vertical-align:middle;margin:0 5px 0 12px}.foot{font-size:11.5px;color:var(--mute);padding-bottom:12px}
 @media(max-width:640px){.hud{position:static;width:auto;max-width:none;border-radius:0;border-width:1px 0 0}.stage{display:flex;flex-direction:column}canvas{flex:1;min-height:320px}}
 </style></head><body>
 <header>
- <div><h1>허브 → 물류센터 3D 관제</h1><div class="sub">곤지암 허브에서 경기·서울·인천센터로 가는 택배차 · 예시 화면 <span id="clk" style="margin-left:10px;color:var(--amber)"></span></div></div>
+ <div><h1>허브 → 물류센터 3D 관제</h1><div class="sub">곤지암 허브에서 경기·서울·인천센터로 가는 택배차 <span id="clk" style="margin-left:10px;color:var(--amber)"></span></div></div>
  <div class="ctl"><button id="sp1" aria-pressed="false">1×</button><button id="sp2" aria-pressed="true">2×</button><button id="sp4" aria-pressed="false">4×</button><button id="sp8" aria-pressed="false">8×</button><button id="bOrbit" aria-pressed="true">조감 시점</button><button id="bBlimp" aria-pressed="false">비행선 시점</button><button id="bChase" aria-pressed="false">선택 차량 추적</button><button id="bPause" aria-pressed="false">일시정지</button></div>
 </header>
 <div class="stage" id="stage"><canvas id="cv"></canvas>
  <div class="pop" id="pop"></div>
  <div class="hud"><h2>운행 중 택배차</h2><div id="list"></div><div class="fare" id="fare"></div></div></div>
-<div class="foot">톨게이트 요금과 입고 수치는 예시입니다. 드래그로 회전, 휠로 확대합니다.<br><span id="spons" class="mut"></span><span class="lg"><i style="background:#4aa3ff"></i>재정고속도로<i style="background:#f08a00"></i>민자고속도로</span></div>
+<div class="foot">드래그로 회전, 휠로 확대합니다.<br><span id="spons" class="mut"></span><span class="lg"><i style="background:#4aa3ff"></i>재정고속도로<i style="background:#f08a00"></i>민자고속도로</span></div>
 <script src="shared.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
@@ -44,7 +45,7 @@ var ROUTES=[
  {id:'T1',name:'경기센터',color:0x4aa3ff,css:'#4aa3ff',z:-27,dx:0,jae:1900,min:1820,off:0.0},
  {id:'T2',name:'서울센터',color:0xf0a800,css:'#f0a800',z:2,dx:24,jae:2330,min:2200,off:0.35},
  {id:'T3',name:'인천센터',color:0x4cc38a,css:'#4cc38a',z:24,dx:-28,jae:3210,min:3100,off:0.7}];
-function sbStart(r){r.asg=null;r.nItems=5+Math.floor(Math.random()*10);if(window.SBOT)SBOT.dispatch(SB_KEY[r.id],r.nItems,function(j){if(j){r.asg=j.assignmentId;r.curNo=j.vehicleNo}})} // 출발할 때 DB(허브 출고·운송 구간)에 기록
+function sbStart(r,n){n=n||0;r.asg=null;if(!n){r.pr=null;r.pt=null;r.at=null;r.dt=hhmm(tod);r.est=r.fin=r.base}r.nItems=5+Math.floor(Math.random()*10);if(window.SBOT)SBOT.dispatch(SB_KEY[r.id],r.nItems,function(j){if(j){r.asg=j.assignmentId;r.curNo=j.vehicleNo;r.logId=j.logId||null;fareKey=null}else if(n<10){setTimeout(function(){if(!r.asg&&!r.curNo)sbStart(r,n+1)},1500)}})} // 출발할 때 DB(허브 출고·운송 구간)에 기록
 var EXIT_T=0.82,speed=2,sbLive=function(){if(window.SBOT)SBOT.live()},SB_KEY={T1:'GGI',T2:'SEL',T3:'ICN'}; // 센터 도착 기록 → 공용 데이터(shared.js)로 대시보드·물류센터 화면에 전달
 var cv=document.getElementById('cv');
 var renderer=new THREE.WebGLRenderer({canvas:cv,antialias:true});
@@ -68,8 +69,15 @@ var hillMat=new THREE.MeshLambertMaterial({color:0x5d7a55}),treeMats=[],lineWhit
  for(var j=0;j<14;j++){var b=r()*Math.PI*2;if(Math.sin(b)>.4)continue;var h2=new THREE.Mesh(new THREE.SphereGeometry(1,18,10),hillMat);h2.scale.set(40+r()*50,10+r()*18,30+r()*30);h2.position.set(Math.cos(b)*230,0,Math.sin(b)*160);scene.add(h2)}})();
 function won(n){return n.toLocaleString('ko-KR')+'원'}
 function pad(n){return (n<10?'0':'')+n}
+// 26.10.25 통행료는 통과한 시각으로만 정한다: 주간(06~21시)은 기본 요금 그대로, 심야 21~24시 30% · 0~6시 50% 할인 (차량마다 따로)
+function rateAt(h){h=+h;if(h!==h)h=12;h=((h%24)+24)%24;return h>=21?.3:h<6?.5:0}
+function hhmm(h){h=+h;if(h!==h)h=20.5;h=((h%24)+24)%24;return pad(Math.floor(h))+':'+pad(Math.floor(h%1*60))}
 function label(text,color,scale){var c=document.createElement('canvas');c.width=512;c.height=128;var g=c.getContext('2d');g.fillStyle='rgba(8,12,24,.85)';g.fillRect(0,20,512,88);g.strokeStyle=color;g.lineWidth=4;g.strokeRect(2,22,508,84);g.fillStyle='#fff';g.font='700 52px "Noto Sans KR",sans-serif';g.textAlign='center';g.textBaseline='middle';g.fillText(text,256,66);
- var t=new THREE.CanvasTexture(c);var s=new THREE.Sprite(new THREE.SpriteMaterial({map:t,depthTest:false}));s.scale.set(scale*4,scale,1);s.renderOrder=5;return s}
+ var t=new THREE.CanvasTexture(c);var s=new THREE.Sprite(new THREE.SpriteMaterial({map:t,depthTest:false}));s.scale.set(scale*4,scale,1);s.renderOrder=5;s.userData={c:c,t:t,col:color};return s}
+function photoUrl(r){return(r.logId&&window.SBOT&&SBOT.apiBase)?SBOT.apiBase()+'/api/amr/vehicles/'+r.logId+'/photo':null}
+function photoImg(r,w){var u=photoUrl(r);return u?'<img src="'+u+'" crossorigin="use-credentials" style="display:block;width:'+w+'px;max-width:100%;border-radius:4px;margin:4px 0;border:1px solid #2a3350" onerror="this.style.display=\'none\'">':''}
+function setPlate(m,text){var u=m.userData,g=u.c.getContext('2d');g.fillStyle='#f2c230';g.fillRect(0,0,256,64);g.strokeStyle='#1a1a1a';g.lineWidth=5;g.strokeRect(3,3,250,58);g.fillStyle='#111';g.font='700 38px "Noto Sans KR",sans-serif';g.textAlign='center';g.textBaseline='middle';g.fillText(text,128,34);u.t.needsUpdate=true;m.visible=true}
+function relabel(s,text){var u=s.userData,c=u.c,g=c.getContext('2d');g.clearRect(0,0,512,128);g.fillStyle='rgba(8,12,24,.85)';g.fillRect(0,20,512,88);g.strokeStyle=u.col;g.lineWidth=4;g.strokeRect(2,22,508,84);g.fillStyle='#fff';g.font='700 46px "Noto Sans KR",sans-serif';g.textAlign='center';g.textBaseline='middle';g.fillText(text,256,66);u.t.needsUpdate=true}
 function box(w,h,d,color,x,y,z){var m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),new THREE.MeshLambertMaterial({color:color}));m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;scene.add(m);return m}
 function wallMat(len,h,css){var cw=512,ch=Math.max(96,Math.round(cw*h/len));var c=document.createElement('canvas');c.width=cw;c.height=ch;var g=c.getContext('2d');
  for(var x=0;x<cw;x+=10){g.fillStyle=(x/10)%2?'#a7acb6':'#bcc1c9';g.fillRect(x,0,10,ch)}
@@ -136,7 +144,7 @@ ROUTES.forEach(function(r){
  [2.26,-2.26].forEach(function(o){wall(c,td,tm,o,.34,.3,30,gB);wall(c,tm,1,o,.34,.3,40,gO);wall(c,td,tm,o,.7,.04,30,gB);wall(c,tm,1,o,.7,.04,40,gO)});
  for(var t3=td+.01;t3<.985;t3+=.0083){[-.57,.57].forEach(function(o){ribbon(c,t3,t3+.0042,o,.08,.05,0,2,lineWhite)})}
  r.exit=gantry(c,EXIT_T);
- r.base=r.jae+r.min;r.est=Math.round(r.base*.7);r.fin=Math.round(r.base*.5);
+ r.base=r.jae+r.min;r.est=r.base;r.fin=r.base;
 });
 var entryG=gantryAt(new THREE.Vector3(GX,0,0),new THREE.Vector3(-1,0,0),5.2,9.6,1.6,1.9,[-3,0,3],[-1.5,1.5],entrySg);
 var glowC=document.createElement('canvas');glowC.width=glowC.height=64;var gg=glowC.getContext('2d'),rg=gg.createRadialGradient(32,32,0,32,32,32);rg.addColorStop(0,'rgba(255,214,140,.9)');rg.addColorStop(1,'rgba(255,214,140,0)');gg.fillStyle=rg;gg.fillRect(0,0,64,64);var glowT=new THREE.CanvasTexture(glowC);
@@ -189,7 +197,8 @@ function makeTruck(color,id){var g=new THREE.Group();
  [-.46,.46].forEach(function(z){var a=new THREE.Mesh(new THREE.BoxGeometry(.06,.16,.22),hl);a.position.set(2.14,.72,z);g.add(a);var b=new THREE.Mesh(new THREE.BoxGeometry(.06,.2,.2),tl);b.position.set(-2.06,.78,z*1.4);g.add(b)});
  g.traverse(function(o){if(o.isMesh)o.castShadow=true});
  g.scale.setScalar(.55);
- var tag=label(id,'#ffffff',1.1);tag.position.set(0,4.2,0);g.add(tag);
+ var tag=label(id,'#ffffff',1.1);tag.position.set(0,4.2,0);g.add(tag);g.userData.tag=tag;
+ g.userData.plates=[[-2.05,.9,-Math.PI/2],[2.215,.5,Math.PI/2]].map(function(q){var c=document.createElement('canvas');c.width=256;c.height=64;var t=new THREE.CanvasTexture(c);var m=new THREE.Mesh(new THREE.PlaneGeometry(.62,.155),new THREE.MeshBasicMaterial({map:t}));m.position.set(q[0],q[1],0);m.rotation.y=q[2];m.visible=false;m.userData={c:c,t:t};g.add(m);return m});
  return g}
 var list=document.getElementById('list');
 ROUTES.forEach(function(r,i){r.truck=makeTruck(r.color,r.id);scene.add(r.truck);r.t=r.off;r.hold=0;r.state='이동 중';
@@ -199,14 +208,14 @@ rows.forEach(function(row,i){row.addEventListener('click',function(){sel=i;fareK
 ROUTES.forEach(sbStart);setInterval(function(){if(window.SBOT)SBOT.live()},1000);if(window.SBOT)SBOT.live();
 function updFare(){var r=ROUTES[sel],passed=r.t>=r.gt||r.hold>0,arrived=r.t>=EXIT_T||r.hold>0;
  var base=r.base,est=r.est,fin=r.fin;
- var key=sel+'|'+(arrived?2:passed?1:0);if(key===fareKey)return;fareKey=key;
+ var key=sel+'|'+(arrived?2:passed?1:0)+'|'+(r.curNo||'');if(key===fareKey)return;fareKey=key;
  rows.forEach(function(row,i){row.classList.toggle('sel',i===sel)});
  function line(a,b,c){return '<div class="row" style="cursor:default"><span>'+a+'</span><span class="st"'+(c?' style="color:'+c+'"':'')+'>'+b+'</span></div>'}
- var h='<h2>정산 내역 · '+r.id+'</h2>'+line('구간','곤지암 허브 → '+r.name)+line('차량','1톤 택배차 (1종)')+line('허브 출발','20:30')+line('톨게이트 통과',passed?'21:20':'—')+line('센터 도착',arrived?'22:10':'—')
+ var h='<h2>정산 내역 · '+r.id+'</h2>'+line('구간','곤지암 허브 → '+r.name)+line('차량','1톤 택배차 (1종)')+(r.curNo?line('차량번호','<span class="plt">'+r.curNo+'</span>')+'':'')+line('허브 출발',r.dt||'—')+line('톨게이트 통과',passed?(r.pt||'—'):'—')+line('센터 도착',arrived?(r.at||'—'):'—')
   +line('<span class="dot" style="background:#4aa3ff"></span>재정구간',won(r.jae))+line('<span class="dot" style="background:#f08a00"></span>민자구간',won(r.min))+line('기본 요금',won(base));
  if(!passed){h+='<div class="mut" style="margin-top:8px">톨게이트를 지나면 예상 요금이 계산됩니다.</div><div class="big">—</div>'}
- else if(!arrived){h+=line('심야할인 (30%)','-'+won(base-est),'#4cc38a')+'<div class="mut" style="margin-top:8px">예상 통행료</div><div class="big">'+won(est)+'</div><div class="mut">센터 도착 시 심야 비율로 확정</div>'}
- else{h+=line('심야(21~06시) 비율','70%')+line('심야할인 (50%)','-'+won(base-fin),'#4cc38a')+'<div class="mut" style="margin-top:8px">확정 통행료</div><div class="big">'+won(fin)+'</div><div class="mut">통과 때 예상 '+won(est)+' (30%) → 확정 '+won(fin)+' (50%)</div>'}
+ else if(!arrived){h+=(r.pr>0?line('심야할인 ('+Math.round(r.pr*100)+'%)','-'+won(base-est),'#4cc38a'):line('주간 통과','할인 없음'))+'<div class="mut" style="margin-top:8px">예상 통행료</div><div class="big">'+won(est)+'</div><div class="mut">통과 시각 기준 요금</div>'}
+ else{h+=(r.pr>0?line('심야('+(r.pr>.4?'00~06':'21~24')+'시) 할인 ('+Math.round(r.pr*100)+'%)','-'+won(base-fin),'#4cc38a'):line('주간 통과','할인 없음'))+'<div class="mut" style="margin-top:8px">확정 통행료</div><div class="big">'+won(fin)+'</div><div class="mut">통과 '+(r.pt||'')+' 기준 · '+(r.pr>0?'심야할인 적용':'기본 요금')+'</div>'}
  h+='<div class="mut" style="margin-top:10px;border-top:1px solid var(--line);padding-top:8px"><b style="color:var(--fg)">요금 기록</b><br>'+(!passed?'통과 대기':!arrived?'통과 시 저장 · 예상 요금':'toll_fare_log 갱신 · 확정 요금')+'</div>';
  document.getElementById('fare').innerHTML=h}
 function refreshSigns(r,s){if(r.sk===s)return;r.sk=s;
@@ -219,16 +228,16 @@ function drawEntry(pk){var g=entrySg.cv.getContext('2d');g.fillStyle='#0b1428';g
 var entryKey='';function refreshEntry(){var pk=null,k='-';if(k!==entryKey){entryKey=k;drawEntry(pk)}}
 var pop=document.getElementById('pop'),popUntil=0,popRoute=null;
 var paused=window.matchMedia('(prefers-reduced-motion: reduce)').matches,mode='orbit';
-[1,2,4,8].forEach(function(n){document.getElementById('sp'+n).addEventListener('click',function(){speed=n;[1,2,4,8].forEach(function(m){document.getElementById('sp'+m).setAttribute('aria-pressed',m===n)})})});
+[1,2,4,8].forEach(function(n){document.getElementById('sp'+n).addEventListener('click',function(){speed=n;clkRebase();[1,2,4,8].forEach(function(m){document.getElementById('sp'+m).setAttribute('aria-pressed',m===n)})})});
 function btn2(id,fn){document.getElementById(id).addEventListener('click',fn)}
 function btn(id,fn){document.getElementById(id).addEventListener('click',fn)}
 function setMode(m){mode=m;document.getElementById('bBlimp').setAttribute('aria-pressed',m==='blimp');document.getElementById('bOrbit').setAttribute('aria-pressed',m==='orbit');document.getElementById('bChase').setAttribute('aria-pressed',m==='chase');controls.enabled=m==='orbit'}
 btn2('bBlimp',function(){setMode('blimp')});
 btn('bOrbit',function(){setMode('orbit')});btn('bChase',function(){setMode('chase')});
 var bp=document.getElementById('bPause');bp.setAttribute('aria-pressed',paused);bp.textContent=paused?'재생':'일시정지';
-btn('bPause',function(){paused=!paused;bp.setAttribute('aria-pressed',paused);bp.textContent=paused?'재생':'일시정지'});
+btn('bPause',function(){paused=!paused;clkRebase();bp.setAttribute('aria-pressed',paused);bp.textContent=paused?'재생':'일시정지'});
 function place(r){var i=ROUTES.indexOf(r),tt=Math.min(r.t,1),p=curves[i].getPoint(tt),tg=curves[i].getTangent(tt);
- r.truck.position.set(p.x,0,p.z);r.truck.rotation.y=-Math.atan2(tg.z,tg.x)}
+ if(r.curNo&&r.shownNo!==r.curNo){r.shownNo=r.curNo;relabel(r.truck.userData.tag,r.curNo);r.truck.userData.plates.forEach(function(m){setPlate(m,r.curNo)})}r.truck.position.set(p.x,0,p.z);r.truck.rotation.y=-Math.atan2(tg.z,tg.x)}
 function resize(){var w=cv.clientWidth,h=cv.clientHeight;if(!w||!h)return;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix()}
 window.addEventListener('resize',resize);
 var last=performance.now(),v=new THREE.Vector3();
@@ -236,10 +245,10 @@ function tick(now){var dt=Math.min((now-last)/1000,.1);last=now;updBlimp(dt,now)
  if(!paused){ROUTES.forEach(function(r,i){
   if(r.hold>0){r.hold-=dt*Math.min(speed,2);r.state='입고 완료';if(r.hold<=0){r.t=0;r.state='이동 중';if(window.SBOT&&r.curNo&&!r.asg)SBOT.depart(SB_KEY[r.id],r.curNo);sbStart(r)}}
   else{var prev=r.t;r.t+=dt*speed/60;
-   if(prev<r.gt&&r.t>=r.gt){popRoute=r;r.laps=(r.laps||0)+1;var over=(r.id==='T3'&&r.laps%2===1);var w=over?'축중 11.4t':'축중 '+(7+Math.random()*1.5).toFixed(1)+'t';
-    pop.innerHTML='<b>'+r.id+' 톨게이트 통과</b><br>'+w+(over?'<br><span style="color:#ef6b6b">과적 적발 · 과태료 부과 후 통과</span>':' · 과적 정상');pop.style.borderColor=over?'#ef6b6b':r.css;popUntil=now+(over?3400:2600)}
+   if(prev<r.gt&&r.t>=r.gt){popRoute=r;r.pr=rateAt(tod);r.pt=hhmm(tod);r.est=r.fin=Math.round(r.base*(1-r.pr));r.laps=(r.laps||0)+1;var over=(r.id==='T3'&&r.laps%2===1);var w=over?'축중 11.4t':'축중 '+(7+Math.random()*1.5).toFixed(1)+'t';
+    pop.innerHTML='<b>'+r.id+' 톨게이트 통과</b>'+(r.curNo?'<br><span class="plt">'+r.curNo+'</span>':'')+'<br>'+w+(over?'<br><span style="color:#ef6b6b">과적 적발 · 과태료 부과 후 통과</span>':' · 과적 정상');pop.style.borderColor=over?'#ef6b6b':r.css;popUntil=now+(over?3400:2600)}
    r.state=(r.t>r.gt-.025&&r.t<r.gt+.03)?'톨게이트 통과':'이동 중';
-   if(r.t>=1){r.t=1;r.hold=6;if(window.SBOT)r.curNo=SBOT.arrive(SB_KEY[r.id],{items:r.nItems||8,base:r.base,fin:r.fin,asg:r.asg,no:r.curNo})}}
+   if(r.t>=1){r.t=1;r.hold=6/(window.SBOT&&SBOT.flow?SBOT.flow():1);r.at=hhmm(tod);if(window.SBOT)r.curNo=SBOT.arrive(SB_KEY[r.id],{items:r.nItems||8,base:r.base,fin:r.fin,asg:r.asg,no:r.curNo})}}
   place(r);r.es=(r.t>=r.gt||r.hold>0)?1:0;refreshSigns(r,(r.t>=EXIT_T||r.hold>0)?2:(r.t>=r.gt?1:0));
   var e=document.getElementById('st'+i);e.textContent=r.state;e.style.color=r.state==='입고 완료'?'#4cc38a':(r.state==='톨게이트 통과'?'#ef6b6b':'#f0a800')})}
  refreshEntry();updFare();
@@ -249,7 +258,10 @@ function tick(now){var dt=Math.min((now-last)/1000,.1);last=now;updBlimp(dt,now)
 var tod=20.5,lastN=-1;
 function mixc(a,b,n){return new THREE.Color(a).lerp(new THREE.Color(b),n)}
 function nightF(h){if(h>=19.5||h<5.5)return 1;if(h>=7.5&&h<17.5)return 0;if(h>=17.5)return (h-17.5)/2;return 1-(h-5.5)/2}
-function updEnv(dt,force){if(!paused)tod=(tod+dt*speed*.1)%24;var n=nightF(tod);
+function clkRead(){try{var c=JSON.parse(localStorage.getItem('sbot_clock')||'null');if(c&&typeof c.tod==='number'&&typeof c.rate==='number')return c}catch(e){}return null}
+function clkTod(){var c=clkRead();return c?(((c.tod+(Date.now()-c.at)/1000*c.rate)%24)+24)%24:null}
+function clkRebase(){try{var t=clkTod();localStorage.setItem('sbot_clock',JSON.stringify({tod:t==null?tod:t,at:Date.now(),rate:paused?0:speed*.1}))}catch(e){}} // 속도·일시정지가 바뀔 때만 기준점을 다시 잡는다 (물류센터 화면도 이 값 하나를 따른다)
+function updEnv(dt,force){var ct=clkTod();if(ct==null){clkRebase();ct=tod}tod=ct;var n=nightF(tod);
  document.getElementById('clk').textContent='시각 '+pad(Math.floor(tod))+':'+pad(Math.floor(tod%1*60))+(n>.5?' · 밤':' · 낮');
  if(!force&&Math.abs(n-lastN)<.01)return;lastN=n;
  var g=skg,gr=g.createLinearGradient(0,0,0,256);gr.addColorStop(0,mixc('#4f8fe0','#04070f',n).getStyle());gr.addColorStop(.5,mixc('#8bbcf0','#0c1834',n).getStyle());gr.addColorStop(1,mixc('#dbe9f7','#26406e',n).getStyle());g.fillStyle=gr;g.fillRect(0,0,2,256);bgTex.needsUpdate=true;

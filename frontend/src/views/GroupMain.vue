@@ -34,8 +34,22 @@
     <p class="desc">화물 운송부터 허브 자동화까지, 물류의 모든 흐름을 하나로 잇습니다</p>
     <p class="en">CONNECTING EVERY FLOW OF LOGISTICS</p>
     <form v-if="!authState.user" class="login" @submit.prevent="login">
-      <label><span>아이디</span><input v-model.trim="uid" type="text" autocomplete="username" placeholder="ID" /></label>
-      <label><span>비밀번호</span><input v-model="upw" type="password" autocomplete="current-password" placeholder="PASSWORD" /></label>
+      <!-- 26.10.24 팀 반영(예지님 v7): 아이디 저장(아이디칸 오른쪽) + 비밀번호 보기/숨기기 -->
+      <div class="fld"><label for="gm-uid">아이디</label>
+        <span class="id-wrap">
+          <input id="gm-uid" v-model.trim="uid" type="text" autocomplete="username" placeholder="ID" />
+          <label class="save-id"><input type="checkbox" v-model="rememberId" @change="onRememberChange" /> 아이디 저장</label>
+        </span>
+      </div>
+      <div class="fld"><label for="gm-upw">비밀번호</label>
+        <span class="pw-wrap">
+          <input id="gm-upw" v-model="upw" :type="showPw ? 'text' : 'password'" autocomplete="current-password" placeholder="PASSWORD" />
+          <button type="button" class="pw-eye" :aria-label="showPw ? '비밀번호 숨기기' : '비밀번호 보기'" :aria-pressed="showPw" @click="showPw = !showPw">
+            <svg v-if="!showPw" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+            <svg v-else viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" d="M3 3l18 18M10.6 5.1A10.9 10.9 0 0 1 12 5c7 0 11 7 11 7a18 18 0 0 1-3.2 4.1M6.6 6.6C3.4 8.6 1 12 1 12s4 7 11 7c1.8 0 3.4-.5 4.8-1.2M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>
+          </button>
+        </span>
+      </div>
       <button type="submit" :disabled="busy">{{ busy ? "확인 중…" : "로그인" }}</button>
       <p v-if="err" class="err">{{ err }}</p>
       <RouterLink to="/regi" class="join">회원가입</RouterLink>
@@ -81,6 +95,8 @@ import { useRouter } from "vue-router";
 import axios from "axios";
 import { authState, clearLogin, setLogin } from "@/auth/authState.js";
 import { API_BASE } from "@/utils/apiBase.js";
+import { hubAccess } from "@/components/amr/amrAccess.js"; // 26.10.22 통합: 관제사는 허브 관제로
+import { loadSavedId, storeSavedId } from "@/utils/savedId.js"; // 26.10.24 팀 반영: 아이디만 localStorage 저장
 
 
 // ===== 회사 연혁(엔딩 크레딧) - 문구는 여기서 수정 =====
@@ -128,7 +144,10 @@ onBeforeUnmount(() => { cancelAnimationFrame(raf); clearTimeout(endTimer); });
 
 const router = useRouter();
 const msg = ref("");
-const uid = ref("");
+const uid = ref(loadSavedId());
+const rememberId = ref(!!uid.value);
+const showPw = ref(false);
+function onRememberChange() { if (!rememberId.value) storeSavedId(false); }
 const upw = ref("");
 const err = ref("");
 const busy = ref(false);
@@ -140,7 +159,9 @@ function login() {
   axios.post(`${API_BASE}/api/accounts/login`, { userId: uid.value, userPw: upw.value }, { withCredentials: true })
     .then((resp) => {
       if (!resp.data || resp.data.userId === undefined) { err.value = "아이디나 비밀번호를 확인해 주세요."; return; }
+      storeSavedId(rememberId.value, uid.value); // 아이디만 저장, 비밀번호는 저장 안 함
       setLogin(resp.data);
+      showPw.value = false;
       upw.value = "";
       const back = sessionStorage.getItem("location");
       sessionStorage.removeItem("location");
@@ -165,7 +186,12 @@ function go(p) {
       msg.value = "S-Bot 은 로그인 후 이용할 수 있습니다. 위에서 S-Bot 관리자 계정으로 로그인해 주세요.";
       return;
     }
-    if (u.userType !== "ADMIN" || u.adminScope !== "SBOT") {
+    if (u.userType !== "ADMIN") { // 26.10.24: 마스터 관리자도 S-Bot 허용
+      // 26.10.22 통합: 통합 관제사(CONTROL) · 허브 관제사(HUB_OP)는 허브 AMR 관제 화면만 사용
+      if (hubAccess(u).canView) {
+        router.push("/sbot/hub");
+        return;
+      }
       msg.value = "S-Bot 은 S-Bot 관리자 계정(sbot)으로 로그인해야 합니다. 오른쪽 위 '로그아웃' 후 다시 로그인해 주세요.";
       return;
     }
@@ -208,6 +234,16 @@ function logout() {
 .login .err { margin: 0; color: #ff9a8a; font-size: 12px; }
 .login .join { color: #9fb0c6; font-size: 12px; text-decoration: none; }
 .login .join:hover { color: #f1e2b8; }
+/* 26.10.24 팀 반영(예지님 v7): 아이디 저장 · 비밀번호 보기 */
+.login .fld { display: flex; flex-direction: column; gap: 4px; text-align: left; }
+.login .fld > label { font-size: 11px; letter-spacing: .2em; color: #b9a574; }
+.login .id-wrap, .login .pw-wrap { position: relative; display: block; }
+.login .id-wrap input[type="text"] { width: 100%; padding-right: 92px; box-sizing: border-box; }
+.login .pw-wrap input { width: 100%; padding-right: 42px; box-sizing: border-box; }
+.login .save-id { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: row; align-items: center; gap: 5px; font-size: 11px; letter-spacing: 0; color: #b9a574; cursor: pointer; white-space: nowrap; }
+.login .save-id input { width: 13px; height: 13px; padding: 0; margin: 0; accent-color: #d8a94e; }
+.login .pw-eye { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 34px; height: 30px; padding: 0; display: grid; place-items: center; background: transparent !important; color: #b9a574; letter-spacing: 0; }
+.login .pw-eye:focus-visible { outline: 2px solid #f6e4b0; }
 .hint { margin: 2.4vh 0 0; color: #b9a574; letter-spacing: .25em; font-size: 13px; }
 .cards { display: flex; gap: 16px; margin-top: 2.4vh; flex-wrap: wrap; justify-content: center; }
 .card { width: 250px; padding: 10px 16px; border-radius: 14px; border: 1px solid rgba(216,169,78,.55); background: rgba(11,29,54,.7); color: #f1e2b8; cursor: pointer; transition: .2s; }

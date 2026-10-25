@@ -40,6 +40,8 @@ public class AmrDtos {
                           Double avgInterWaitSec, long interWaits, List<RobotUtil> utilization,
                           long entries, long exits, long blocks, Double avgOcrConfidence, OffsetDateTime at) {}
     public record RegistryView(String plate, String kind, String carrier, String memo) {}
+    // 26.10.22 허브 선택 목록: simulated = 웹 시뮬레이터가 데이터를 쓰는 허브(기본 허브), canManage = 이 사용자가 변경할 수 있는지
+    public record HubView(Long hubId, String hubCode, String hubName, boolean simulated, boolean canManage) {}
     public record StateView(boolean producerLive, OffsetDateTime producerAt, Integer phase, List<RobotView> robots,
                             MaintView pending, MaintView active, List<EventView> events, SettingsView settings,
                             List<VehicleView> vehicles) {}

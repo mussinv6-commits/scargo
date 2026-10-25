@@ -163,6 +163,7 @@
   </div>
 </template>
 <script setup>
+import { toDate } from '@/utils/serverTime.js' // 26.10.23 서버 시각(epoch 초) → Date
 import { ref, computed, onBeforeUnmount, onMounted } from 'vue'
 import axios from 'axios'
 import AdminPageHeader from '@/components/admin/AdminPageHeader.vue'
@@ -275,12 +276,12 @@ async function fetchOverload(vno) {
     const rows = (res.data?.content ?? []).filter(
       (r) =>
         String(r.vehicleNo || '').replace(/\s/g, '') === key &&
-        (!since || !r.checkedAt || new Date(r.checkedAt).getTime() >= since),
+        (!since || !r.checkedAt || toDate(r.checkedAt).getTime() >= since),
     )
     if (!rows.length) return { overload: 'none' }
     // 가장 최근 검사 1건 기준 (checkedAt → checkId 순)
     rows.sort((x, y) => {
-      const t = new Date(y.checkedAt || 0) - new Date(x.checkedAt || 0)
+      const t = (toDate(y.checkedAt) || 0) - (toDate(x.checkedAt) || 0)
       return t !== 0 ? t : Number(y.checkId || 0) - Number(x.checkId || 0)
     })
     const row = rows[0]
@@ -325,7 +326,7 @@ async function syncYardFromLogs() {
       delete at[vno]
       return
     }
-    const entryAt = new Date(new Date(log.passAt).getTime() - 5000).toISOString()
+    const entryAt = new Date(toDate(log.passAt).getTime() - 5000).toISOString()
     if (yardHidden.value[vno] && new Date(yardHidden.value[vno]) >= new Date(entryAt) - 60000) return
     if (!list.includes(vno)) list.push(vno)
     if (!at[vno] || new Date(at[vno]) < new Date(entryAt)) at[vno] = entryAt
@@ -448,7 +449,7 @@ const liveError = ref(false)
 let livePollId = null
 function formatTime(iso) {
   if (!iso) return '-'
-  const d = new Date(iso)
+  const d = toDate(iso)
   return d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 }
 async function fetchLiveLogs() {

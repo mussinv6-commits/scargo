@@ -3,6 +3,7 @@ package com.scargo.controller;
 import com.scargo.Enum.NotificationType;
 import com.scargo.dto.NotificationCreateRequest;
 import com.scargo.dto.NotificationResponse;
+import com.scargo.security.AuthenticatedAccountPrincipal;
 import com.scargo.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -11,6 +12,7 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.parameters.P;
 import org.springframework.web.bind.annotation.*;
 
@@ -77,10 +79,13 @@ public class NotificationController {
     }
 
     // 6. 알림 단건 읽음 처리
+    // 26.10.22 수정: 소유자 검증 추가 (본인 알림, 소속 업체 알림, 관리자만)
     @PatchMapping("/{notificationId}/read")
-    public ResponseEntity<Void> markAsRead(@PathVariable("notificationId") Long notificationId) {
-        // TODO: 서비스 계층 또는 시큐리티에서 해당 알림의 소유자가 맞는지 추가 검증 권장
-        notificationService.markAsRead(notificationId);
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<Void> markAsRead(
+            @PathVariable("notificationId") Long notificationId,
+            @AuthenticationPrincipal AuthenticatedAccountPrincipal principal) {
+        notificationService.markAsRead(notificationId, principal);
         return ResponseEntity.ok().build();
     }
 
@@ -94,10 +99,13 @@ public class NotificationController {
     }
 
     // 8. 알림 개별 삭제
+    // 26.10.22 수정: 소유자 검증 추가 (본인 알림, 소속 업체 알림, 관리자만)
     @DeleteMapping("/{notificationId}")
-    public ResponseEntity<Void> deleteNotification(@PathVariable("notificationId") Long notificationId) {
-        // TODO: 소유자 검증 로직 추가 필요
-        notificationService.deleteNotification(notificationId);
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<Void> deleteNotification(
+            @PathVariable("notificationId") Long notificationId,
+            @AuthenticationPrincipal AuthenticatedAccountPrincipal principal) {
+        notificationService.deleteNotification(notificationId, principal);
         return ResponseEntity.ok().build();
     }
 

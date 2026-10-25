@@ -44,7 +44,7 @@
 <script setup>
 import { onMounted, onBeforeUnmount, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { authState } from '@/auth/authState.js'
+import { authState, isDriverType } from '@/auth/authState.js' // 26.10.22 통합: 기사 권한 3종
 import { adminApi, pickErrorMessage } from '@/utils/adminApi'
 // 26.09.21 추가: assets 폴더에 저장된 종 이미지(bell.png)를 아이콘으로 사용
 import bellIcon from '@/assets/bell.png'
@@ -127,7 +127,7 @@ function resolveTarget(n) {
     case 'CORPORATE_APPROVAL':
       return role === 'ADMIN' ? '/admin/accounts' : role === 'CORPORATE_APPROVED' ? '/company' : '/'
     case 'OVERLOAD_WARNING':
-      return role === 'ADMIN' ? '/admin/overload-checks' : role === 'GENERAL' ? '/driver/app/status' : '/company'
+      return role === 'ADMIN' ? '/admin/overload-checks' : isDriverType(role) ? '/driver/app/status' : '/company'
     case 'NOTICE':
     case 'SYSTEM':
     default:
@@ -136,13 +136,13 @@ function resolveTarget(n) {
       if (/차량|진입|허가|반려|배정/.test(text)) {
         if (role === 'ADMIN') return '/admin/trucks'
         if (role === 'CORPORATE_APPROVED') return /배정/.test(text) ? '/company/drivers' : '/company'
-        if (role === 'GENERAL') return '/driver/app/my-page'
+        if (isDriverType(role)) return '/driver/app/my-page'
       }
-      if (/배차|컨테이너|적재/.test(text) && role === 'GENERAL') return '/driver/app/dispatch-list'
-      if (/정산|세금계산서/.test(text) && role === 'GENERAL') return '/driver/app/settlement'
+      if (/배차|컨테이너|적재/.test(text) && isDriverType(role)) return '/driver/app/dispatch-list'
+      if (/정산|세금계산서/.test(text) && isDriverType(role)) return '/driver/app/settlement'
       if (role === 'ADMIN') return '/admin'
       if (role === 'CORPORATE_APPROVED') return '/company'
-      if (role === 'GENERAL') return '/driver/app/status'
+      if (isDriverType(role)) return '/driver/app/status'
       return null
   }
 }
@@ -181,7 +181,9 @@ async function markAllRead() {
 
 function formatTime(d) {
   if (!d) return ''
-  const date = new Date(d)
+  // 26.10.23 수정: 서버가 시각을 epoch 초(예: 1792742008.12)로 내려주는데 밀리초로 읽어 1970년으로 보이던 문제
+  //  숫자면 초 단위로 보고 1000을 곱한다 (문자열 ISO 시각은 그대로)
+  const date = new Date(typeof d === 'number' && d < 1e12 ? d * 1000 : d)
   const diffMs = Date.now() - date.getTime()
   const diffMin = Math.floor(diffMs / 60000)
   if (diffMin < 1) return '방금 전'

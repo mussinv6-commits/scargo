@@ -63,6 +63,7 @@
 </template>
 
 <script setup>
+import { toDate } from '@/utils/serverTime.js' // 26.10.23 서버 시각(epoch 초) → Date
 import { fetchMyVehicleNo } from '@/utils/driverTruck.js'
 import { ref, computed, onMounted, watch } from 'vue'
 import { fetchDriverAssignment } from '@/utils/driverAssignment.js'
@@ -98,7 +99,7 @@ async function loadSettlement() {
     const { history } = await fetchDriverAssignment()
     const monthRows = history.filter((r) => {
       if (r.status !== 'COMPLETED' || !r.loadedAt) return false
-      const d = new Date(r.loadedAt)
+      const d = toDate(r.loadedAt)
       return d.getFullYear() === year.value && d.getMonth() + 1 === month.value
     })
     invoiceList.value = monthRows
@@ -120,7 +121,7 @@ async function loadSettlement() {
 }
 function formatDate(iso) {
   if (!iso) return '-'
-  const d = new Date(iso)
+  const d = toDate(iso)
   return `${d.getMonth() + 1}.${String(d.getDate()).padStart(2, '0')}`
 }
 function formatWon(n) {

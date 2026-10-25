@@ -47,6 +47,43 @@ public interface OverloadCheckRepository
             Pageable pageable
     );
 
+    // 차량 번호 완전 일치 조회 (페이징)
+    Page<OverloadCheck> findByVehicleNo(
+            String vehicleNo,
+            Pageable pageable
+    );
+
+    // 26.10.22 추가: 운송사 담당자는 자기 업체 차량의 검사만 조회
+    @Query("SELECT o FROM OverloadCheck o WHERE o.vehicleNo IN "
+            + "(SELECT t.vehicleNo FROM Truck t WHERE t.company.companyId = :companyId)")
+    Page<OverloadCheck> findByTruckCompanyId(
+            @Param("companyId") Long companyId,
+            Pageable pageable
+    );
+
+    @Query("SELECT o FROM OverloadCheck o WHERE o.isViolation = true AND o.vehicleNo IN "
+            + "(SELECT t.vehicleNo FROM Truck t WHERE t.company.companyId = :companyId)")
+    Page<OverloadCheck> findViolationsByTruckCompanyId(
+            @Param("companyId") Long companyId,
+            Pageable pageable
+    );
+
+    @Query("SELECT o FROM OverloadCheck o WHERE o.isPassed = false AND o.vehicleNo IN "
+            + "(SELECT t.vehicleNo FROM Truck t WHERE t.company.companyId = :companyId)")
+    Page<OverloadCheck> findFailedByTruckCompanyId(
+            @Param("companyId") Long companyId,
+            Pageable pageable
+    );
+
+    @Query("SELECT o FROM OverloadCheck o WHERE o.checkedAt BETWEEN :start AND :end AND o.vehicleNo IN "
+            + "(SELECT t.vehicleNo FROM Truck t WHERE t.company.companyId = :companyId)")
+    Page<OverloadCheck> findBetweenByTruckCompanyId(
+            @Param("companyId") Long companyId,
+            @Param("start") OffsetDateTime start,
+            @Param("end") OffsetDateTime end,
+            Pageable pageable
+    );
+
     // 동일한 ENTRY gateLog가 이미 계량됐는지 확인
     boolean existsByGateLogId(Long gateLogId);
 

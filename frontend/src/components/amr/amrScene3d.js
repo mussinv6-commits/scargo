@@ -1472,6 +1472,10 @@ export function createAmrScene(container, sim, opts = {}) {
       const tr = outTrucks[i]
       tr.visible = d.state !== 'empty'
       tr.position.x = WALL_R + 0.6 + ease(d.off) * 22
+      // 26.10.25 출고: 도크에서 곧게 빠진 뒤 서울·경기·인천 방향 도로로 갈라져 나간다 (도착할 때는 같은 곡선을 후진)
+      { const u = Math.min(1, Math.max(0, (ease(d.off) - 0.5) / 0.5)), dir = i - 1
+        tr.position.z = Z(d.y) + dir * 4 * u * u
+        tr.rotation.y = -Math.atan((dir * 8 * u) / 11) }
       plateTagUpdate(d, i, 1, tr, t)
       const dd = dockDoors.out[i]; const want = d.state === 'docked' ? 1 : 0
       dd.open += (want - dd.open) * Math.min(1, dtReal * 2.5)
@@ -1484,7 +1488,7 @@ export function createAmrScene(container, sim, opts = {}) {
     const place = (c, x, y, z, ry) => { const m = cargoMesh(c); m.seen = true; m.g.visible = true; m.g.position.set(x, y, z); m.g.rotation.y = ry || 0 }
     S.slots.forEach((row) => row.forEach((side) => side.forEach((v) => { if (v.box) { const [x, z] = slotPos(v.box.loc); place(v.box, x, 0, z, 0) } })))
     S.inDocks.forEach((d, i) => { if (d.state === 'empty') return; d.cargo.forEach((c, k) => place(c, inTrucks[i].position.x - 0.9 - k * 1.25, 1.3, Z(d.y), 0)) })
-    S.outDocks.forEach((d, i) => { if (d.state === 'empty') return; d.boxes.forEach((c, k) => place(c, outTrucks[i].position.x + 0.75 + k * 1.15, 1.06, Z(d.y), 0)) })
+    S.outDocks.forEach((d, i) => { if (d.state === 'empty') return; d.boxes.forEach((c, k) => { const T = outTrucks[i], o = 0.75 + k * 1.15, th = T.rotation.y; place(c, T.position.x + o * Math.cos(th), 1.06, T.position.z - o * Math.sin(th), th) }) })
     S.amrs.forEach((a, i) => {
       const o = amrs3[i]
       if (o.fl) {

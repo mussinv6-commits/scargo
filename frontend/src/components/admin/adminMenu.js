@@ -10,6 +10,8 @@ export const ADMIN_MENU = {
     { to: '/admin/trucks', label: '차량 관리', icon: 'bi-truck', img: dashIcons.sidebar.차량관리 },
     { to: '/admin/containers', label: '컨테이너 관리', icon: 'bi-box-seam', img: dashIcons.sidebar.컨테이너관리 },
     { to: '/admin/container-locations', label: '컨테이너 위치 조회', icon: 'bi-geo-alt', img: dashIcons.sidebar.적재위치관리 },
+    { to: '/admin/inspections', label: '컨테이너 점검표', icon: 'bi-clipboard-check', img: dashIcons.sidebar.컨테이너관리 }, // 26.10.23
+    { to: '/admin/center-receipts', label: '지역센터 인수 현황', icon: 'bi-box-arrow-in-down', img: dashIcons.sidebar.적재기록조회 }, // 26.10.23
   ],
   yard: [
     { to: '/admin/yards', label: '야드 관리', icon: 'bi-map', img: dashIcons.sidebar.야드관리 },
@@ -17,6 +19,7 @@ export const ADMIN_MENU = {
     { to: '/admin/loading-records', label: '적재 기록 조회', icon: 'bi-journal-text', img: dashIcons.sidebar.적재기록조회 },
   ],
   etc: [
+    { to: '/admin/ops-center', label: '운영 센터', icon: 'bi-speedometer2', img: dashIcons.sidebar.홈 }, // 26.10.24 현황판·사고·예약·보고서·KPI 통합
     { to: '/admin/gate-ocr', label: '게이트 OCR 검사', icon: 'bi-upc-scan', img: dashIcons.sidebar.검문소관리 }, // 26.10.01: 상단 메뉴에서 이동
     { to: '/admin/weighbridge', label: '검사소 계량', icon: 'bi-truck-front', img: dashIcons.sidebar.과적검사관리 }, // 26.10.01 추가
     { to: '/admin/overload-checks', label: '과적 검사 관리', icon: 'bi-speedometer', img: dashIcons.sidebar.과적검사관리 },

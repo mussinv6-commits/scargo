@@ -9,4 +9,9 @@ import java.util.Optional;
 public interface AmrOtpKeyRepository extends JpaRepository<AmrOtpKey, Long> {
     Optional<AmrOtpKey> findFirstByActiveTrueOrderByKeyIdDesc();
     List<AmrOtpKey> findByActiveTrue();
+    // 26.10.22 허브별 OTP 키: hub_id NULL = 관리자용 전체 허브 키
+    Optional<AmrOtpKey> findFirstByActiveTrueAndHubIdIsNullOrderByKeyIdDesc();
+    Optional<AmrOtpKey> findFirstByActiveTrueAndHubIdOrderByKeyIdDesc(Long hubId);
+    List<AmrOtpKey> findByActiveTrueAndHubId(Long hubId);
+    List<AmrOtpKey> findByActiveTrueOrderByKeyIdDesc();
 }

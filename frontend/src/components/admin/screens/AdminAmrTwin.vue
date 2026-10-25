@@ -114,16 +114,16 @@
             <div><b id="tw-kpiOcr">-</b><span>OCR 신뢰도</span></div>
           </div>
         </div>
-        <div class="card">
+        <div class="card sim-only">
           <div class="grouphead"><span class="gtitle">화물 처리</span><span class="gmeta">처리 <b id="tw-kThru">0</b>건</span></div>
           <div class="hubcount" id="tw-hubcount"></div>
         </div>
-        <div class="card">
+        <div class="card sim-only">
           <span class="label">Storage · 보관 현황</span>
           <div class="stock" id="tw-stock"></div>
           <div class="hint">바닥 칸 = AMR이 꺼내 가는 출고 대기 · 위 단 = 무인 지게차가 다루는 보충 재고</div>
         </div>
-        <div class="card">
+        <div class="card sim-only">
           <div class="selhead"><span class="label">Cargo · 화물 정보</span><span class="hubchip" id="tw-cHub">-</span></div>
           <div class="cargo-id" id="tw-cId">-</div>
           <div class="cbar"><canvas id="tw-cBar" width="230" height="58" aria-label="상자 바코드 EAN-13"></canvas><span id="tw-cBarNo">-</span></div>
@@ -141,7 +141,7 @@
           <span class="label">Gate OCR · 입출차 번호판</span>
           <ul class="scans gates" id="tw-gates"><li><span class="sd">트럭이 입구 · 출구 게이트에 오면 번호판을 인식합니다</span></li></ul>
         </div>
-        <div class="card">
+        <div class="card sim-only">
           <span class="label">Inbound Scan · 상자 바코드 (EAN-13)</span>
           <ul class="scans" id="tw-scans"></ul>
         </div>
@@ -202,11 +202,13 @@
 <script setup>
 import { onMounted, onBeforeUnmount, ref } from 'vue'
 import { mountAmrTwin } from '@/components/amr/amrTwinApp.js'
+import { hubAccess } from '@/components/amr/amrAccess.js' // 26.10.22 권한별 화면 (ADMIN 관리 · CONTROL 조회 전용 · HUB_OP 소속 허브)
+import { authState } from '@/auth/authState.js'
 import '@/components/amr/amrTwin.css'
 
 const root = ref(null)
 let app = null
 
-onMounted(() => { app = mountAmrTwin(root.value) })
+onMounted(() => { app = mountAmrTwin(root.value, hubAccess(authState.user)) })
 onBeforeUnmount(() => { if (app) app.destroy() })
 </script>

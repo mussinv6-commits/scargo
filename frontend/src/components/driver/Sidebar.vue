@@ -40,6 +40,15 @@
       MY/차량
     </RouterLink>
 
+    <!-- 26.10.23 컨테이너 점검표 (컨테이너 운송기사만) -->
+    <RouterLink v-if="isContainerDriver" to="/driver/app/inspection" class="nav-item" :class="{ active: route.path === '/driver/app/inspection' }">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M9 11l3 3L22 4"></path>
+        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+      </svg>
+      컨테이너 점검표
+    </RouterLink>
+
     <div class="nav-label">기타</div>
 
     <RouterLink to="/driver/app/faq" class="nav-item" :class="{ active: route.path === '/driver/app/faq' }">
@@ -71,8 +80,11 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import { useRoute } from 'vue-router'
+import { authState } from '@/auth/authState.js'
 const route = useRoute()
+const isContainerDriver = computed(() => authState.user?.userType === 'CONTAINER_DRIVER')
 </script>
 
 <style scoped>

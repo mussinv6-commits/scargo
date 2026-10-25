@@ -57,7 +57,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
-import { setLogin } from '@/auth/authState.js'
+import { setLogin, isDriverType } from '@/auth/authState.js'
 import { API_BASE, setApiBase } from '@/utils/apiBase.js'
 import logo from '@/assets/scargo_logo_4x.png'
 
@@ -93,8 +93,8 @@ async function login() {
       error.value = '아이디나 비밀번호를 확인해 주세요.'
       return
     }
-    // 기사 앱은 화물차 기사(GENERAL) 계정만 사용한다.
-    if (mem.userType && mem.userType !== 'GENERAL') {
+    // 기사 앱은 화물차 기사 계정만 사용한다. (26.10.22 통합: GENERAL · CONTAINER_DRIVER · LINEHAUL_DRIVER)
+    if (mem.userType && !isDriverType(mem.userType)) {
       axios.post(`${API_BASE}/api/accounts/logout`, {}, { withCredentials: true }).catch(() => {})
       error.value = '화물차 기사 계정으로 로그인해 주세요. 관리자·사업자는 웹에서 이용할 수 있습니다.'
       return

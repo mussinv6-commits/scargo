@@ -66,7 +66,7 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 
-const API_KEY = '6b144ee4dd2306755be21d9f00eb8850' // WeatherCalendar.vue 와 같은 OpenWeather 키
+const API_KEY = import.meta.env.VITE_WEATHER_API_KEY || '6b144ee4dd2306755be21d9f00eb8850' // 팀 공유본: frontend/.env.local 에 VITE_WEATHER_API_KEY 지정 (README 11장) // WeatherCalendar.vue 와 같은 OpenWeather 키
 
 const PORTS = [
   { key: 'incheon', label: '인천', lat: 37.4563, lon: 126.6052 },

@@ -142,6 +142,7 @@
 </template>
 
 <script setup>
+import { toDate } from '@/utils/serverTime.js' // 26.10.23 서버 시각(epoch 초) → Date
 import { computed, onMounted, ref } from 'vue'
 import DonutChart from '@/components/common/DonutChart.vue'
 import { fetchCompanyDrivers, fetchCompanyTrucks } from '@/utils/companyDrivers.js'
@@ -276,7 +277,7 @@ const weekSeries = computed(() => {
   const rows = days.map((d) => {
     const key = toDateInput(d)
     const selected = key === toDateInput(viewDate.value)
-    const dated = trucks.value.filter((t) => t.createdAt && toDateInput(new Date(t.createdAt)) === key)
+    const dated = trucks.value.filter((t) => t.createdAt && toDateInput(toDate(t.createdAt)) === key)
     const ship = dated.length ? dated.length : (selected ? trucks.value.length : 0)
     const delay = dated.length
       ? dated.filter((t) => !(t.assignedAccountId || t.assignedDriverName)).length

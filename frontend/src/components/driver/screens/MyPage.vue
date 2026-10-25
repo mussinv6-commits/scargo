@@ -160,6 +160,7 @@
 </template>
 
 <script setup>
+import { toDate } from '@/utils/serverTime.js' // 26.10.23 서버 시각(epoch 초) → Date
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
@@ -176,7 +177,7 @@ const user = computed(() => authState.user)
 const initial = computed(() => user.value?.userName?.[0] || '?')
 const memberSince = computed(() => {
   const d = user.value?.createdAt
-  return d ? new Date(d).toLocaleDateString('ko-KR') : '-'
+  return d ? toDate(d).toLocaleDateString('ko-KR') : '-'
 })
 const userTypeLabel = computed(() => {
   const map = {
@@ -184,6 +185,9 @@ const userTypeLabel = computed(() => {
     CORPORATE_PENDING: '기업 회원 (승인대기)',
     CORPORATE_APPROVED: '기업 회원 (승인완료)',
     ADMIN: '관리자',
+    // 26.10.22 통합: 구간별 권한
+    CONTAINER_DRIVER: '컨테이너 운송기사',
+    LINEHAUL_DRIVER: '간선 운송기사',
   }
   return map[user.value?.userType] || user.value?.userType || '-'
 })
@@ -307,7 +311,7 @@ async function fetchRecords() {
 }
 
 function formatDate(d) {
-  return d ? new Date(d).toLocaleString() : '-'
+  return d ? toDate(d).toLocaleString() : '-'
 }
 
 // ---- 푸시 알림 설정 (프런트 전용, localStorage에만 저장 - 백엔드 API 없음) ----

@@ -1,7 +1,11 @@
 // ─────────────────────────────────────────────────────────────
 // S카고 허브 AMR 디지털 트윈 — 화면 조립
 // 시뮬레이션 + 3D 씬 + 관제 패널(차트·화물·로그)을 하나의 루트 요소에 붙인다.
-// 사용: const app = mountAmrTwin(rootEl)  →  화면을 떠날 때 app.destroy()
+// 사용: const app = mountAmrTwin(rootEl, hubAccess(user))  →  화면을 떠날 때 app.destroy()
+// 26.10.22 권한별 화면 (amrAccess.js)
+//  - ADMIN: 전체 허브 선택 · 관리 / HUB_OP: 소속 허브만 관리 / CONTROL: 전체 허브 조회 전용
+//  - 웹 시뮬레이터는 기본 허브(simulated)에서만 돌고 DB에 기록한다. 조회 전용이거나 다른 허브를 보면
+//    시뮬레이터를 멈추고 로봇 · 이벤트 · 진동을 DB 값으로 보여 준다 (remoteView)
 // ─────────────────────────────────────────────────────────────
 import { createSim, HUBS, ZONES, STATE_KO, PHASE_T, CAPTIONS, PIPE_ON, PH_COL, COLORS, status, lvCol, tons, zoneRow, captionOf, fmtPlate, ean13Bits } from './amrSim.js'
 // ZONES: 0 D 냉장 창고 · 1 A 인천 · 2 B 서울 · 3 C 경기
@@ -10,12 +14,24 @@ import { createAmrSound } from './amrSound.js'
 import { amrApi } from './amrApi.js'   // DB 연동 (서버가 꺼져 있으면 시뮬레이션만으로 동작)
 import { drawQr } from './amrQr.js' // 26.10.16 앱 연결 QR
 
-export function mountAmrTwin(root) {
+export function mountAmrTwin(root, access = { canView: true, canManage: true, allHubs: true, hubId: null, label: '' }) {
   const $ = (id) => root.querySelector('#tw-' + id)
   let selected = 2, cargoPin = null, speed = 1, playing = !window.matchMedia('(prefers-reduced-motion: reduce)').matches
   let bannerTimer = 0, raf = 0, scene = null, destroyed = false
   let lastScanVer = -1
   let simRef = null   // createSim 도중에도 단계 콜백이 불릴 수 있어서 따로 둔다
+
+  /* ── 26.10.22 권한 · 허브 ── */
+  const readOnly = !access.canManage             // CONTROL: 저장 · 변경 · 시뮬레이터 실행 없음
+  let hubSim = !!access.allHubs                  // 지금 허브가 시뮬레이터 허브인지 (HUB_OP 은 허브 목록을 받은 뒤 정함)
+  const remoteView = () => readOnly || !hubSim   // true 면 시뮬레이터 정지 + DB 값으로 표시
+  amrApi.setReadOnly(readOnly)
+  amrApi.setHub(access.allHubs ? null : access.hubId)
+  if (readOnly) playing = false
+  let remoteSel = null, remoteHist = [], lastRemotePhase = null, fleetKey = ''
+  // 26.10.22 서버 시각은 epoch 초(숫자) 또는 ISO 문자열로 온다 → Date (숫자를 그대로 넣으면 1970년이 됨)
+  const toDate = (v) => (v == null ? null : new Date(typeof v === 'number' ? v * 1000 : v))
+  const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 
   /* ── 단계 · 배너 · 로그 ── */
   function applyPhase(p) {
@@ -37,6 +53,8 @@ export function mountAmrTwin(root) {
 
   /* ── DB 연동: 이 화면이 현장(시뮬레이터) 역할 → 센서 · 예측 · 정비 진행을 저장, 승인은 앱 · 웹 어디서든 ── */
   let maintId = null, remote = null, approveFlash = 0, pendingBy = null, lastCfgBy = '', cfgLocalT = 0
+  let seeded = false   // 26.10.22 화면을 열면 서버(DB)에 저장된 배터리·상태로 로봇을 맞춘다 (전엔 매번 초기값으로 다시 시작해서, 서버가 충전 중이어도 화면은 바로 작업 중으로 보였음)
+  const DB_TO_CLIENT = { IDLE: 'idle', TO_PICK: 'toPick', LOADING: 'load', TO_DROP: 'toDrop', UNLOADING: 'unload', TO_MAINT: 'toMaint', MAINT: 'maint', TO_HOME: 'toHome', TO_RACK: 'toRack', FORK_WORK: 'fwork', CHARGING: 'charge' }
   // 입구 · 출구 번호판 OCR: 트럭이 게이트에 오면 서버(→ gate_api.py)로 인식 요청, 결과로 3D 트럭이 들어오거나 돌아간다
   // 26.10.16 배지는 최근 결과로 판단: 90초 안에 성공이 있으면 "연결" 유지, 실패는 건수로만 표시 (한 건 실패로 오프라인이 되지 않게)
   let ocrLastOk = 0, ocrFails = 0, ocrLastErr = ''
@@ -60,6 +78,7 @@ export function mountAmrTwin(root) {
       })
   }
   function onSimEvent(type, p) {
+    if (remoteView()) return // 26.10.22 조회 전용 · 다른 허브: 시뮬레이터 기록을 보내지 않음
     if (type === 'vehicle') { onVehicle(p); return }
     if (type === 'move') { amrApi.task(p); return }
     if (type === 'charge') { amrApi.event(p.code, 'INFO', S.sc.phase, p.code + ' 배터리 ' + Math.round(p.battery) + '% · 기준 ' + S.cfg.chargeAt + '% 이하 → 충전소 이동'); return }
@@ -76,7 +95,19 @@ export function mountAmrTwin(root) {
   async function pollState() {
     const st = await amrApi.state(); if (!st || destroyed) return
     remote = st
+    // 처음 한 번만: 서버에 저장된 배터리 · 상태로 화면 로봇을 맞춘다 (충전 중에 화면을 닫았다 열어도 이어서 보임)
+    if (!remoteView() && !seeded && Array.isArray(st.robots) && st.robots.length) {
+      seeded = true
+      st.robots.forEach((r) => {
+        const a = S.amrs.find((x) => x.name === r.code); if (!a) return
+        if (typeof r.batteryPct === 'number') a.batt = r.batteryPct
+        if (typeof r.healthScore === 'number') a.health = r.healthScore
+        const cs = DB_TO_CLIENT[r.state]
+        if (cs && cs !== 'idle') { a.state = cs; a.needCharge = cs === 'charge'; a.maintFlag = cs === 'maint' || cs === 'toMaint' }
+      })
+    }
     renderGates(st.vehicles)
+    if (remoteView()) renderRemote(st)
     // 관리자 운영 기준 (앱에서 바꾸면 2초 안에 여기 3D 로봇이 그 기준대로 움직인다)
     const cs = st.settings
     if (cs && Date.now() - cfgLocalT > 3000) {
@@ -104,6 +135,56 @@ export function mountAmrTwin(root) {
   ocrBadge.textContent = '○ OCR 대기'; ocrBadge.style.color = '#8a9bb0'; ocrBadge.style.borderColor = '#3a4a5c'
   ocrBadge.title = '트럭이 입구 게이트에 오면 번호판 인식을 요청합니다'
 
+  /* ── 26.10.22 권한 표시 · 허브 선택 ── */
+  const modeBadge = document.createElement('span')
+  modeBadge.style.cssText = dbBadge.style.cssText
+  badgeBox.appendChild(modeBadge)
+  const hubSel = document.createElement('select')
+  hubSel.setAttribute('aria-label', '허브 선택')
+  hubSel.className = 'tw-hubSel'
+  hubSel.innerHTML = '<option>허브 불러오는 중</option>'
+  hubSel.disabled = true
+  badgeBox.appendChild(hubSel)
+  let hubList = []
+  function syncMode() {
+    const col = readOnly ? '#ffb84d' : '#3fe0cc'
+    modeBadge.textContent = readOnly ? '🔒 조회 전용' : access.allHubs ? '● 전체 허브 관리' : '● 소속 허브 관리'
+    modeBadge.style.color = col; modeBadge.style.borderColor = col
+    modeBadge.title = (access.label || '') + (remoteView() ? ' · 시뮬레이터 정지, DB 기록만 표시' : ' · 웹 시뮬레이터가 이 허브에 기록')
+    root.classList.toggle('remote-view', remoteView())
+  }
+  function setHubTo(h) {
+    const wasRemote = remoteView()
+    amrApi.setHub(h.hubId); hubSim = !!h.simulated
+    remote = null; remoteSel = null; remoteHist = []; fleetKey = ''; lastRemotePhase = null
+    lastGateKey = ''; gateList = []; gatePick = null; gPhoto.hidden = true; gSeal.hidden = true
+    $('gates').innerHTML = '<li><span class="sd">이 허브의 입출차 기록이 아직 없습니다</span></li>'
+    sim.setVehicleGate(!remoteView())
+    if (wasRemote && !remoteView()) { playing = true; syncPlay() }
+    if (!wasRemote && remoteView()) { playing = false; syncPlay() }
+    if (!remoteView()) buildFleet()
+    syncControls(); syncMode(); updPanel(); drawChart()
+    pollState(); pollKpi()
+    if (remoteView() && !readOnly) notice(h.hubName + ' · 웹 시뮬레이터 대상이 아니라 DB 기록만 표시합니다 (운영 기준 · 씰 확인은 가능)', COLORS.cyan)
+  }
+  hubSel.addEventListener('change', () => { const h = hubList.find((x) => String(x.hubId) === hubSel.value); if (h) setHubTo(h) })
+  async function loadHubs() {
+    const list = await amrApi.hubs(); if (destroyed || !list || !list.length) return
+    hubList = list
+    hubSel.innerHTML = list.map((h) => '<option value="' + h.hubId + '">' + esc(h.hubName) + (h.simulated ? ' · 시뮬레이터' : '') + '</option>').join('')
+    hubSel.disabled = list.length < 2
+    const pick = access.allHubs ? (list.find((h) => h.simulated) || list[0]) : list[0]
+    hubSel.value = String(pick.hubId)
+    setHubTo(pick)
+  }
+  // 서버가 403(권한 없음)을 주면 오프라인으로 바꾸지 않고 알림만 (같은 알림은 8초에 한 번)
+  let deniedAt = 0
+  const offDenied = amrApi.onDenied(({ path }) => {
+    if (Date.now() - deniedAt < 8000) return
+    deniedAt = Date.now()
+    notice('권한이 없어 요청이 거부되었습니다 · ' + path.replace(/\?.*$/, ''), COLORS.amber)
+  })
+
   /* ── 26.10.16 앱 연결: 웹(팀 관리자 로그인)에 30초마다 바뀌는 6자리 + QR → 앱이 찍거나 입력하면 24시간 로그인 ── */
   amrApi.useCookieAuth()
   const linkWrap = document.createElement('div'); linkWrap.className = 'tw-link'
@@ -113,14 +194,15 @@ export function mountAmrTwin(root) {
     '<p class="tw-linkHelp">앱에서 <b>QR 찍기</b> 또는 6자리 입력 → 24시간 로그인<br>QR에는 이 노트북 주소도 들어 있어 주소 입력이 필요 없어요</p>' +
     '<p class="tw-linkSrv"></p><button type="button" class="tw-linkOut">모든 앱 로그아웃</button></div>'
   badgeBox.appendChild(linkWrap)
+  if (!access.canManage) linkWrap.hidden = true // 26.10.22 조회 전용은 앱 연결 코드를 다루지 않음
   const linkChip = linkWrap.querySelector('.tw-linkChip'), linkPop = linkWrap.querySelector('.tw-linkPop')
   let link = null, linkAt = 0, linkFetching = false
   async function fetchCode() {
-    if (linkFetching) return
+    if (linkFetching || !access.canManage) return
     linkFetching = true
     const r = await amrApi.appCode(); linkFetching = false
     if (destroyed) return
-    if (!r.data) { link = null; linkChip.textContent = r.status === 403 ? '📱 앱 연결 · 관리자 로그인 필요' : '📱 앱 연결 QR ▾'; linkChip.classList.remove('ok'); linkWrap.querySelector('.tw-linkCode').textContent = '------'; linkWrap.querySelector('.tw-linkSec').textContent = r.error || ''; return }
+    if (!r.data) { link = null; linkChip.textContent = r.status === 403 ? '📱 앱 연결 · 권한 없음' : '📱 앱 연결 QR ▾'; linkChip.classList.remove('ok'); linkWrap.querySelector('.tw-linkCode').textContent = '------'; linkWrap.querySelector('.tw-linkSec').textContent = r.error || ''; return }
     link = r.data; linkAt = Date.now()
     const code = link.code.slice(0, 3) + ' ' + link.code.slice(3)
     linkChip.textContent = '📱 QR · ' + code + ' ▾'; linkChip.classList.add('ok')
@@ -148,7 +230,7 @@ export function mountAmrTwin(root) {
   const authTimer = setInterval(tickCode, 250)
   let dbAcc = 0
   const S = sim.S
-  const warm = () => { sim.setVehicleGate(false); for (let i = 0; i < 80; i++) sim.step(0.05); S.packets.length = 0; sim.setVehicleGate(true) }
+  const warm = () => { sim.setVehicleGate(false); for (let i = 0; i < 80; i++) sim.step(0.05); S.packets.length = 0; sim.setVehicleGate(!remoteView()) }
   warm()
 
   /* ── 패널 ── */
@@ -156,8 +238,15 @@ export function mountAmrTwin(root) {
   function buildFleet() {
     fleetEl.innerHTML = S.amrs.map((a, i) => `<button type="button" class="frow" data-i="${i}"><span class="dot"></span><span class="nm">${a.name}</span><span class="st"></span><span class="bar"><i></i></span><span class="hs"></span></button>`).join('')
   }
-  fleetEl.addEventListener('click', (e) => { const b = e.target.closest('.frow'); if (!b) return; select(+b.dataset.i) })
-  function select(i) { selected = i; cargoPin = null; if (scene && scene.viewMode === 'follow') scene.setView('follow', i); updPanel(); drawChart() }
+  fleetEl.addEventListener('click', (e) => {
+    const b = e.target.closest('.frow'); if (!b) return
+    if (b.dataset.code) { pickRemote(b.dataset.code); return } // DB 화면의 로봇
+    select(+b.dataset.i)
+  })
+  function pickRemote(code) { remoteSel = code; remoteHist = []; fleetKey = ''; updPanel(); drawChart(); pollHistory() }
+  function select(i) {
+    if (remoteView()) { const nm = S.amrs[i] && S.amrs[i].name; if (nm && remoteRobots().some((r) => r.code === nm)) pickRemote(nm); return }
+    selected = i; cargoPin = null; if (scene && scene.viewMode === 'follow') scene.setView('follow', i); updPanel(); drawChart() }
 
   const cssCol = (l) => (l === 'crit' ? 'var(--red)' : l === 'warn' ? 'var(--amber)' : l === 'spare' ? '#4a5a6b' : 'var(--green)')
   function currentCargo() { if (cargoPin) return cargoPin; const a = S.amrs[selected]; return a.box || a.lastBox || null }
@@ -213,6 +302,7 @@ export function mountAmrTwin(root) {
   gSeal.innerHTML = '<b class="sl-t" style="display:block;font-size:13px"></b><p class="sl-s" style="margin:4px 0 8px;opacity:.75"></p><div style="display:flex;gap:6px"><input class="sl-in" placeholder="현장 씰 번호" autocomplete="off" style="flex:1;min-width:0;padding:7px;border-radius:6px;border:1px solid rgba(255,255,255,.2);background:rgba(0,0,0,.3);color:inherit;text-transform:uppercase"><button type="button" class="sl-go" style="padding:7px 12px;border-radius:6px;border:0;background:#3fe0cc;color:#04212b;font-weight:700;cursor:pointer">대조</button></div>'
   gPhoto.before(gSeal) // 사진 위에 둠 (사진이 커서 아래는 화면 밖으로 밀림)
   function showSeal(v) {
+    if (!access.canManage) { gSeal.hidden = true; return } // 26.10.22 조회 전용은 씰 대조 불가
     if (!v || !(v.direction === 'ENTRY' && v.kind === 'CARGO' && v.plate && v.sealStatus)) { gSeal.hidden = true; return }
     const M = { PENDING: ['씰 대조 대기', '하차 전 현장 씰 번호를 대조하세요'], OK: ['씰 대조 일치 · 하차 가능', '현장 ' + (v.sealInput || '') + ' · 등록 번호와 일치'], MISMATCH: ['씰 불일치 · 하차 보류', '현장 ' + (v.sealInput || '') + ' · 관리자 확인 필요'], MISSING: ['씰 미등록 · 게이트 대기', '등록된 씰 번호가 없습니다 · 기사 앱 등록 필요'] }
     const [a, b] = M[v.sealStatus] || M.PENDING
@@ -251,7 +341,7 @@ export function mountAmrTwin(root) {
     $('kpiWait').textContent = k.avgInterWaitSec != null ? k.avgInterWaitSec + '초' : '0초'
     $('kpiGate').textContent = (k.entries + k.exits) + ' / ' + k.blocks
     $('kpiOcr').textContent = k.avgOcrConfidence != null ? k.avgOcrConfidence + '%' : '-'
-    const t = new Date(k.at); $('kpiAt').textContent = String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0') + ':' + String(t.getSeconds()).padStart(2, '0') + ' 기준'
+    const t = toDate(k.at); $('kpiAt').textContent = String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0') + ':' + String(t.getSeconds()).padStart(2, '0') + ' 기준'
   }
   const kpiTimer = setInterval(pollKpi, 10000); setTimeout(pollKpi, 1500)
   function renderScans() {
@@ -271,7 +361,7 @@ export function mountAmrTwin(root) {
       return `<div class="srow"><span class="sz" style="color:${z.col}">${z.tag} ${z.name}</span><span class="sk">바닥</span>${bar(fl, flT)}<span class="sk">위 단</span>${bar(up, upT)}</div>`
     }).join('')
   }
-  function updPanel() {
+  function updSimPanel() {
     const a = S.amrs[selected], [lv, lt] = status(a)
     $('selName').textContent = a.name
     $('selState').textContent = (a.role === 'spare' && a.state === 'idle' ? '예비 대기' : STATE_KO[a.state]) + (a.box ? ' · ' + a.box.id + ' → ' + HUBS[a.box.hub].name : '')
@@ -291,13 +381,74 @@ export function mountAmrTwin(root) {
       const bar = r.querySelector('.bar i'); bar.style.width = Math.round(b.health) + '%'; bar.style.background = cssCol(l)
       r.querySelector('.hs').textContent = t === '정상' ? Math.round(b.health) + '점' : t
     })
-    $('kThru').textContent = S.thru
     const amrOnly = S.amrs.filter((b) => b.kind !== 'fl')
     $('kAct').textContent = amrOnly.filter((b) => b.role === 'active' && !b.maintFlag && b.state !== 'maint').length + '/' + amrOnly.length
+  }
+  function updPanel() {
+    if (remoteView()) updRemotePanel(); else updSimPanel()
+    $('kThru').textContent = S.thru
     renderStock()
     $('hubcount').innerHTML = HUBS.map((h, i) => `<div style="border-color:${h.col}">${h.name} 출고<b>${S.hubSent[i]}건</b></div>`).join('')
     updCargo(); renderScans()
   }
+
+  /* ── 26.10.22 DB 화면: 조회 전용 · 시뮬레이터 대상이 아닌 허브는 로봇 · 이벤트 · 진동을 DB 값으로 ── */
+  const DB_STATE_KO = { IDLE: '대기', TO_PICK: '픽업 이동', LOADING: '적재 중', TO_DROP: '운반 중', UNLOADING: '하역 중', TO_MAINT: '정비소 이동', MAINT: '정비 중', TO_HOME: '복귀 중', TO_RACK: '랙 이동', FORK_WORK: '랙 작업 중', CHARGING: '충전 중' }
+  const DB_LV = { INFO: '', OK: 'ok', WARN: 'warn', CRIT: 'crit', DISPATCH: 'hub' }
+  function remoteLevel(r) {
+    if (!r) return ['ok', '-']
+    if (r.state === 'MAINT' || r.state === 'TO_MAINT' || (r.health != null && r.health < 50) || (r.vibration != null && r.vibration >= 4.5)) return ['crit', '정비 필요']
+    if ((r.health != null && r.health < 80) || (r.vibration != null && r.vibration >= 2.6)) return ['warn', '주의']
+    if (r.role === 'SPARE') return ['spare', '예비']
+    return ['ok', '정상']
+  }
+  const remoteRobots = () => (remote && remote.robots) || []
+  const remoteRobot = () => remoteRobots().find((r) => r.code === remoteSel) || null
+  const hhmm = (v) => { const t = toDate(v); if (!t) return '--:--'; return String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0') }
+  function renderRemote(st) {
+    if (st.phase && st.phase !== lastRemotePhase) { lastRemotePhase = st.phase; applyPhase(st.phase) }
+    const ev = st.events || []
+    $('log').innerHTML = ev.length
+      ? ev.slice(0, 8).map((e) => '<li class="' + (DB_LV[e.level] || '') + '"><time>' + hhmm(e.createdAt) + '</time><span>' + esc(e.message) + '</span></li>').join('')
+      : '<li><time>--:--</time><span>이 허브의 이벤트 기록이 아직 없습니다</span></li>'
+    if (!remoteSel && remoteRobots().length) { remoteSel = remoteRobots()[0].code; pollHistory() }
+    updPanel()
+  }
+  function updRemotePanel() {
+    const list = remoteRobots()
+    const key = remoteSel + '|' + list.map((r) => [r.code, r.state, r.role, r.health, r.battery].join(':')).join(',')
+    if (key !== fleetKey) { // 같은 값이면 다시 그리지 않음 (클릭 중에 버튼이 바뀌지 않게)
+      fleetKey = key
+      fleetEl.innerHTML = list.length ? list.map((r) => {
+        const [l, t] = remoteLevel(r), c = cssCol(l)
+        const st = r.role === 'SPARE' && r.state === 'IDLE' ? '예비 대기' : (DB_STATE_KO[r.state] || r.state || '-')
+        return '<button type="button" class="frow' + (r.code === remoteSel ? ' sel' : '') + '" data-code="' + esc(r.code) + '"><span class="dot" style="background:' + c + ';box-shadow:' + (l === 'spare' ? 'none' : '0 0 8px ' + c) + '"></span><span class="nm">' + esc(r.code) + '</span><span class="st">' + esc(st) + '</span><span class="bar"><i style="width:' + Math.round(r.health ?? 0) + '%;background:' + c + '"></i></span><span class="hs">' + (t === '정상' ? Math.round(r.health ?? 0) + '점' : t) + '</span></button>'
+      }).join('') : '<div class="hint">' + (remote ? '이 허브에 등록된 로봇이 없습니다' : '허브 정보를 불러오는 중입니다') + '</div>'
+    }
+    const r = remoteRobot(), [lv, lt] = remoteLevel(r)
+    $('selName').textContent = r ? r.code : '-'
+    $('selState').textContent = r ? (DB_STATE_KO[r.state] || r.state || '-') + ' · DB 기준' : '로봇을 선택하세요'
+    const p = $('selPill'); p.className = 'pill ' + lv; p.textContent = r ? lt : '-'
+    const num = (v, d) => (v == null ? '-' : d ? Number(v).toFixed(d) : String(Math.round(v)))
+    $('mVib').textContent = num(r && r.vibration, 1); $('mVib').className = 'v'
+    $('mTemp').textContent = num(r && r.temp); $('mTemp').className = 'v'
+    $('mHealth').textContent = num(r && r.health); $('mHealth').className = 'v'
+    $('mCum').textContent = r && r.cumLoadKg != null ? (r.cumLoadKg / 1000).toFixed(1) : '-'; $('mCum').className = 'v'
+    $('mLoad').textContent = '-'
+    $('mBatt').textContent = num(r && r.battery)
+    $('rul').innerHTML = ''
+    const amrs = list.filter((x) => !String(x.code).startsWith('FL'))
+    $('kAct').textContent = amrs.filter((x) => x.role === 'ACTIVE' && x.state !== 'MAINT').length + '/' + amrs.length
+  }
+  // 선택한 로봇의 최근 5분 진동 (DB)
+  async function pollHistory() {
+    if (!remoteView() || !remoteSel) return
+    const code = remoteSel
+    const pts = await amrApi.history(code, 5); if (destroyed || !pts || code !== remoteSel) return
+    remoteHist = pts.map((pt) => pt.vibration).filter((v) => v != null).slice(-150)
+    drawChart()
+  }
+  const histTimer = setInterval(pollHistory, 4000)
 
   /* ── 진동 차트 ── */
   const ch = $('chart'), cx = ch.getContext('2d')
@@ -306,7 +457,7 @@ export function mountAmrTwin(root) {
   function sizeChart() { const dpr = Math.min(2, window.devicePixelRatio || 1); ch.width = Math.round(ch.clientWidth * dpr); ch.height = Math.round(130 * dpr) }
   const chartRO = new ResizeObserver(() => { sizeChart(); drawChart() }); chartRO.observe(ch)
   function drawChart() {
-    const a = S.amrs[selected], dpr = Math.min(2, window.devicePixelRatio || 1), w = ch.width / dpr, h = 130
+    const remoteMode = remoteView(), a = remoteMode ? null : S.amrs[selected], dpr = Math.min(2, window.devicePixelRatio || 1), w = ch.width / dpr, h = 130
     if (!w) return
     cx.setTransform(dpr, 0, 0, dpr, 0, 0); cx.clearRect(0, 0, w, h)
     const L = 24, R = w - 4, Tp = 10, B = h - 20, pw = (R - L) * 0.74, ymax = 8
@@ -316,10 +467,10 @@ export function mountAmrTwin(root) {
     cx.fillStyle = 'rgba(255,90,95,.06)'; cx.fillRect(L, Y(ymax), R - L, Y(7.1) - Y(ymax))
     cx.fillStyle = 'rgba(255,184,77,.05)'; cx.fillRect(L, Y(7.1), R - L, Y(4.5) - Y(7.1))
     ;[[4.5, COLORS.amber, '주의 4.5'], [7.1, COLORS.red, '고장 7.1']].forEach(([v, c, l]) => { cx.strokeStyle = c; cx.globalAlpha = 0.7; cx.setLineDash([3, 3]); cx.beginPath(); cx.moveTo(L, Y(v)); cx.lineTo(R, Y(v)); cx.stroke(); cx.setLineDash([]); cx.globalAlpha = 1; cx.fillStyle = c; cx.textAlign = 'left'; cx.fillText(l, L + 4, Y(v) - 7) })
-    cx.fillStyle = CH.dim; cx.textAlign = 'left'; cx.fillText('진동 · 최근 30초', L, h - 7); cx.textAlign = 'right'; cx.fillText('예측 구간', R, h - 7)
+    cx.fillStyle = CH.dim; cx.textAlign = 'left'; cx.fillText(remoteMode ? '진동 · 최근 5분 (DB)' : '진동 · 최근 30초', L, h - 7); cx.textAlign = 'right'; cx.fillText('예측 구간', R, h - 7)
     cx.strokeStyle = CH.edge; cx.beginPath(); cx.moveTo(L + pw + 0.5, Tp); cx.lineTo(L + pw + 0.5, B); cx.stroke()
-    const hs = a.hist, N = 150, dx = pw / (N - 1), off = N - hs.length
-    const [lv] = status(a), col = lvCol(lv === 'spare' ? 'ok' : lv)
+    const hs = remoteMode ? remoteHist : a.hist, N = 150, dx = pw / (N - 1), off = N - hs.length
+    const [lv] = remoteMode ? remoteLevel(remoteRobot()) : status(a), col = lvCol(lv === 'spare' ? 'ok' : lv)
     const segs = []; let cur = []
     hs.forEach((v, i) => { if (v == null) { if (cur.length) segs.push(cur); cur = []; return } cur.push([L + (off + i) * dx, Y(Math.min(ymax, v)), v]) })
     if (cur.length) segs.push(cur)
@@ -331,7 +482,7 @@ export function mountAmrTwin(root) {
     const lastSeg = segs[segs.length - 1], lastPt = lastSeg && lastSeg[lastSeg.length - 1]
     if (lastPt && lastPt[0] > L + pw - dx * 2) {
       cx.fillStyle = col; cx.shadowColor = col; cx.shadowBlur = 8; cx.beginPath(); cx.arc(lastPt[0], lastPt[1], 3.2, 0, 7); cx.fill(); cx.shadowBlur = 0
-      if (selected === 2 && a.maintFlag && S.sc.rul != null && a.state !== 'maint') {
+      if (!remoteMode && selected === 2 && a.maintFlag && S.sc.rul != null && a.state !== 'maint') {
         const sl = Math.max(0.08, S.sc.slope), ly = lastPt[2], secs = (7.1 - ly) / sl, px = Math.min(R, lastPt[0] + secs * 5 * dx)
         const py = px >= R ? Y(ly + (sl * (R - lastPt[0])) / (5 * dx)) : Y(7.1)
         cx.strokeStyle = COLORS.red; cx.setLineDash([2, 3]); cx.lineWidth = 1.5; cx.beginPath(); cx.moveTo(lastPt[0], lastPt[1]); cx.lineTo(px, py); cx.stroke(); cx.setLineDash([])
@@ -476,6 +627,12 @@ export function mountAmrTwin(root) {
   const syncPlay = () => { playBtn.textContent = playing ? '일시정지' : '재생' }
   playBtn.addEventListener('click', () => { playing = !playing; syncPlay() })
   root.querySelectorAll('.spd').forEach((b) => b.addEventListener('click', () => { speed = +b.dataset.s; root.querySelectorAll('.spd').forEach((x) => x.setAttribute('aria-pressed', String(x === b))) }))
+  // 26.10.22 조회 전용 · 시뮬레이터 대상이 아닌 허브에서는 시뮬레이터를 실행할 수 없다
+  function syncControls() {
+    const off = remoteView()
+    const why = readOnly ? '조회 전용 계정은 시뮬레이터를 실행할 수 없습니다' : '이 허브는 웹 시뮬레이터 대상이 아니라 DB 기록만 표시합니다'
+    ;[playBtn, $('restart'), ...root.querySelectorAll('.spd')].forEach((b) => { b.disabled = off; b.title = off ? why : '' })
+  }
   $('restart').addEventListener('click', () => { sim.init(); warm(); maintId = null; selected = 2; cargoPin = null; lastScanVer = -1; buildFleet(); updPanel(); playing = true; syncPlay() })
 
   /* ── 루프 ── */
@@ -520,6 +677,10 @@ export function mountAmrTwin(root) {
   apCard.innerHTML = '<div class="ap-t"><i>!</i><b class="ap-h"></b></div><p class="ap-p"></p>'
   const sideL = root.querySelector('.side-l') || root
   sideL.prepend(apCard); sideL.prepend(cfgCard)
+  if (!access.canManage) { // 26.10.22 조회 전용
+    cfgCard.querySelectorAll('button').forEach((b) => { b.disabled = true; b.title = '조회 전용' })
+    cfgCard.querySelector('.cfg-note').textContent = '조회 전용 계정입니다. 운영 기준은 관리자 · 허브 관제사가 바꿉니다.'
+  }
   function syncCfgInputs() {
     cfgCard.querySelector('.cfg-rul').textContent = S.cfg.rulAt
     cfgCard.querySelector('.cfg-chg').textContent = S.cfg.chargeAt
@@ -528,7 +689,7 @@ export function mountAmrTwin(root) {
   }
   let cfgTimer = 0
   cfgCard.addEventListener('click', (e) => {
-    const b = e.target.closest('button[data-k]'); if (!b) return
+    const b = e.target.closest('button[data-k]'); if (!b || !access.canManage) return
     const d = +b.dataset.d
     if (b.dataset.k === 'rul') sim.setCfg({ rulAt: S.cfg.rulAt + d }); else sim.setCfg({ chargeAt: S.cfg.chargeAt + d })
     syncCfgInputs(); cfgLocalT = Date.now()
@@ -550,10 +711,11 @@ export function mountAmrTwin(root) {
   syncCfgInputs()
 
   // DB: 실제 시간 2초마다 센서 저장 + 상태 읽기 (화면이 느려도 간격 유지)
-  const dbTimer = setInterval(() => { if (playing) amrApi.telemetry(S.sc.phase, S.amrs); pollState() }, 2000)
+  const dbTimer = setInterval(() => { if (playing && !remoteView()) amrApi.telemetry(S.sc.phase, S.amrs); pollState() }, 2000)
 
   buildFleet(); sizeChart(); updPanel(); drawChart(); syncPlay()
   applyPhase(S.sc.phase)
+  syncControls(); syncMode(); loadHubs() // 26.10.22 권한 표시 · 허브 목록
   raf = requestAnimationFrame(frame)
 
   return {
@@ -562,7 +724,8 @@ export function mountAmrTwin(root) {
     destroy() {
       destroyed = true
       offDb()
-      clearInterval(dbTimer); clearInterval(kpiTimer); clearInterval(authTimer); clearInterval(agTimer)
+      clearInterval(dbTimer); clearInterval(kpiTimer); clearInterval(authTimer); clearInterval(agTimer); clearInterval(histTimer)
+      offDenied(); amrApi.setReadOnly(false); amrApi.setHub(null) // 26.10.22 다른 계정이 이어 쓰지 않게 초기화
       offAuth(); document.removeEventListener('click', onDocClick); window.removeEventListener('resize', placePop); window.removeEventListener('scroll', placePop, true)
       cancelAnimationFrame(raf)
       clearTimeout(bannerTimer)

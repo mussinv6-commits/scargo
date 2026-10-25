@@ -83,6 +83,7 @@
 </template>
 
 <script>
+import { toDate } from "@/utils/serverTime.js"; // 26.10.23 서버 시각(epoch 초) → Date
 import axios from "axios";
 import { authState } from "@/auth/authState.js";
 import { API_BASE } from "@/utils/apiBase.js";
@@ -148,7 +149,7 @@ export default {
       return this.trucks.find((t) => t.assignedAccountId === accountId)?.vehicleNo || "";
     },
     formatDate(d) {
-      return d ? new Date(d).toLocaleDateString("ko-KR") : "-";
+      return d ? toDate(d).toLocaleDateString("ko-KR") : "-";
     },
   },
 };

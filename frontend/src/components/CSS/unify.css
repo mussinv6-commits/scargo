@@ -78,3 +78,25 @@ a:hover { color: var(--color-accent); }
 }
 
 /* ---- 폼 카드형 페이지 여백 정리 ---- */
+
+/* ---- 표 글자 정렬 통일 (26.10.24) ----
+   모든 표의 머리글·본문을 가운데 정렬한다. 화면별 스타일(scoped)보다 우선하도록 !important 를 쓴다.
+   일부 칸만 왼쪽/오른쪽으로 두고 싶으면 그 칸(td)에 class="is-left" 또는 "is-right" 를 붙이면 된다. */
+table th,
+table td {
+  text-align: center !important;
+  vertical-align: middle;
+}
+table td.is-left,
+table th.is-left { text-align: left !important; }
+table td.is-right,
+table th.is-right { text-align: right !important; }
+
+/* ── 가독성 보정: 좁은 화면에서 표 가로 스크롤, 글자 줄바꿈 정리 ── */
+@media (max-width: 900px) {
+  .card, .panel, [class*="-panel"], [class*="oc-"] { overflow-x: auto; }
+  table { min-width: 560px; }
+  table th, table td { white-space: nowrap; }
+  input[type="date"], input[type="datetime-local"], select { max-width: 100%; }
+}
+table th, table td { word-break: keep-all; }

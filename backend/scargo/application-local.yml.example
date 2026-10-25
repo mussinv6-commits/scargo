@@ -1,0 +1,8 @@
+# 로컬 실행용 DB 접속 설정 예시 — 이 파일을 같은 폴더(backend/scargo)에 application-local.yml 로 복사해 값을 채우세요
+# application-local.yml 은 각자 PC 전용입니다. 공유 · 커밋하지 마세요 (.gitignore 에 포함)
+# 환경변수(SCARGO_DB_*)를 쓰는 경우에는 이 파일이 필요 없습니다
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/scargo
+    username: postgres
+    password: "<로컬 PostgreSQL 비밀번호>"

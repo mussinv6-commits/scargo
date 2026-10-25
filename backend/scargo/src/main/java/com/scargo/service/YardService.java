@@ -8,6 +8,7 @@ import com.scargo.entity.Yard;
 import com.scargo.repository.YardRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -16,12 +17,15 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
+// 항만→허브 업무 공통 야드 조회. 데이터별 배차 범위 필터를 적용하는 API는 아님.
+@PreAuthorize("hasAnyRole('ADMIN', 'CONTROL', 'HUB_OP', 'CONTAINER_DRIVER', 'CORPORATE_APPROVED')")
 public class YardService {
 
     private final YardRepository yardRepository;
 
     // 야드 등록 로직
     @Transactional
+    @PreAuthorize("hasAnyRole('ADMIN', 'CONTROL')")
     public YardResponse createYard(YardCreateRequest request) {
         // 야드 이름 중복 체크
         yardRepository.findByYardName(request.getYardName())
@@ -35,7 +39,7 @@ public class YardService {
                 .yardType(request.getYardType())  // 야드 타입
                 .latitude(request.getLatitude())    // 위도
                 .longitude(request.getLongitude())  // 경도
-                .status(request.getStatus())     // 야드 상태 (입력 안 하면 엔티티 기본값 'AVAILABLE' 적용)
+                .status(request.getStatus())     // 커스텀 생성자에서 null이면 기존 AVAILABLE 기본값 유지
                 .build();  // 최종생성
 
         Yard savedYard = yardRepository.save(yard);
@@ -79,6 +83,7 @@ public class YardService {
 
     // 야드 수정 로직
     @Transactional
+    @PreAuthorize("hasAnyRole('ADMIN', 'CONTROL')")
     public YardResponse updateYard(Long yardId, YardUpdateRequest request) {
         Yard yard = yardRepository.findById(yardId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 야드입니다. ID: " + yardId));
@@ -105,6 +110,7 @@ public class YardService {
 
     // 야드 삭제 로직
     @Transactional
+    @PreAuthorize("hasAnyRole('ADMIN', 'CONTROL')")
     public void deleteYard(Long yardId) {
         Yard yard = yardRepository.findById(yardId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 야드입니다. ID: " + yardId));

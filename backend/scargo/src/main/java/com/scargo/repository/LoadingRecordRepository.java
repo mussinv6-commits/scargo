@@ -8,11 +8,18 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.time.OffsetDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
 @Repository
 public interface LoadingRecordRepository extends JpaRepository<LoadingRecord, Long>, LoadingRecordRepositoryCustom {
+
+    // 26.10.22 추가: 컨테이너의 진행 중(PENDING · IN_PROGRESS) 적재 기록 조회 (DB 유니크 인덱스상 최대 1건)
+    Optional<LoadingRecord> findFirstByContainer_ContainerNoAndStatusInOrderByRecordIdDesc(
+            String containerNo,
+            Collection<LoadingStatus> statuses
+    );
 
     // 특정 차량(vehicleNo)의 적재 기록 목록 조회 (페이징 및 리스트)
     Page<LoadingRecord> findByTruck_VehicleNo(String vehicleNo, Pageable pageable);

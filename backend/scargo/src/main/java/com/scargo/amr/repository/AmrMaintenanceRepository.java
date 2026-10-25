@@ -13,4 +13,7 @@ public interface AmrMaintenanceRepository extends JpaRepository<AmrMaintenance, 
     Optional<AmrMaintenance> findFirstByStatusInOrderByMaintIdDesc(Collection<String> statuses);
     Optional<AmrMaintenance> findFirstByRobotIdAndStatusInOrderByMaintIdDesc(Long robotId, Collection<String> statuses);
     List<AmrMaintenance> findAllByOrderByMaintIdDesc(Pageable pageable);
+    // 26.10.22 허브별 조회 (허브의 로봇들)
+    Optional<AmrMaintenance> findFirstByRobotIdInAndStatusInOrderByMaintIdDesc(Collection<Long> robotIds, Collection<String> statuses);
+    List<AmrMaintenance> findByRobotIdInOrderByMaintIdDesc(Collection<Long> robotIds, Pageable pageable);
 }

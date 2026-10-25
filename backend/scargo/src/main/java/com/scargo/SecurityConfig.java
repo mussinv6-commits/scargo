@@ -16,6 +16,7 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter; // 26.09.21 추가
 
 import com.scargo.security.SessionAuthenticationFilter; // 26.09.21 추가
+import com.scargo.amr.security.AmrTokenAuthenticationFilter; // 26.10.22 추가
 import lombok.RequiredArgsConstructor; // 26.09.21 추가
 
 import org.springframework.web.cors.CorsConfiguration;
@@ -30,12 +31,24 @@ public class SecurityConfig {
     // 26.09.21 추가: 세션의 accountId를 Spring Security 인증 정보로 변환
     private final SessionAuthenticationFilter sessionAuthenticationFilter;
 
+    // 26.10.22 추가: 허브 앱 출입증(X-AMR-Token)을 허브 범위가 있는 인증으로 변환 (/api/amr/** 전용)
+    private final AmrTokenAuthenticationFilter amrTokenAuthenticationFilter;
+
     // @Component 필터가 서블릿 필터로 한 번 더 등록되면 시큐리티 체인 밖에서 돌고,
     // 체인 시작 시 SecurityContext가 비워져 로그인 사용자가 익명으로 남는다.
     @Bean
     public FilterRegistrationBean<SessionAuthenticationFilter> sessionAuthenticationFilterRegistration(
             SessionAuthenticationFilter filter) {
         FilterRegistrationBean<SessionAuthenticationFilter> registration = new FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
+    }
+
+    // 26.10.22 추가: 허브 앱 출입증 필터도 같은 이유로 시큐리티 체인 안에서만 돌게 함
+    @Bean
+    public FilterRegistrationBean<AmrTokenAuthenticationFilter> amrTokenAuthenticationFilterRegistration(
+            AmrTokenAuthenticationFilter filter) {
+        FilterRegistrationBean<AmrTokenAuthenticationFilter> registration = new FilterRegistrationBean<>(filter);
         registration.setEnabled(false);
         return registration;
     }
@@ -96,21 +109,39 @@ public class SecurityConfig {
 
             // 26.09.21 추가: 세션의 accountId를 SecurityContext에 반영
             .addFilterBefore(sessionAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+            // 26.10.22 추가: 웹 로그인 세션이 없을 때만 허브 앱 출입증으로 인증
+            .addFilterAfter(amrTokenAuthenticationFilter, SessionAuthenticationFilter.class)
 
             // URL 접근 권한 설정
             .authorizeHttpRequests(auth -> auth
+            		
+
+            		// Swagger UI 및 API 명세 접근 허용
+            	    .requestMatchers(
+            	        "/swagger-ui/**",
+            	        "/swagger-ui.html",
+            	        "/v3/api-docs",
+            	        "/v3/api-docs/**"
+            	    ).permitAll()	
+            		
+            		
                 // 1. 공통 비인증 허용 경로 (로그인, ID 중복체크, 회원가입 등)
                 .requestMatchers(HttpMethod.GET, "/api/accounts/check-id/**").permitAll()
                 // 26.10.01 추가: 스프링 내부 에러 페이지(/error)는 공개 - 막혀 있으면 404/500 같은
                 // 실제 오류가 전부 "권한 없음(403)"으로 바뀌어 보여서 원인을 알 수 없었음
                 .requestMatchers("/error").permitAll()
                 // AMR 관제 API (시뮬레이터 · 로그인 없는 관리자 앱이 호출)
-                .requestMatchers("/api/amr/**").permitAll()
+                // 26.10.22 수정: 전체 공개 → 연결 확인 · 앱 인증(코드 입력)만 공개.
+                //  나머지 /api/amr/** 는 웹 로그인 또는 허브 앱 출입증이 필요하고, 역할 · 허브 범위는 AmrController · AmrAccessPolicy 가 확인
+                .requestMatchers("/api/amr/health", "/api/amr/auth/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/accounts", "/api/accounts/login").permitAll()
 
-                // 2. 외부 연동 / 공개 API (매핑, 업체 등 서비스 요구사항에 맞게 설정)
-                .requestMatchers("/api/mappings/**", "/api/mappings").permitAll()
-                .requestMatchers("/api/companies/**").permitAll()
+                // 2. 외부 연동 / 공개 API (업체 등 서비스 요구사항에 맞게 설정)
+                // 26.10.22 수정: 차량-컨테이너 매핑(/api/mappings/**) 공개 제거 → 로그인 필요.
+                //  역할(ADMIN · CONTROL · CORPORATE_APPROVED)은 MappingController, 업체 범위는 MappingService 가 확인
+                // 26.10.22 수정: 업체 API 전체 공개 → 가입 화면용 업체 선택 목록만 공개
+                //  (나머지는 CompanyController의 @PreAuthorize로 보호)
+                .requestMatchers(HttpMethod.GET, "/api/companies/options").permitAll()
 
                 // 2-1. 26.09.21 추가: 게시판은 비로그인 사용자도 조회는 가능해야 하므로 GET만 공개
                 //      (글쓰기/수정/삭제 등은 anyRequest().authenticated() 규칙에 걸려 로그인 필요)

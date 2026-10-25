@@ -1,0 +1,2 @@
+# 26.10.24 DB 접속 실패(비밀번호 미설정 · 틀림 · DB 없음 · 서버 접속 불가) 원인 안내
+org.springframework.boot.diagnostics.FailureAnalyzer=com.scargo.config.DatabaseConnectionFailureAnalyzer

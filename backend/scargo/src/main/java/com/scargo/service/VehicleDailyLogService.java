@@ -112,6 +112,13 @@ public class VehicleDailyLogService {
         recalculateSubsequentLogs(vehicleNo, drivingDate);
     }
 
+    // 26.10.22 추가: 권한 검사용 - 운행 기록의 차량번호
+    public String getVehicleNo(Long logId) {
+        return logRepository.findById(logId)
+                .map(VehicleDailyLog::getVehicleNo)
+                .orElseThrow(() -> new IllegalArgumentException("해당 운행 기록을 찾을 수 없습니다. ID: " + logId));
+    }
+
     //특정 기준일 이후의 모든 누적 거리를 순차적으로 재계산하는 공통 메서드
     private void recalculateSubsequentLogs(String vehicleNo, java.time.LocalDate baseDate) {
         // 기준일 직전의 가장 최근 로그 조회 (없으면 기준점 0부터 시작)

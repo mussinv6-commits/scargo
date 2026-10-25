@@ -32,19 +32,19 @@ public interface VehicleChecklistRepository extends JpaRepository<VehicleCheckli
             @Param("endDate") LocalDate endDate
     );
 
-    // 특정 차량이 해당 회사의 소속이 맞는지 확인 (t.company.id로 수정)
-    @Query("SELECT COUNT(t) > 0 FROM Truck t WHERE t.vehicleNo = :vehicleNo AND t.company.id = :companyId")
+    // 특정 차량이 해당 회사의 소속이 맞는지 확인 (실제 Company 기본키 필드 companyId 사용)
+    @Query("SELECT COUNT(t) > 0 FROM Truck t WHERE t.vehicleNo = :vehicleNo AND t.company.companyId = :companyId")
     boolean existsByVehicleNoAndCompanyId(@Param("vehicleNo") String vehicleNo, @Param("companyId") Long companyId);
 
-    // 특정 점검 기록이 해당 회사의 소속 차량인지 확인 (t.company.id로 수정)
+    // 특정 점검 기록이 해당 회사의 소속 차량인지 확인 (실제 Company 기본키 필드 companyId 사용)
     @Query("SELECT COUNT(c) > 0 FROM VehicleChecklist c " +
            "JOIN Truck t ON c.vehicleNo = t.vehicleNo " +
-           "WHERE c.inspectionId = :inspectionId AND t.company.id = :companyId")
+           "WHERE c.inspectionId = :inspectionId AND t.company.companyId = :companyId")
     boolean existsByIdAndCompanyId(@Param("inspectionId") Long inspectionId, @Param("companyId") Long companyId);
 
-    // 특정 회사의 소속된 모든 차량의 점검 이력 전체 조회용 (t.company.id로 수정)
+    // 특정 회사의 소속된 모든 차량의 점검 이력 전체 조회용 (실제 Company 기본키 필드 companyId 사용)
     @Query("SELECT c FROM VehicleChecklist c " +
            "JOIN Truck t ON c.vehicleNo = t.vehicleNo " +
-           "WHERE t.company.id = :companyId ORDER BY c.inspectionDate DESC")
+           "WHERE t.company.companyId = :companyId ORDER BY c.inspectionDate DESC")
     List<VehicleChecklist> findAllByCompanyId(@Param("companyId") Long companyId);
 }

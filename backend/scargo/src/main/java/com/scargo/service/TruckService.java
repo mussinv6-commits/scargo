@@ -13,6 +13,7 @@ import com.scargo.repository.AccountRepository; // 26.09.22 추가
 import com.scargo.repository.CompanyRepository;
 import com.scargo.repository.ContainerRepository;
 import com.scargo.repository.TruckRepository;
+import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,6 +31,7 @@ public class TruckService {
     private final NotificationService notificationService; // 26.09.22 추가: 차량 등록 시 관리자 알림 발송용
     private final DriverAlertService driverAlertService;
     private final ContainerRepository containerRepository;
+    private final EntityManager entityManager;
 
     // 차량 등록
     @Transactional
@@ -162,9 +164,7 @@ public class TruckService {
         Account driver = accountRepository.findById(accountId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 계정입니다. ID: " + accountId));
 
-        if (driver.getUserType() != Account.UserType.GENERAL) {
-            throw new IllegalArgumentException("화물차 기사(일반회원) 계정만 배정할 수 있습니다.");
-        }
+        validateDriverForTruck(truck, driver);
 
         // 26.09.22 추가: 사업자가 호출한 경우, 본인 업체 소속 기사만 배정 가능
         if (callerCompanyId != null && !callerCompanyId.equals(driver.getCompanyId())) {
@@ -181,12 +181,65 @@ public class TruckService {
         });
 
         truck.setAssignedDriver(driver);
+        truckRepository.flush();
         driverAlertService.notifyDriverAssigned(truck);
         containerRepository.findByAssignedVehicleNo(truck.getVehicleNo())
                 .ifPresent(container -> driverAlertService.notifyContainerMapped(truck, container));
         return TruckResponse.from(truck);
     }
 
+    // 차량 구분과 기사 권한 및 소속 업체 검증
+    private void validateDriverForTruck(Truck truck, Account driver) {
+        Account.UserType userType = driver.getUserType();
+        if (userType != Account.UserType.CONTAINER_DRIVER
+                && userType != Account.UserType.LINEHAUL_DRIVER) {
+            throw new IllegalArgumentException(
+                    "컨테이너 운송기사 또는 간선 운송기사 계정만 배정할 수 있습니다."
+            );
+        }
+
+        if (truck.getCompanyId() == null
+                || !truck.getCompanyId().equals(driver.getCompanyId())) {
+            throw new IllegalArgumentException(
+                    "차량과 기사의 소속 업체가 일치해야 합니다."
+            );
+        }
+
+        // 차량 구분은 DB의 vehicle_category 기준으로 검사.
+        // semiTrailer나 truckType으로 추정하지 않음.
+        entityManager.flush();
+        Object categoryValue = entityManager.createNativeQuery(
+                "SELECT vehicle_category FROM trucks WHERE vehicle_no = :vehicleNo"
+        )
+                .setParameter("vehicleNo", truck.getVehicleNo())
+                .getSingleResult();
+
+        String category = categoryValue == null ? null : categoryValue.toString();
+
+        // 전체 SQL의 scargo_check_account_role 트리거와 동일하게
+        // 구분 미등록(NULL) 차량에는 두 기사 유형 모두 허용
+        if (category == null) {
+            return;
+        }
+
+        if ("CONTAINER_TRUCK".equals(category)) {
+            if (userType != Account.UserType.CONTAINER_DRIVER) {
+                throw new IllegalArgumentException(
+                        "컨테이너 트랙터에는 컨테이너 운송기사만 배정할 수 있습니다."
+                );
+            }
+        } else if ("GENERAL_TRUCK".equals(category)) {
+            if (userType != Account.UserType.LINEHAUL_DRIVER) {
+                throw new IllegalArgumentException(
+                        "일반 화물차에는 간선 운송기사만 배정할 수 있습니다."
+                );
+            }
+        } else {
+            throw new IllegalArgumentException(
+                    "기사 배정을 지원하지 않는 차량 구분입니다: " + category
+            );
+        }
+    }
     // 기사 배정 해제 (관리자 또는 해당 업체 소속 사업자)
     @Transactional
     public TruckResponse unassignDriver(String vehicleNo, Long callerCompanyId) {
@@ -215,7 +268,7 @@ public class TruckService {
         Truck truck = truckRepository.findById(vehicleNo)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 차량입니다. 번호: " + vehicleNo));
 
-        if (!java.util.List.of("PENDING", "APPROVED", "REJECTED").contains(entryApproval)) {
+        if (entryApproval == null || !java.util.List.of("PENDING", "APPROVED", "REJECTED").contains(entryApproval)) {
             throw new IllegalArgumentException("진입 허가 상태는 PENDING/APPROVED/REJECTED 중 하나여야 합니다.");
         }
 

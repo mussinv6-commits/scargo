@@ -17,69 +17,92 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/yards")
 @RequiredArgsConstructor
+// 별도 메서드 권한이 없는 조회 API에 적용
+// 항만→허브 업무 이용자와 관리자의 공통 야드 정보 조회 허용
+@PreAuthorize("hasAnyRole('ADMIN', 'CONTROL', 'HUB_OP', 'CONTAINER_DRIVER', 'CORPORATE_APPROVED')")
 public class YardController {
 
     private final YardService yardService;
 
-    // 야드 등록
+    // 야드 등록 API
+    // POST /api/yards
+    // 권한: ADMIN, CONTROL
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<YardResponse> createYard(@Valid @RequestBody YardCreateRequest request) {
-        YardResponse response = yardService.createYard(request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    @PreAuthorize("hasAnyRole('ADMIN', 'CONTROL')")
+    public ResponseEntity<YardResponse> createYard(
+            @Valid @RequestBody YardCreateRequest request
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(yardService.createYard(request));
     }
 
-    // 전체 야드 목록 조회
+    // 전체 야드 목록 조회 API
+    // GET /api/yards
     @GetMapping
-    @PreAuthorize("hasAnyRole('GENERAL', 'CORPORATE_PENDING', 'CORPORATE_APPROVED', 'ADMIN')") // 26.09.30 병합: 로그인 회원 전체 조회 허용(백엔드.zip)
     public ResponseEntity<List<YardResponse>> getAllYards() {
-        List<YardResponse> yards = yardService.getAllYards();
-        return ResponseEntity.ok(yards);
+        return ResponseEntity.ok(yardService.getAllYards());
     }
 
-    // 드롭다운/옵션용 야드 목록 조회 (셀렉트 박스 등)
+    // 야드 선택 목록 조회 API
+    // GET /api/yards/options
     @GetMapping("/options")
     public ResponseEntity<List<YardOptionResponse>> getYardOptions() {
-        List<YardOptionResponse> options = yardService.getYardOptions();
-        return ResponseEntity.ok(options);
+        return ResponseEntity.ok(yardService.getYardOptions());
     }
 
-    // 단건 야드 조회 (yardId 기준)
+    // 야드 단건 조회 API
+    // GET /api/yards/{yardId}
     @GetMapping("/{yardId}")
-    @PreAuthorize("hasAnyRole('GENERAL', 'CORPORATE_PENDING', 'CORPORATE_APPROVED', 'ADMIN')") // 26.09.30 병합: 로그인 회원 전체 조회 허용(백엔드.zip)
-    public ResponseEntity<YardResponse> getYard(@PathVariable("yardId") Long yardId) {
-        YardResponse response = yardService.getYard(yardId);
-        return ResponseEntity.ok(response);
+    public ResponseEntity<YardResponse> getYard(
+            @PathVariable("yardId") Long yardId
+    ) {
+        return ResponseEntity.ok(yardService.getYard(yardId));
     }
 
-    // 야드 타입별 조회
+    // 야드 유형별 목록 조회 API
+    // GET /api/yards/type/{yardType}
     @GetMapping("/type/{yardType}")
-    @PreAuthorize("hasAnyRole('GENERAL', 'CORPORATE_PENDING', 'CORPORATE_APPROVED', 'ADMIN')") // 26.09.30 병합: 로그인 회원 전체 조회 허용(백엔드.zip)
-    public ResponseEntity<List<YardResponse>> getYardsByType(@PathVariable("yardType") String yardType) {
-        List<YardResponse> yards = yardService.getYardsByType(yardType);
-        return ResponseEntity.ok(yards);
+    public ResponseEntity<List<YardResponse>> getYardsByType(
+            @PathVariable("yardType") String yardType
+    ) {
+        return ResponseEntity.ok(
+                yardService.getYardsByType(yardType)
+        );
     }
 
-    // 사용 가능 여부별 조회 (예: /api/yards/availability?isAvailable=true)
+    // 사용 가능 여부별 야드 목록 조회 API
+    // GET /api/yards/availability?isAvailable=true
     @GetMapping("/availability")
-    @PreAuthorize("hasAnyRole('GENERAL', 'CORPORATE_PENDING', 'CORPORATE_APPROVED', 'ADMIN')") // 26.09.30 병합: 로그인 회원 전체 조회 허용(백엔드.zip)
-    public ResponseEntity<List<YardResponse>> getYardsByAvailability(@RequestParam("isAvailable") Boolean isAvailable) {
-        List<YardResponse> yards = yardService.getYardsByAvailability(isAvailable);
-        return ResponseEntity.ok(yards);
-    }
-    
-    // 야드 수정
-    @PutMapping("/{yardId}")
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<YardResponse> updateYard(@PathVariable("yardId") Long yardId, @Valid @RequestBody YardUpdateRequest request) {
-        YardResponse response = yardService.updateYard(yardId, request);
-        return ResponseEntity.ok(response);
+    public ResponseEntity<List<YardResponse>> getYardsByAvailability(
+            @RequestParam("isAvailable") Boolean isAvailable
+    ) {
+        return ResponseEntity.ok(
+                yardService.getYardsByAvailability(isAvailable)
+        );
     }
 
-    // 야드 삭제
+    // 야드 정보 수정 API
+    // PUT /api/yards/{yardId}
+    // 실제 상하차 작업·배정 처리는 별도 업무 API에서 수행
+    @PutMapping("/{yardId}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'CONTROL')")
+    public ResponseEntity<YardResponse> updateYard(
+            @PathVariable("yardId") Long yardId,
+            @Valid @RequestBody YardUpdateRequest request
+    ) {
+        return ResponseEntity.ok(
+                yardService.updateYard(yardId, request)
+        );
+    }
+
+    // 야드 삭제 API
+    // DELETE /api/yards/{yardId}
+    // 삭제 가능 여부는 Service 및 DB 외래 키 정책에 따라 결정
     @DeleteMapping("/{yardId}")
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<Void> deleteYard(@PathVariable("yardId") Long yardId) {
+    @PreAuthorize("hasAnyRole('ADMIN', 'CONTROL')")
+    public ResponseEntity<Void> deleteYard(
+            @PathVariable("yardId") Long yardId
+    ) {
         yardService.deleteYard(yardId);
         return ResponseEntity.noContent().build();
     }

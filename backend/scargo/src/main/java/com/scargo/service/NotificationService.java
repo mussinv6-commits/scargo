@@ -5,11 +5,13 @@ import com.scargo.dto.NotificationResponse;
 import com.scargo.entity.Notification;
 import com.scargo.Enum.NotificationType;
 import com.scargo.repository.NotificationRepository;
+import com.scargo.security.AuthenticatedAccountPrincipal;
 // [FCM 비활성화 26.09.30] import com.scargo.service.FcmPushService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation; // 26.10.01 추가: 미등록 차량 알림용
 import org.springframework.transaction.annotation.Transactional;
@@ -66,21 +68,42 @@ public class NotificationService {
     }
 
     // 3. 알림 읽음 처리
+    // 26.10.22 수정: 알림 소유자(또는 관리자)만 처리 가능
     @Transactional
-    public void markAsRead(Long notificationId) {
-        Notification notification = notificationRepository.findById(notificationId)
-                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 알림입니다. ID: " + notificationId));
-        
+    public void markAsRead(Long notificationId, AuthenticatedAccountPrincipal caller) {
+        Notification notification = findOwnedNotification(notificationId, caller);
         notification.markAsRead();
     }
 
     // 4. 알림 개별 삭제
+    // 26.10.22 수정: 알림 소유자(또는 관리자)만 삭제 가능
     @Transactional
-    public void deleteNotification(Long notificationId) {
-        if (!notificationRepository.existsById(notificationId)) {
-            throw new IllegalArgumentException("존재하지 않는 알림입니다. ID: " + notificationId);
+    public void deleteNotification(Long notificationId, AuthenticatedAccountPrincipal caller) {
+        Notification notification = findOwnedNotification(notificationId, caller);
+        notificationRepository.delete(notification);
+    }
+
+    // 26.10.22 추가: 알림 소유자 확인
+    //  - 계정 알림: 수신 계정 본인
+    //  - 업체 알림(수신 계정 없음): 같은 업체 소속 계정 (업체 알림 조회 API의 COMPANY_<id> 권한과 같은 기준)
+    //  - 관리자: 전체
+    private Notification findOwnedNotification(Long notificationId, AuthenticatedAccountPrincipal caller) {
+        if (caller == null) {
+            throw new AccessDeniedException("로그인이 필요합니다.");
         }
-        notificationRepository.deleteById(notificationId);
+        Notification notification = notificationRepository.findById(notificationId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 알림입니다. ID: " + notificationId));
+
+        boolean admin = "ADMIN".equals(caller.getUserType());
+        boolean accountOwner = notification.getAccountId() != null
+                && notification.getAccountId().equals(caller.getId());
+        boolean companyOwner = notification.getAccountId() == null
+                && notification.getCompanyId() != null
+                && notification.getCompanyId().equals(caller.getCompanyId());
+        if (!admin && !accountOwner && !companyOwner) {
+            throw new AccessDeniedException("본인 또는 소속 업체의 알림만 처리할 수 있습니다.");
+        }
+        return notification;
     }
     
     // 5. 특정 계정의 '전체' 알림 목록 조회 (히스토리용)
@@ -138,7 +161,7 @@ public class NotificationService {
 
     // 10.특정 계정의 알림 유형별 필터링 조회 (예: 과적 경고, 기업 승인 등)
     public List<NotificationResponse> getNotificationsByType(Long accountId, NotificationType notificationType) {
-        List<Notification> notifications = notificationRepository.findByAccountIdAndNotificationTypeOrderByCreatedAtDesc(accountId, notificationType);
+        List<Notification> notifications = notificationRepository.findByAccountIdAndNotificationTypeOrderByCreatedAtDesc(accountId, notificationType.name());
         return notifications.stream()
                 .map(NotificationResponse::from)
                 .collect(Collectors.toList());

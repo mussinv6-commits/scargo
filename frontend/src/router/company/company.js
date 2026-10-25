@@ -5,6 +5,8 @@ import CompanyMapping from "@/components/company/CompanyMapping.vue";
 import CompanyTruckRegister from "@/components/company/CompanyTruckRegister.vue";
 import CompanyDrivers from "@/components/company/CompanyDrivers.vue";
 import CompanyContainerLocations from "@/components/company/CompanyContainerLocations.vue";
+import CompanyInspections from "@/components/company/CompanyInspections.vue"; // 26.10.23 컨테이너 점검표
+import CompanyGateReservations from "@/components/company/CompanyGateReservations.vue"; // 26.10.24
 
 // 사업자(승인된 기업 회원) 전용 화면 묶음.
 // 접근 제어(로그인 여부 + CORPORATE_APPROVED 여부)는 router/index.js 의
@@ -21,6 +23,8 @@ export default [
       { path: "trucks/new", name: "company-truck-register", component: CompanyTruckRegister },
       { path: "drivers", name: "company-drivers", component: CompanyDrivers },
       { path: "container-locations", name: "company-container-locations", component: CompanyContainerLocations },
+      { path: "inspections", name: "company-inspections", component: CompanyInspections },
+      { path: "gate-reservations", name: "company-gate-reservations", component: CompanyGateReservations }, // 26.10.24
     ],
   },
 ];

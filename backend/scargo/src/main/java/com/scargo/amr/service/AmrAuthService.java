@@ -4,8 +4,14 @@ import com.scargo.amr.entity.AmrAuthToken;
 import com.scargo.amr.entity.AmrOtpKey;
 import com.scargo.amr.repository.AmrAuthTokenRepository;
 import com.scargo.amr.repository.AmrOtpKeyRepository;
+import com.scargo.amr.security.AmrAccessPolicy;
+import com.scargo.amr.security.AmrDevicePrincipal;
+import com.scargo.security.AuthenticatedAccountPrincipal;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -24,6 +30,7 @@ import java.time.OffsetDateTime;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -36,6 +43,11 @@ import java.util.concurrent.ConcurrentHashMap;
  *   - QR에는 노트북 서버 주소도 들어 있어서, 노트북이 바뀌어도 앱에서 주소를 따로 입력할 필요가 없다
  *   - 앱의 모든 AMR API 요청은 토큰을 확인한다 (웹은 팀 관리자 로그인 세션으로 통과)
  *
+ *  26.10.22 허브별 키
+ *   - 앱 연결 코드는 ADMIN(전체 허브 키, hub_id NULL)과 HUB_OP(소속 허브 키)만 볼 수 있다. CONTROL은 조회 전용이라 발급 불가
+ *   - 앱 출입증의 범위 = 그 코드를 만든 키의 허브 (AmrDevicePrincipal.hubId)
+ *   - HUB_OP의 "모든 앱 로그아웃"은 자기 허브 키 · 출입증만, ADMIN은 기존처럼 전부
+ *
  *  6자리 계산은 TOTP(RFC 6238) 규칙: 서버만 아는 비밀키 + 현재 시각(30초 단위) → HmacSHA1 → 6자리
  *
  *  안전장치
@@ -43,6 +55,14 @@ import java.util.concurrent.ConcurrentHashMap;
  *   - 이미 한 번 쓴 6자리는 다시 못 씀
  *   - 토큰 원문은 DB에 저장하지 않고 SHA-256 해시만 저장
  *   - "모든 앱 로그아웃" 하면 비밀키를 새로 만들고 기존 토큰 전부 무효
+ *
+ *  26.10.23 출입증 감사 (마이그레이션 14장 = 팀 DB v16 10장)
+ *   - 발급: 그 키의 코드를 마지막으로 화면에 띄운 웹 계정(없으면 키를 만든 계정)을 issued_by_* 에, 접속 기기를 user_agent 에 남김
+ *   - 폐기: 앱 로그아웃 LOGOUT, 관리자 "모든 앱 로그아웃" ADMIN_REVOKE_ALL, 허브 관제사 "모든 앱 로그아웃" ROTATE (revoked_at · revoked_by)
+ *   - 실패: amr_auth_failures 에 NO_KEY · BAD_CODE · REUSED_CODE · IP_LOCKED (입력한 코드 · 비밀키 · 토큰은 저장하지 않음)
+ *  26.10.23 감사 보존 (마이그레이션 15장)
+ *   - 발급 · 폐기 값은 DB 트리거가 amr_auth_token_audits 에 옮겨 적는다 (토큰 해시는 옮기지 않음)
+ *   - 만료 출입증 정리(deleteExpired)는 그대로 amr_auth_tokens 행만 지움 → 감사 이력은 남음. 보관 기간은 미정(별도 승인)
  */
 @Service
 @RequiredArgsConstructor
@@ -57,10 +77,15 @@ public class AmrAuthService {
     private final AmrOtpKeyRepository keys;
     private final AmrAuthTokenRepository tokens;
     private final AmrService amr;
+    private final AmrAccessPolicy access;
+    private final JdbcTemplate jdbc;
 
     private final SecureRandom rnd = new SecureRandom();
     private final Map<String, Fail> fails = new ConcurrentHashMap<>();
-    private volatile long lastUsedStep = -1; // 재사용 방지
+    private final Map<Long, Long> lastUsedStep = new ConcurrentHashMap<>(); // 키별 마지막 사용 구간 (재사용 방지)
+    private final Map<Long, Issuer> lastShownBy = new ConcurrentHashMap<>(); // 26.10.23 키별로 코드를 마지막에 화면에 띄운 웹 계정
+
+    private record Issuer(Long accountId, String userId) {}
 
     private record Fail(int count, OffsetDateTime lockedUntil) {}
 
@@ -68,8 +93,11 @@ public class AmrAuthService {
 
     // ── 웹: 지금 앱 연결 코드 (+ 휴대폰이 접속할 노트북 주소) ─────────
     @Transactional
-    public Map<String, Object> currentCode(String adminId, int port) {
-        AmrOtpKey k = activeKey(adminId);
+    public Map<String, Object> currentCode(int port) {
+        Long hub = access.issuerHubId();
+        AmrOtpKey k = activeKey(hub, access.actorName());
+        Issuer viewer = webIssuer();
+        if (viewer != null) lastShownBy.put(k.getKeyId(), viewer);
         long now = System.currentTimeMillis() / 1000;
         Map<String, Object> m = new HashMap<>();
         m.put("code", totp(unbase32(k.getSecret()), now / STEP_SEC));
@@ -77,31 +105,63 @@ public class AmrAuthService {
         m.put("period", STEP_SEC);
         String ip = lanIp();
         m.put("lanBase", ip == null ? null : "http://" + ip + ":" + port);
+        m.put("hubId", hub); // null = 전체 허브용 코드
         return m;
     }
 
     // ── 웹: 모든 앱 로그아웃 (비밀키 새로 만들기) ─────────────────
     @Transactional
-    public void rotate(String adminId) {
+    public void rotate() {
+        Long hub = access.issuerHubId();
+        String by = access.actorName();
         OffsetDateTime now = OffsetDateTime.now();
-        for (AmrOtpKey k : keys.findByActiveTrue()) { k.setActive(false); k.setRevokedAt(now); }
-        tokens.revokeAll();
-        newKey(adminId);
-        amr.event(null, "INFO", "AMR 앱 연결 모두 해제 (" + adminId + ") · 앱은 새 코드로 다시 로그인");
+        List<AmrOtpKey> old = hub == null ? keys.findByActiveTrue() : keys.findByActiveTrueAndHubId(hub);
+        for (AmrOtpKey k : old) { k.setActive(false); k.setRevokedAt(now); }
+        // 26.10.23 폐기 감사: 무효로 만들 출입증에 폐기 시각 · 처리자 · 사유를 먼저 남긴다
+        if (hub == null) {
+            jdbc.update("UPDATE amr_auth_tokens SET revoked_at = ?, revoked_by = ?, revoke_reason = 'ADMIN_REVOKE_ALL' WHERE revoked = false", now, by);
+            tokens.revokeAll(); // 관리자: 모든 허브의 앱 로그아웃 (기존 동작)
+        } else if (!old.isEmpty()) {
+            for (AmrOtpKey k : old) {
+                jdbc.update("UPDATE amr_auth_tokens SET revoked_at = ?, revoked_by = ?, revoke_reason = 'ROTATE' WHERE revoked = false AND key_id = ?", now, by, k.getKeyId());
+            }
+            tokens.revokeByKeyIds(old.stream().map(AmrOtpKey::getKeyId).toList());
+        }
+        newKey(hub, by);
+        Long eventHub = hub == null ? access.defaultHubId() : hub;
+        amr.event(eventHub, null, "INFO", "AMR 앱 연결 모두 해제 (" + by + ") · 앱은 새 코드로 다시 로그인");
     }
 
     // ── 앱: 6자리 → 24시간 토큰 ───────────────────────────────
     @Transactional(noRollbackFor = ResponseStatusException.class)
     public LoginResult login(String code, String client, String ip) {
-        AmrOtpKey k = keys.findFirstByActiveTrueOrderByKeyIdDesc()
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "웹 AMR 관제 화면을 먼저 열어 앱 연결 코드를 확인하세요"));
-        checkLock(ip);
-        long step = match(k.getSecret(), code);
-        if (step < 0) { failed(ip); throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "코드가 맞지 않습니다 (" + left(ip) + "번 남음)"); }
-        if (step <= lastUsedStep) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "이미 사용한 코드입니다. 웹에서 다음 코드를 확인하세요");
-        lastUsedStep = step;
+        return login(code, client, ip, null);
+    }
+
+    @Transactional(noRollbackFor = ResponseStatusException.class)
+    public LoginResult login(String code, String client, String ip, String userAgent) {
+        List<AmrOtpKey> active = keys.findByActiveTrueOrderByKeyIdDesc();
+        if (active.isEmpty()) {
+            auditFailure(ip, userAgent, "NO_KEY");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "웹 AMR 관제 화면을 먼저 열어 앱 연결 코드를 확인하세요");
+        }
+        try {
+            checkLock(ip);
+        } catch (ResponseStatusException e) {
+            auditFailure(ip, userAgent, "IP_LOCKED");
+            throw e;
+        }
+        // 어느 허브의 코드인지는 맞는 키로 정해진다 (관리자 키 = 전체 허브, 허브 관제사 키 = 그 허브)
+        AmrOtpKey k = null; long step = -1;
+        for (AmrOtpKey candidate : active) {
+            step = match(candidate.getSecret(), code);
+            if (step >= 0) { k = candidate; break; }
+        }
+        if (k == null) { auditFailure(ip, userAgent, "BAD_CODE"); failed(ip); throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "코드가 맞지 않습니다 (" + left(ip) + "번 남음)"); }
+        if (step <= lastUsedStep.getOrDefault(k.getKeyId(), -1L)) { auditFailure(ip, userAgent, "REUSED_CODE"); throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "이미 사용한 코드입니다. 웹에서 다음 코드를 확인하세요"); }
+        lastUsedStep.put(k.getKeyId(), step);
         fails.remove(ip);
-        return issue(k.getKeyId(), "WEB".equalsIgnoreCase(client) ? "WEB" : "APP", ip);
+        return issue(k, "WEB".equalsIgnoreCase(client) ? "WEB" : "APP", ip, userAgent);
     }
 
     // ── 토큰 확인 (앱의 모든 AMR API 요청마다) ────────────────────
@@ -115,21 +175,60 @@ public class AmrAuthService {
         return t;
     }
 
+    /** 26.10.22 출입증 → 허브 앱 인증 주체 (출입증이 없거나 만료 · 무효면 null) */
+    @Transactional
+    public AmrDevicePrincipal authenticate(String raw) {
+        AmrAuthToken t = check(raw);
+        if (t == null) return null;
+        return keys.findById(t.getKeyId())
+                .map(k -> new AmrDevicePrincipal(k.getKeyId(), k.getHubId(), t.getClient()))
+                .orElse(null);
+    }
+
     @Transactional
     public void logout(String raw) {
         if (raw == null || raw.isBlank()) return;
-        tokens.findById(sha256(raw.trim())).ifPresent((t) -> t.setRevoked(true));
+        tokens.findById(sha256(raw.trim())).ifPresent((t) -> {
+            if (t.isRevoked()) return;
+            t.setRevoked(true);
+            t.setRevokedAt(OffsetDateTime.now());
+            t.setRevokedBy(t.getClient()); // 앱 · 웹 출입증 스스로 로그아웃
+            t.setRevokeReason("LOGOUT");
+        });
+    }
+
+    // ── 26.10.23 출입증 감사 조회 ──────────────────────────
+    @Transactional(readOnly = true)
+    public Map<String, Object> audit() {
+        Long hub = access.issuerHubId(); // ADMIN = null(전체), HUB_OP = 소속 허브, 그 외 403
+        // 26.10.23 마이그레이션 15장: 감사 이력은 amr_auth_token_audits 에서 읽는다 (만료 출입증이 정리돼도 남음)
+        //  마지막 사용 시각은 출입증이 남아 있을 때만 (tokenRetained = false 면 만료 후 정리된 출입증)
+        String sql = "SELECT a.hub_id AS \"hubId\", a.client, a.ip, a.user_agent AS \"userAgent\", "
+                + "a.issued_by_user_id AS \"issuedByUserId\", a.issued_at AS \"createdAt\", a.expires_at AS \"expiresAt\", "
+                + "t.last_used_at AS \"lastUsedAt\", a.revoked, a.revoked_at AS \"revokedAt\", a.revoked_by AS \"revokedBy\", "
+                + "a.revoke_reason AS \"revokeReason\", (t.audit_id IS NOT NULL) AS \"tokenRetained\" "
+                + "FROM amr_auth_token_audits a LEFT JOIN amr_auth_tokens t ON t.audit_id = a.audit_id "
+                + (hub == null ? "" : "WHERE a.hub_id = ? ") + "ORDER BY a.issued_at DESC, a.audit_id DESC LIMIT 100";
+        Map<String, Object> m = new HashMap<>();
+        m.put("tokens", hub == null ? jdbc.queryForList(sql) : jdbc.queryForList(sql, hub));
+        // 실패 기록에는 허브 정보가 없어 전체 범위(ADMIN)만 본다
+        m.put("failures", hub == null ? jdbc.queryForList("SELECT occurred_at AS \"occurredAt\", ip, user_agent AS \"userAgent\", reason "
+                + "FROM amr_auth_failures ORDER BY occurred_at DESC LIMIT 100") : List.of());
+        m.put("hubId", hub);
+        return m;
     }
 
     // ── 내부 ─────────────────────────────────────────────
-    private AmrOtpKey activeKey(String adminId) {
-        return keys.findFirstByActiveTrueOrderByKeyIdDesc().orElseGet(() -> newKey(adminId));
+    private AmrOtpKey activeKey(Long hub, String by) {
+        return (hub == null ? keys.findFirstByActiveTrueAndHubIdIsNullOrderByKeyIdDesc()
+                : keys.findFirstByActiveTrueAndHubIdOrderByKeyIdDesc(hub))
+                .orElseGet(() -> newKey(hub, by));
     }
 
-    private AmrOtpKey newKey(String adminId) {
+    private AmrOtpKey newKey(Long hub, String adminId) {
         byte[] b = new byte[20]; rnd.nextBytes(b);
         AmrOtpKey k = new AmrOtpKey();
-        k.setLabel("app"); k.setSecret(base32(b)); k.setActive(true); k.setCreatedBy(adminId); k.setCreatedAt(OffsetDateTime.now());
+        k.setLabel("app"); k.setSecret(base32(b)); k.setActive(true); k.setCreatedBy(adminId); k.setCreatedAt(OffsetDateTime.now()); k.setHubId(hub);
         return keys.save(k);
     }
 
@@ -152,16 +251,38 @@ public class AmrAuthService {
         } catch (Exception e) { return null; }
     }
 
-    private LoginResult issue(Long keyId, String client, String ip) {
+    private LoginResult issue(AmrOtpKey k, String client, String ip, String userAgent) {
+        Long keyId = k.getKeyId();
+        Issuer issuer = lastShownBy.get(keyId);
         byte[] b = new byte[32]; rnd.nextBytes(b);
         String raw = HexFormat.of().formatHex(b);
         OffsetDateTime now = OffsetDateTime.now();
-        tokens.deleteExpired(now.minusDays(1)); // 하루 넘게 지난 출입증 정리
+        tokens.deleteExpired(now.minusDays(1)); // 하루 넘게 지난 출입증 정리 (감사 이력 amr_auth_token_audits 는 지우지 않음)
         AmrAuthToken t = new AmrAuthToken();
         t.setTokenHash(sha256(raw)); t.setClient(client); t.setKeyId(keyId); t.setIp(ip);
         t.setCreatedAt(now); t.setExpiresAt(now.plus(TOKEN_TTL)); t.setLastUsedAt(now); t.setRevoked(false);
+        // 26.10.23 발급 감사: 코드를 보여 준 웹 계정 (서버 재시작 등으로 모르면 키를 만든 계정 아이디)
+        t.setIssuedByAccountId(issuer == null ? null : issuer.accountId());
+        t.setIssuedByUserId(issuer == null ? k.getCreatedBy() : issuer.userId());
+        t.setUserAgent(trim(userAgent, 300));
         tokens.save(t);
         return new LoginResult(raw, t.getExpiresAt(), client);
+    }
+
+    // 26.10.23 실패 감사 기록. 입력한 코드는 저장하지 않는다. 기록 실패가 로그인 응답을 바꾸지 않게 예외는 삼킨다
+    private void auditFailure(String ip, String userAgent, String reason) {
+        try {
+            jdbc.update("INSERT INTO amr_auth_failures (ip, user_agent, reason) VALUES (?, ?, ?)", trim(ip, 60), trim(userAgent, 300), reason);
+        } catch (Exception ignored) { /* 감사 기록 실패는 무시 */ }
+    }
+
+    private static Issuer webIssuer() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        return auth != null && auth.getPrincipal() instanceof AuthenticatedAccountPrincipal p ? new Issuer(p.getId(), p.getUserId()) : null;
+    }
+
+    private static String trim(String v, int max) {
+        return v == null ? null : v.length() <= max ? v : v.substring(0, max);
     }
 
     private void checkLock(String ip) {
@@ -178,7 +299,7 @@ public class AmrAuthService {
         int c = f.count() + 1;
         if (c >= MAX_FAIL) {
             fails.put(ip, new Fail(0, OffsetDateTime.now().plus(LOCK)));
-            amr.event(null, "WARN", "AMR 앱 로그인 " + MAX_FAIL + "회 실패 · 1분 잠금 (" + ip + ")");
+            amr.event(access.defaultHubId(), null, "WARN", "AMR 앱 로그인 " + MAX_FAIL + "회 실패 · 1분 잠금 (" + ip + ")");
             throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, MAX_FAIL + "번 틀려 1분 동안 잠깁니다");
         }
         fails.put(ip, new Fail(c, null));
