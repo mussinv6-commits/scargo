@@ -16,7 +16,7 @@
         <RouterLink to="/">홈</RouterLink>
         <a v-if="sbotAdmin" href="#" class="sb-demo" :class="{ run: demo >= 0 }" @click.prevent="demo >= 0 ? stopDemo() : startDemo()">{{ demo >= 0 ? "■ 시연 중지" : "▶ 시연" }}</a><!-- 26.10.25 시연 시나리오 -->
         <span class="sb-stat":class="stat" :title="statTip"><i></i>{{ statText }}</span><!-- 26.10.25 추가: 서버 연결 상태 -->
-        <span class="sb-user" v-if="authState.user">{{ authState.user.userName }}님<template v-if="accessLabel"> · {{ accessLabel }}</template></span>
+        <span class="sb-user" v-if="authState.user">{{ displayName }}님<template v-if="accessLabel"> · {{ accessLabel }}</template></span>
         <a href="#" @click.prevent="logout">로그아웃</a>
       </nav>
     </header>
@@ -35,12 +35,13 @@ import { useRouter } from "vue-router";
 import axios from "axios";
 import { authState, clearLogin } from "@/auth/authState.js";
 import { API_BASE } from "@/utils/apiBase.js";
-import { hubAccess, isSbotAdmin } from "@/components/amr/amrAccess.js"; // 26.10.22 통합: 화면별 권한
+import { hubAccess, isSbotAdmin, isMaster } from "@/components/amr/amrAccess.js"; // 26.10.22 통합: 화면별 권한
 import logo from "@/assets/sbot_logo.png";
 
 const router = useRouter();
 const sbotAdmin = computed(() => isSbotAdmin(authState.user));
 // 26.10.22 통합: 상단에 권한 범위 표시 (관리자 · 전체 허브 / 통합 관제사 · 조회 전용 / 허브 관제사 · 소속 허브)
+const displayName = computed(() => (isMaster(authState.user) ? "마스터" : authState.user?.userName || "")); // 26.10.26 마스터 계정은 '마스터님'
 const accessLabel = computed(() => hubAccess(authState.user).label || "");
 // 26.10.23 출입증 감사는 앱 연결 코드를 다루는 계정(S-Bot 관리자 · HUB_OP)만
 const canAudit = computed(() => hubAccess(authState.user).canManage);

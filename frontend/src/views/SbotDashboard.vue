@@ -8,7 +8,7 @@
     <div class="alerts" v-if="alerts.length"><span class="al-t">⚠ 확인 필요</span><RouterLink v-for="a in alerts" :key="a.k" :to="a.to" class="al" :class="a.lv">{{ a.t }}</RouterLink></div>
     <div class="tools">
       <span class="tl">센터</span><button v-for="f in FILTERS" :key="f.q" type="button" :class="{ on: fc === f.q }" @click="fc = f.q">{{ f.n }}</button>
-      <button type="button" class="csv" @click="exportCsv">⭳ CSV 내려받기</button>
+      <button type="button" class="csv" @click="exportCsv">⭳ 운영 현황 보고서(엑셀)</button>
       <button type="button" class="csv" @click="exportXlsx">⭳ 통행료 정산 보고서(엑셀)</button>
     </div>
     <div class="sech">허브 처리 현황 <small>AMR 작업 기준 · 센터 현황과 같은 데이터</small></div>
@@ -244,22 +244,103 @@ function exportXlsx() {
     [{ v: "합계", s: 4 }, { v: rows[0].hr.reduce((a, b) => a + b, 0), f: "SUM(B4:B11)", s: 3 }, { v: rows[1].hr.reduce((a, b) => a + b, 0), f: "SUM(C4:C11)", s: 3 }, { v: rows[2].hr.reduce((a, b) => a + b, 0), f: "SUM(D4:D11)", s: 3 }]] };
   downloadBlob(buildXlsx([s1, s2]), `S카고_센터별_통행료_정산보고서_${stamp.slice(0, 10)}.xlsx`);
 }
+// 26.10.26 운영 현황 보고서(.xlsx): 종합 판단 → 핵심 지표(설명 포함) → 확인 필요 → 센터별 운송 → 입고·통행료 → 시간대별 → AMR 상세. 합계 · 비중은 수식
 function exportCsv() {
-  const rowsCsv = [["구분", "항목", "값"]];
-  kpis.value.forEach((k) => rowsCsv.push(["허브", k.t, k.v]));
-  transport.value.forEach((t) => {
-    rowsCsv.push([t.n + "센터", "거리(km)", t.km]);
-    rowsCsv.push([t.n + "센터", "운송 중(대)", t.transit.length]);
-    rowsCsv.push([t.n + "센터", "도착(대)", t.arrived]);
-    CATL.forEach((c, i) => rowsCsv.push([t.n + "센터", c + "(건)", t.cat[i]]));
+  const t = new Date(), p = (n) => String(n).padStart(2, "0");
+  const day = `${t.getFullYear()}-${p(t.getMonth() + 1)}-${p(t.getDate())}`, stamp = `${day} ${p(t.getHours())}:${p(t.getMinutes())}`;
+  const src = hasDb.value || sbotDb.value ? "DB 실시간" : "시뮬레이션 예시값 (서버 · 운행 기록 없음)";
+  const H = (v) => ({ v, s: 1 }), N = (v) => ({ v, s: 2 }), T = (v) => ({ v, s: 7 }), W = (v) => ({ v, s: 9 }), C = (v) => ({ v, s: 14 }), TT = (v) => ({ v, s: 4 });
+  const L = "ABCDEFGHIJ", rows = [], merges = [], heights = {};
+  const add = (cells, h) => { rows.push(cells); if (h) heights[rows.length - 1] = h; return rows.length; };
+  const span = (cells, c0, c1, s) => { for (let i = c0 + 1; i <= c1; i++) cells[i] = { v: "", s }; const n = rows.length + 1; merges.push(`${L[c0]}${n}:${L[c1]}${n}`); return cells; };
+  const sec = (title) => { add([]); add(span([{ v: title, s: 8 }], 0, 9, 8), 24); };
+  const ROUTE = { "/sbot/hub": "허브 관제", "/sbot/move": "택배 이동", "/sbot/center": "물류센터 관제", "/sbot": "대시보드" };
+
+  // ── 데이터 정리 ──
+  const tr = transport.value, am = amrRows.value, al = alerts.value;
+  const bad = al.filter((a) => a.lv === "bad"), warn = al.filter((a) => a.lv === "warn");
+  const lvl = bad.length ? "확인 필요" : warn.length ? "주의" : "정상";
+  const NM = { SEL: "서울", GGI: "경기", ICN: "인천" }, FARE = { SEL: 4530, GGI: 3720, ICN: 6310 }, ex = !shared.value;
+  const toll = ["SEL", "GGI", "ICN"].map((k) => {
+    const c = shared.value?.centers?.[k] || { trips: EXC[k].trips, items: EXC[k].items, base: FARE[k] * EXC[k].trips, fin: FARE[k] * EXC[k].trips };
+    const base = Math.round(c.base || 0), fin = Math.round(c.fin ?? base);
+    return { nm: NM[k], trips: c.trips || 0, items: c.items || 0, base, fin };
   });
-  amrRows.value.forEach((a) => rowsCsv.push(["AMR", a.code, `${a.label} · 오늘 ${a.today}건 · 충전 ${a.charge}회 · 정비 ${a.fault}회`]));
-  const csv = "﻿" + rowsCsv.map((r) => r.map((v) => '"' + String(v).replace(/"/g, '""') + '"').join(",")).join("\r\n");
-  const d = new Date(), p = (n) => String(n).padStart(2, "0");
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
-  a.download = `sbot_report_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}.csv`;
-  document.body.appendChild(a); a.click(); a.remove();
+  const arrivedN = tr.reduce((a, c) => a + c.arrived, 0), fareSum = toll.reduce((a, r) => a + r.fin, 0);
+  const hr = hourRows.value, hmax = Math.max(1, ...hr.map((h) => h.count)), hsum = hr.reduce((a, h) => a + h.count, 0);
+
+  // ── 제목 · 종합 판단 ──
+  add(span([{ v: "S-Bot 운영 현황 보고서", s: 5 }], 0, 9, 5), 30);
+  add(span([{ v: `기준 ${stamp}  ·  데이터: ${src}  ·  대상: S카고 허브(곤지암) → 서울 · 경기 · 인천 물류센터`, s: 6 }], 0, 9, 6));
+  add([]);
+  const bs = bad.length ? 12 : warn.length ? 11 : 10;
+  const sumTxt = `허브  화물차 ${kpis.value[0].v} 반입 · 택배 ${kpis.value[2].v} 처리 · AMR 가동 ${kpis.value[1].v} · 택배 1건 평균 운반 ${kpis.value[3].v}\n운송  허브→센터 운송 중 ${inTransitN.value}대 · 센터 도착 완료 ${arrivedN}대 · 오늘 통행료 확정 ${fareSum.toLocaleString("ko-KR")}원\n점검  ${al.length ? al.map((a) => a.t).join(" · ") : "확인이 필요한 항목 없음"}`;
+  const n0 = rows.length + 1; merges.push(`A${n0}:B${n0}`, `C${n0}:J${n0}`);
+  add([{ v: `종합 상태\n${lvl}`, s: bs }, { v: "", s: bs }, { v: sumTxt, s: 15 }, ...Array(7).fill({ v: "", s: 15 })], 66);
+
+  // ── 1. 핵심 지표 ──
+  sec("1. 핵심 지표  (각 항목이 무엇을 뜻하는지 함께 표시)");
+  add(span([H("항목"), H("현황"), H("무엇을 보여주는 지표인가")], 2, 9, 1), 22);
+  const DESC = ["오늘 허브에 들어온 화물차 수 (센터로 나간 차량 + 현재 운송 중인 차량)", "지금 가동 중인 AMR 수 / 전체 AMR 수 (충전 · 정비 · 예비 대기 중인 로봇은 가동에서 제외)", "오늘 허브에서 처리한 택배 건수 (센터로 보낸 물품 합계)", "AMR이 택배 1건을 옮기는 데 걸린 평균 시간 (짧을수록 처리 속도가 빠름)"];
+  kpis.value.forEach((k, i) => add(span([T(k.t), { v: k.v, s: 14 }, W(DESC[i] || "")], 2, 9, 9), 22));
+  add(span([T("허브→센터 운송 중"), C(`${inTransitN.value}대`), W("지금 도로 위에서 센터로 이동 중인 택배차 수 (아래 3번 표에서 센터별 · 차량번호 확인)")], 2, 9, 9), 22);
+  add(span([T("센터 도착 완료"), C(`${arrivedN}대`), W("오늘 센터에 입고를 마친 택배차 수")], 2, 9, 9), 22);
+  add(span([T("통행료 확정 합계"), C(`${fareSum.toLocaleString("ko-KR")}원`), W("오늘 센터 3곳 통행료 합계 (심야 할인 반영 후 금액, 4번 표 참고)")], 2, 9, 9), 22);
+
+  // ── 2. 확인 필요 ──
+  sec("2. 확인 필요 사항  (위험: 즉시 조치 · 주의: 확인)");
+  { const n = rows.length + 1; merges.push(`B${n}:H${n}`, `I${n}:J${n}`);
+    add([H("구분"), H("내용"), ...Array(6).fill(H("")), H("이동할 화면"), H("")], 22); }
+  const alRows = al.length ? al : [{ lv: "ok", t: "확인이 필요한 항목이 없습니다 (AMR 정상 · 운송 지연 없음)", to: "" }];
+  alRows.forEach((a) => {
+    const st = a.lv === "bad" ? 12 : a.lv === "warn" ? 11 : 10, n = rows.length + 1;
+    merges.push(`B${n}:H${n}`, `I${n}:J${n}`);
+    add([{ v: a.lv === "bad" ? "위험" : a.lv === "warn" ? "주의" : "정상", s: st }, W(a.t), ...Array(6).fill(W("")), C(ROUTE[String(a.to).split("?")[0]] || "-"), C("")], 22);
+  });
+
+  // ── 3. 센터별 운송 ──
+  sec("3. 센터별 운송 현황  (허브 → 물류센터, 거리 순)");
+  add([H("센터"), H("거리(km)"), H("운송 중(대)"), H("도착(대)"), H("전자제품(건)"), H("의류(건)"), H("식품(건)"), H("기타(건)"), H("물품 합계(건)"), H("운송 중 차량")], 32);
+  const a3 = rows.length + 1;
+  tr.forEach((c) => { const n = rows.length + 1, tot = c.cat.reduce((a, b) => a + b, 0);
+    add([T(c.n + "센터"), N(c.km), N(c.transit.length), N(c.arrived), ...c.cat.map(N), { v: tot, f: `SUM(E${n}:H${n})`, s: 2 }, W(c.transit.map((x) => x.no).join(", ") || "-")], 22); });
+  const b3 = rows.length, S3 = (col, v) => ({ v, f: `SUM(${col}${a3}:${col}${b3})`, s: 3 });
+  add([TT("합계"), TT(""), S3("C", tr.reduce((a, c) => a + c.transit.length, 0)), S3("D", arrivedN), ...[0, 1, 2, 3].map((j) => S3("EFGH"[j], tr.reduce((a, c) => a + c.cat[j], 0))), S3("I", tr.reduce((a, c) => a + c.cat.reduce((x, y) => x + y, 0), 0)), TT("")], 22);
+
+  // ── 4. 입고 · 통행료 ──
+  sec(`4. 센터별 입고 · 통행료  ${ex ? "(예시값: 오늘 운행 기록 없음)" : "(S-Bot 오늘 누적)"}`);
+  add([H("센터"), H("도착 차량(회)"), H("입고 물품(건)"), H("기본 요금(원)"), H("할인(원)"), H("확정 금액(원)"), H("할인율(%)"), H("차량당 요금(원)")], 32);
+  const a4 = rows.length + 1;
+  toll.forEach((r) => { const n = rows.length + 1, dis = r.base - r.fin;
+    add([T(r.nm + "센터"), N(r.trips), N(r.items), N(r.base), { v: dis, f: `D${n}-F${n}`, s: 2 }, N(r.fin), { v: r.base ? Math.round((dis / r.base) * 1000) / 10 : 0, f: `IF(D${n}=0,0,E${n}/D${n}*100)`, s: 13 }, { v: r.trips ? Math.round(r.fin / r.trips) : 0, f: `IF(B${n}=0,0,F${n}/B${n})`, s: 2 }], 22); });
+  const b4 = rows.length, S4 = (col, v) => ({ v, f: `SUM(${col}${a4}:${col}${b4})`, s: 3 }), n4 = rows.length + 1, tb = toll.reduce((a, r) => a + r.base, 0), tf = toll.reduce((a, r) => a + r.fin, 0), tt = toll.reduce((a, r) => a + r.trips, 0);
+  add([TT("합계"), S4("B", tt), S4("C", toll.reduce((a, r) => a + r.items, 0)), S4("D", tb), S4("E", tb - tf), S4("F", tf), { v: tb ? Math.round(((tb - tf) / tb) * 1000) / 10 : 0, f: `IF(D${n4}=0,0,E${n4}/D${n4}*100)`, s: 18 }, { v: tt ? Math.round(tf / tt) : 0, f: `IF(B${n4}=0,0,F${n4}/B${n4})`, s: 3 }], 22);
+  add(span([{ v: "할인 = 기본 요금 - 확정 금액 · 통행료는 통과 시각 기준 (06~21시 할인 없음 · 21~24시 30% · 00~06시 50%)", s: 17 }], 0, 9, 17));
+
+  // ── 5. 시간대별 ──
+  sec("5. 시간대별 처리 건수  (허브 처리 현황 그래프와 같은 데이터)");
+  add(span([H("시간대"), H("처리 건수"), H("비중(%)"), H("건수 막대")], 3, 8, 1).concat([H("비고")]), 22);
+  const a5 = rows.length + 1;
+  hr.forEach((h) => { const n = rows.length + 1, hh = Number(h.hour), bar = "█".repeat(Math.round((h.count / hmax) * 24));
+    add(span([T(`${p(hh)}~${p(hh + 2)}시`), N(h.count), { v: hsum ? Math.round((h.count / hsum) * 1000) / 10 : 0, f: `IF(B$${a5 + hr.length}=0,0,B${n}/B$${a5 + hr.length}*100)`, s: 13 }, { v: bar, f: `REPT("█",ROUND(B${n}/MAX(B$${a5}:B$${a5 + hr.length - 1})*24,0))`, s: 16 }], 3, 8, 16).concat([C(h.count === hmax && hmax > 0 ? "▲ 피크" : "")]), 22); });
+  add(span([TT("합계"), { v: hsum, f: `SUM(B${a5}:B${a5 + hr.length - 1})`, s: 3 }, { v: 100, s: 18 }, TT("")], 3, 8, 4).concat([TT("")]), 22);
+
+  // ── 6. AMR 상세 ──
+  sec("6. AMR 로봇 상세  (가동률은 최근 1시간 기준 · 처리 건수는 오늘 누적)");
+  add(span([H("로봇"), H("상태"), H("가동률(%)"), H("시간당 처리(건)"), H("오늘 처리(건)"), H("충전(회)"), H("정비(회)"), H("비고")], 7, 9, 1), 32);
+  const NOTE = { fault: "정비 중 · 작업 불가, 정비 완료 후 복귀", chg: "충전 중 · 충전 완료 후 복귀", sp: "예비 대기 · 관리자 승인 후 투입", ok: "" };
+  const a6 = rows.length + 1;
+  am.forEach((a) => { const n = rows.length + 1, st = a.cls === "fault" ? 12 : a.cls === "chg" ? 11 : a.cls === "ok" ? 10 : 14;
+    add(span([T(a.code), { v: a.label, s: st }, { v: a.pct, s: 13 }, N(a.hour), N(a.today), N(a.charge), N(a.fault), W(NOTE[a.cls] || "")], 7, 9, 9), 22); });
+  if (!am.length) add(span([T("-"), C("데이터 없음"), W("AMR 기록을 불러오지 못했습니다 (서버 연결 확인)")], 2, 9, 9), 22);
+  else { const b6 = rows.length, n6 = rows.length + 1, SA = (col, v) => ({ v, f: `SUM(${col}${a6}:${col}${b6})`, s: 3 });
+    add(span([TT("합계 · 평균"), TT(""), { v: Math.round((am.reduce((a, r) => a + r.pct, 0) / am.length) * 10) / 10, f: `AVERAGE(C${a6}:C${b6})`, s: 18 }, SA("D", am.reduce((a, r) => a + r.hour, 0)), SA("E", am.reduce((a, r) => a + r.today, 0)), SA("F", am.reduce((a, r) => a + r.charge, 0)), SA("G", am.reduce((a, r) => a + r.fault, 0)), TT("")], 7, 9, 4), 22); }
+
+  add([]);
+  add(span([{ v: "판단 기준: AMR 정비 중 = 위험 · AMR 충전 중 / 센터 운송 중 5대 이상 / 서버 연결 불가 = 주의. 그 외는 정상. 서버가 꺼져 있으면 시뮬레이션 예시값으로 표시됩니다.", s: 17 }], 0, 9, 17), 30);
+
+  const sheet = { name: "운영 현황 보고서", widths: [16, 13, 13, 13, 14, 13, 13, 13, 14, 24], landscape: true, heights, merges, rows };
+  downloadBlob(buildXlsx([sheet]), `S봇_운영현황보고서_${day}_${p(t.getHours())}${p(t.getMinutes())}.xlsx`);
 }
 const inTransitN = computed(() => transport.value.reduce((a, t) => a + t.transit.length, 0)); // 26.10.25 한 줄 요약용
 const downN = computed(() => amrRows.value.filter((r) => r.cls === "fault" || r.cls === "chg").length);

@@ -9,12 +9,18 @@
 //  ※ 화면 표시용 판단일 뿐이고, 실제 차단은 서버가 한다 (403)
 // ─────────────────────────────────────────────────────────────
 
+// 26.10.26 마스터 = S그룹 CEO 통합 마스터 계정(admin01). 아이디 필드명이 달라도 값으로 판별한다
+export function isMaster(user) {
+  return !!user && user.userType === 'ADMIN' && Object.values(user).some((v) => typeof v === 'string' && v.trim().toLowerCase() === 'admin01')
+}
+
 export function hubAccess(user) {
   if (!user) return { canView: false, canManage: false, reason: '로그인 후 이용할 수 있습니다.' }
   switch (user.userType) {
     case 'ADMIN':
       // 26.10.24: 마스터 관리자(admin01 등 S Cargo 관리자)도 S-Bot 을 사용할 수 있다 (서버도 ADMIN 전체 허용)
-      return { canView: true, canManage: true, allHubs: true, hubId: null, label: '관리자 · 전체 허브' }
+      // 26.10.26 마스터 계정은 '마스터님 · 전체'로 표시 (관리자님 · 관리자 · 전체 허브처럼 겹쳐 보이던 문제). 어느 화면에서든 같은 값이라 '허브'는 뺌
+      return { canView: true, canManage: true, allHubs: true, hubId: null, label: '전체' }
     case 'CONTROL':
       return { canView: true, canManage: false, allHubs: true, hubId: null, label: '통합 관제사 · 전체 허브 조회 전용' }
     case 'HUB_OP':

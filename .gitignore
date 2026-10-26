@@ -75,3 +75,8 @@ _제외목록.txt
 공유용/
 공유용_압축.bat
 
+# ===== 26.10.26 추가 =====
+*.bak
+backend/scargo/uploads/
+backend/scargo/application-local.yml
+.env
