@@ -19,6 +19,11 @@ public interface AmrAuthTokenRepository extends JpaRepository<AmrAuthToken, Stri
     @Query("update AmrAuthToken t set t.revoked = true where t.revoked = false and t.keyId in :keyIds")
     int revokeByKeyIds(@Param("keyIds") Collection<Long> keyIds);
 
+    // 26.10.21 (scargo_1): 살아 있는 출입증 목록 · 하나 폐기 (웹 출입증 관리 화면 AmrTokenAdmin)
+    java.util.List<AmrAuthToken> findByRevokedFalseAndExpiresAtAfterOrderByCreatedAtDesc(OffsetDateTime now);
+
+    java.util.List<AmrAuthToken> findByTokenHashStartingWith(String prefix);
+
     @Modifying
     @Query("delete from AmrAuthToken t where t.expiresAt < :before")
     int deleteExpired(@Param("before") OffsetDateTime before);

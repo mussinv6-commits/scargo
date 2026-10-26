@@ -1,0 +1,8 @@
+# fix_1300: 로컬 개발 프로필 (SPRING_PROFILES_ACTIVE 미지정 시 기본)
+spring:
+  datasource:
+    password: ${DB_PASSWORD:1234}
+scargo:
+  seed-accounts: true          # admin/admin1234 등 시드 계정 생성
+  app:
+    dev-tools: true            # PC 테스트용 게이트아웃 시뮬레이션 API

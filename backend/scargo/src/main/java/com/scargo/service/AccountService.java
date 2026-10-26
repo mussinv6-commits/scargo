@@ -110,15 +110,41 @@ public class AccountService {
         return new AccountResponse(saved);
     }
 
-    // 26.10.22 통합: 관리자의 기업계정 승인 (같은 운영 계열사 소속 계정만)
+    // 관리자의 기업계정 승인 (같은 운영 계열사 소속 계정만)
+    //  통합(26.10.26): 두 승인 방식을 함께 처리
+    //   ① share: 회원가입으로 만든 CORPORATE_PENDING 계정 → CORPORATE_APPROVED 로 변경
+    //   ② scargo_1: 운송사 승인은 회사 단위(companies.is_carrier + approval_status). 승인 전 회사의 담당자는
+    //      ROLE_CORPORATE_PENDING 만 받으므로(CarrierLegacy), 계정 승인 시 소속 회사도 운송사 APPROVED 로 만든다
     @Transactional
     public void approveCorporateAccount(Long accountId) {
+        Account caller = currentAccount();
         Account account = findAccount(accountId);
-        requireManagedAccount(account, requireAdminOperator(currentAccount()));
-        if (account.getUserType() != Account.UserType.CORPORATE_PENDING) {
+        requireManagedAccount(account, requireAdminOperator(caller));
+        boolean pendingAccount = account.getUserType() == Account.UserType.CORPORATE_PENDING;
+        Company company = account.getCompanyId() == null ? null
+                : companyRepository.findById(account.getCompanyId()).orElse(null);
+        boolean pendingCompany = account.getUserType() == Account.UserType.CORPORATE_APPROVED && company != null
+                && !"APPROVED".equals(company.getApprovalStatus());
+        if (!pendingAccount && !pendingCompany) {
             throw new IllegalArgumentException("승인 대기 중인 기업 계정이 아닙니다.");
         }
-        account.setUserType(Account.UserType.CORPORATE_APPROVED);
+        // DB 트리거(trg_account_carrier_contact): CORPORATE_APPROVED 는 운송사(is_carrier) 소속이어야 하므로 회사를 먼저 승인·반영한다
+        if (company != null && !(Boolean.TRUE.equals(company.getIsCarrier()) && "APPROVED".equals(company.getApprovalStatus()))) {
+            company.markCarrierPending();
+            company.approveCarrier(caller.getAccountId());
+            companyRepository.saveAndFlush(company);
+            notificationService.createNotification(NotificationCreateRequest.builder()
+                    .companyId(company.getCompanyId())
+                    .title("운송사 승인 완료")
+                    .message(company.getCompanyName() + " 운송사 등록이 승인되었습니다. 운송오더·배차·기사 승인 화면을 쓸 수 있습니다.")
+                    .notificationType(NotificationType.CORPORATE_APPROVAL)
+                    .referenceId(company.getCompanyId())
+                    .build());
+        }
+        if (pendingAccount) {
+            account.setUserType(Account.UserType.CORPORATE_APPROVED);
+            accountRepository.flush();
+        }
         notificationService.createNotification(NotificationCreateRequest.builder()
                 .accountId(account.getAccountId())
                 .title("기업 회원 가입 승인 완료")
@@ -128,15 +154,33 @@ public class AccountService {
                 .build());
     }
 
-    // 26.10.22 통합: 관리자의 기업계정 거절 = 승인 대기 신청 삭제 (다시 가입하면 됨)
+    // 관리자의 기업계정 거절
+    //  ① share: CORPORATE_PENDING 신청 = 계정 삭제 (다시 가입하면 됨)
+    //  ② scargo_1: 승인 대기 운송사(회사)의 담당자 = 회사 단위 반려 (REJECTED + reject_reason, 계정은 남김)
     @Transactional
-    public void rejectCorporateAccount(Long accountId) {
+    public void rejectCorporateAccount(Long accountId) { rejectCorporateAccount(accountId, "관리자 반려"); }
+
+    @Transactional
+    public void rejectCorporateAccount(Long accountId, String reason) {
         Account account = findAccount(accountId);
         requireManagedAccount(account, requireAdminOperator(currentAccount()));
-        if (account.getUserType() != Account.UserType.CORPORATE_PENDING) {
+        if (account.getUserType() == Account.UserType.CORPORATE_PENDING) {
+            accountRepository.delete(account);
+            return;
+        }
+        Company company = account.getUserType() == Account.UserType.CORPORATE_APPROVED && account.getCompanyId() != null
+                ? companyRepository.findById(account.getCompanyId()).orElse(null) : null;
+        if (company == null || !"PENDING".equals(company.getApprovalStatus())) {
             throw new IllegalArgumentException("승인 대기 중인 기업 계정이 아닙니다.");
         }
-        accountRepository.delete(account);
+        company.rejectCarrier(reason == null || reason.isBlank() ? "관리자 반려" : reason);
+        notificationService.createNotification(NotificationCreateRequest.builder()
+                .companyId(company.getCompanyId())
+                .title("운송사 승인 반려")
+                .message(company.getCompanyName() + " 운송사 등록이 반려되었습니다. 사유: " + company.getRejectReason())
+                .notificationType(NotificationType.CORPORATE_APPROVAL)
+                .referenceId(company.getCompanyId())
+                .build());
     }
 
     // 계정 등록
@@ -203,7 +247,7 @@ public class AccountService {
         boolean companyRequired =
                 userType == Account.UserType.CORPORATE_APPROVED
                 || userType == Account.UserType.CONTAINER_DRIVER
-                || userType == Account.UserType.LINEHAUL_DRIVER;
+                || userType == Account.UserType.BRANCH_DRIVER;
 
         if (companyRequired && companyId == null) {
             throw new IllegalArgumentException("소속 업체를 선택해주세요.");
@@ -378,7 +422,7 @@ public class AccountService {
         boolean companyRequired =
                 userType == Account.UserType.CORPORATE_APPROVED
                 || userType == Account.UserType.CONTAINER_DRIVER
-                || userType == Account.UserType.LINEHAUL_DRIVER;
+                || userType == Account.UserType.BRANCH_DRIVER;
 
         if (companyRequired && companyId == null) {
             throw new IllegalArgumentException("운송사 및 기사 계정은 소속 업체가 필요합니다.");
@@ -526,7 +570,7 @@ public class AccountService {
         return !accountRepository.existsByUserId(userId.trim());
     }
 
-    // 특정 업체 소속 컨테이너 기사·간선 기사 조회
+    // 특정 업체 소속 컨테이너 기사·지선 기사 조회
     public List<AccountResponse> getDriversByCompany(Long companyId) {
         if (companyId == null) {
             throw new IllegalArgumentException("업체 ID를 지정해주세요.");
@@ -549,7 +593,7 @@ public class AccountService {
                 ).stream(),
                 accountRepository.findByCompanyIdAndUserType(
                         companyId,
-                        Account.UserType.LINEHAUL_DRIVER
+                        Account.UserType.BRANCH_DRIVER
                 ).stream()
         )
                 .map(AccountResponse::new)
@@ -585,7 +629,7 @@ public class AccountService {
 
     private boolean isDriver(Account.UserType type) {
         return type == Account.UserType.CONTAINER_DRIVER
-                || type == Account.UserType.LINEHAUL_DRIVER;
+                || type == Account.UserType.BRANCH_DRIVER;
     }
 
     private void requireAccountRead(Account caller, Account target) {

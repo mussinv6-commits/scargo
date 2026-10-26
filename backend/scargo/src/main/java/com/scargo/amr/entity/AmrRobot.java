@@ -1,5 +1,8 @@
 package com.scargo.amr.entity;
 
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -35,13 +38,16 @@ public class AmrRobot {
     @Column(name = "state", length = 20, nullable = false)
     private String state; // IDLE, TO_PICK, LOADING, TO_DROP, UNLOADING, TO_MAINT, MAINT, TO_HOME, TO_RACK, FORK_WORK, CHARGING
 
-    @Column(name = "battery_pct")
+    @JdbcTypeCode(SqlTypes.NUMERIC) // 26.10.20 DB numeric(5,2)
+    @Column(name = "battery_pct", precision = 5, scale = 2)
     private Double batteryPct;
 
-    @Column(name = "health_score")
+    @JdbcTypeCode(SqlTypes.NUMERIC) // 26.10.20 DB numeric(5,2)
+    @Column(name = "health_score", precision = 5, scale = 2)
     private Double healthScore;
 
-    @Column(name = "cum_load_kg", nullable = false)
+    @JdbcTypeCode(SqlTypes.NUMERIC) // 26.10.20 DB numeric(10,1)
+    @Column(name = "cum_load_kg", nullable = false, precision = 10, scale = 1)
     private Double cumLoadKg;
 
     @Column(name = "last_maintained_at")

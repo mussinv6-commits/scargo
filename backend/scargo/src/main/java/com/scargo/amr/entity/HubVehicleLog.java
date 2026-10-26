@@ -40,7 +40,7 @@ public class HubVehicleLog {
     private String decision;
 
     @Column(name = "lane", length = 5)
-    private String lane; // IN(입고 도크 쪽 · 화물차 레인) / OUT(출고 도크 쪽 · 택배차 레인)
+    private String lane; // IN(입고 도크 쪽 · 화물차 레인) / OUT(출고 도크 쪽 · 지선차량 레인)
 
     @Column(name = "dock_no")
     private Integer dockNo;
@@ -64,7 +64,7 @@ public class HubVehicleLog {
     private String destHub;
 
     @Column(name = "seal_status", length = 10)
-    private String sealStatus; // 26.10.20 PENDING(도크 확인 대기) / OK(씰 확인 완료) / MISMATCH(불일치 · 하차 대기) / MISSING(기준 씰 없음 · 대기), 택배차는 null
+    private String sealStatus; // 26.10.20 PENDING(도크 확인 대기) / OK(씰 확인 완료) / MISMATCH(불일치 · 하차 대기) / MISSING(기준 씰 없음 · 대기), 지선차량는 null
 
     @Column(name = "seal_input", length = 30)
     private String sealInput; // 도크에서 스캔 · 입력한 씰 번호

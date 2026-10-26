@@ -49,4 +49,14 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     @Modifying
     @Query("DELETE FROM Notification n WHERE n.isRead = true AND n.readAt < :cutoffDate")
     int deleteOldReadNotifications(@Param("cutoffDate") OffsetDateTime cutoffDate);
+
+    // fix_1530: 운송사 담당자 알림 종 = 내 계정 알림 + 우리 회사(company_id) 알림
+    @org.springframework.data.jpa.repository.Query("SELECT n FROM Notification n WHERE n.accountId = :a OR (:c IS NOT NULL AND n.companyId = :c) ORDER BY n.createdAt DESC")
+    Page<Notification> findMine(@org.springframework.data.repository.query.Param("a") Long accountId, @org.springframework.data.repository.query.Param("c") Long companyId, Pageable pageable);
+
+    @org.springframework.data.jpa.repository.Query("SELECT count(n) FROM Notification n WHERE n.isRead = false AND (n.accountId = :a OR (:c IS NOT NULL AND n.companyId = :c))")
+    long countMineUnread(@org.springframework.data.repository.query.Param("a") Long accountId, @org.springframework.data.repository.query.Param("c") Long companyId);
+
+    @org.springframework.data.jpa.repository.Query("SELECT n FROM Notification n WHERE n.isRead = false AND (n.accountId = :a OR (:c IS NOT NULL AND n.companyId = :c)) ORDER BY n.createdAt DESC")
+    List<Notification> findMineUnread(@org.springframework.data.repository.query.Param("a") Long accountId, @org.springframework.data.repository.query.Param("c") Long companyId);
 }

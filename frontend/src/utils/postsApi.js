@@ -61,8 +61,8 @@ export async function authorName(accountId) {
   if (authState.user && Number(authState.user.accountId) === Number(accountId)) return authState.user.userName
   if (nameCache.has(accountId)) return nameCache.get(accountId)
   const p = axios
-    .get(`${API_BASE}/api/accounts/${accountId}`, { withCredentials: true })
-    .then((r) => r.data?.userName || r.data?.userId || `회원 #${accountId}`)
+    .get(`${API_BASE}/api/accounts/${accountId}/display-name`, { withCredentials: true }) // fix_1300 (scargo_1): 이름만 공개
+    .then((r) => r.data?.userName || `회원 #${accountId}`)
     .catch(() => `회원 #${accountId}`)
   nameCache.set(accountId, p)
   return p

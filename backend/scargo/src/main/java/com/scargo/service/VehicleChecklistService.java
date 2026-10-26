@@ -36,7 +36,7 @@ public class VehicleChecklistService {
     OR (:role = 'CORPORATE_APPROVED' AND t.company_id = :companyId)
     OR (:role = 'CONTAINER_DRIVER' AND t.assigned_account_id = :accountId
         AND (t.vehicle_category = 'CONTAINER_TRUCK' OR t.vehicle_category IS NULL))
-    OR (:role = 'LINEHAUL_DRIVER' AND t.assigned_account_id = :accountId
+    OR (:role = 'BRANCH_DRIVER' AND t.assigned_account_id = :accountId
         AND (t.vehicle_category = 'GENERAL_TRUCK' OR t.vehicle_category IS NULL))
     OR (:role = 'CONTROL' AND EXISTS (
         SELECT 1 FROM shipment_legs l
@@ -189,7 +189,7 @@ public class VehicleChecklistService {
                 .orElseThrow(() -> new AccessDeniedException("유효한 계정이 아닙니다."));
         if (account.getUserType() == null || !Set.of(Account.UserType.ADMIN, Account.UserType.CONTROL,
                 Account.UserType.CORPORATE_APPROVED, Account.UserType.CONTAINER_DRIVER,
-                Account.UserType.LINEHAUL_DRIVER).contains(account.getUserType())) {
+                Account.UserType.BRANCH_DRIVER).contains(account.getUserType())) {
             throw new AccessDeniedException("차량 점검표 접근 권한이 없습니다.");
         }
         if (account.getUserType() == Account.UserType.CORPORATE_APPROVED && account.getCompanyId() == null) {
@@ -201,7 +201,7 @@ public class VehicleChecklistService {
     // 기사는 조회만 허용하고 기존 관리자·관제사·업체 담당자의 쓰기 권한 유지
     private void requireWrite(Account caller) {
         if (caller.getUserType() == Account.UserType.CONTAINER_DRIVER
-                || caller.getUserType() == Account.UserType.LINEHAUL_DRIVER) {
+                || caller.getUserType() == Account.UserType.BRANCH_DRIVER) {
             throw new AccessDeniedException("기사는 점검표 조회만 가능합니다.");
         }
     }

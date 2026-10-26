@@ -34,16 +34,25 @@ public class AmrTokenAuthenticationFilter extends OncePerRequestFilter {
 
     private final AmrAuthService authService;
 
-    @Override
-    protected boolean shouldNotFilter(HttpServletRequest request) {
+    private static boolean amrPath(HttpServletRequest request) {
         String path = request.getRequestURI().substring(request.getContextPath().length());
-        return !path.startsWith("/api/amr/");
+        return path.startsWith("/api/amr/");
     }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
         Authentication existing = SecurityContextHolder.getContext().getAuthentication();
+        // 26.10.26 통합 검증 중 수정: 출입증 인증이 SessionManagementFilter 에 의해 HTTP 세션에 저장되면
+        //  같은 쿠키로 오는 요청은 출입증을 폐기 · 만료해도 계속 통과했다 → 세션에 남은 출입증 인증은 믿지 않고 매 요청 헤더로 다시 확인
+        if (existing != null && existing.getPrincipal() instanceof AmrDevicePrincipal) {
+            SecurityContextHolder.clearContext();
+            existing = null;
+        }
+        if (!amrPath(request)) {
+            chain.doFilter(request, response);
+            return;
+        }
         if (existing == null || existing instanceof AnonymousAuthenticationToken) {
             String raw = request.getHeader(HEADER);
             // 사진은 <img> 태그라 헤더를 못 보내서 ?t= 로 받는다 (기존 동작 유지)

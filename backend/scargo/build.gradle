@@ -25,16 +25,13 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-jdbc'       
     implementation 'org.mybatis.spring.boot:mybatis-spring-boot-starter:3.0.3' 
     implementation 'org.mybatis:mybatis:3.5.19'                              
-    runtimeOnly 'org.postgresql:postgresql'                                 
+    runtimeOnly 'org.postgresql:postgresql'
+    runtimeOnly 'com.h2database:h2' // 26.10.20 추가: PostgreSQL 없이 기동 확인용 (--spring.profiles.active=h2)                                 
 
     // JPA 설정
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 
     // QueryDSL 설정 (Spring Boot 3.x / Jakarta 패키지 적용)
-    implementation 'com.querydsl:querydsl-jpa:5.0.0:jakarta'
-    annotationProcessor 'com.querydsl:querydsl-apt:5.0.0:jakarta'
-    annotationProcessor 'jakarta.annotation:jakarta.annotation-api'
-    annotationProcessor 'jakarta.persistence:jakarta.persistence-api'
 
     // 보안 및 유효성 검증
     implementation 'org.springframework.boot:spring-boot-starter-security'   
@@ -59,10 +56,9 @@ dependencies {
 
     // 테스트 도구
     testImplementation 'org.springframework.boot:spring-boot-starter-test'  
-    // 26.10.22 추가: Gradle 9부터 JUnit 실행기를 직접 넣어야 테스트가 시작됨
-    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher' // 26.10.20: Gradle 9 는 런처를 자동 추가하지 않음
 
-    // 스웨거 연동(api 문서화)
+    // 스웨거 연동(api 문서화) — 26.10.21 v4 병합(팀장 v3)
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.2.0'
 }
 
@@ -74,34 +70,4 @@ tasks.withType(JavaCompile) {
     options.compilerArgs << "-parameters"
 }
 
-// ==========================================
-// QueryDSL QClass 생성 위치 및 빌드 설정
-// ==========================================
-def querydslDir = layout.buildDirectory.dir("generated/querydsl").get().asFile
-
-sourceSets {
-    main.java.srcDirs += [ querydslDir ]
-}
-
-tasks.withType(JavaCompile) {
-    options.generatedSourceOutputDirectory = file(querydslDir)
-}
-
-clean {
-    delete file(querydslDir)
-}
-
-// ==========================================
-// Eclipse / STS IDE 자동 경로 인식 추가 설정
-// ==========================================
-eclipse {
-    classpath {
-        file {
-            whenMerged { classpath ->
-                // 생성된 QueryDSL 폴더를 소스 경로(Source Folder)로 등록
-                def container = new org.gradle.plugins.ide.eclipse.model.SourceFolder(querydslDir.path, null)
-                classpath.entries.add(container)
-            }
-        }
-    }
-}
+// 26.10.20: QueryDSL 제거 (LoadingRecord 검색을 JPQL 로 교체) → Q클래스 생성/IDE 소스경로 설정 불필요

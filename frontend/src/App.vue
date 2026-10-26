@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch, onMounted, onBeforeUnmount } from "vue";
+import { computed, ref, watch, onMounted, onBeforeUnmount, defineAsyncComponent } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import axios from "axios";
 import Main from "./views/Main.vue";
@@ -15,6 +15,28 @@ const route = useRoute();
 
 // 26.10.20: S Cargo 관리자 = ADMIN 이면서 S-Bot 관리자가 아닌 계정
 const isAdmin = computed(() => authState.user?.userType === "ADMIN" && authState.user?.adminScope !== "SBOT");
+// 26.10.26 관리자: 사이드바가 없는 화면(메인 등)에서는 "메뉴" 버튼으로 사이드바를 왼쪽에서 열어 준다
+const AdminSidebar = defineAsyncComponent(() => import("@/components/admin/AdminSidebar.vue"));
+const menuOpen = ref(false);
+const hasSidebar = computed(() => route.path.startsWith("/admin") || route.path.startsWith("/w/"));
+async function toggleMenu() {
+  if (!menuOpen.value) { try { await import("@/components/CSS/admin.css"); } catch { /* 스타일 로드 실패해도 열기는 함 */ } }
+  menuOpen.value = !menuOpen.value;
+}
+watch(() => route.fullPath, () => { menuOpen.value = false; });
+// 26.10.26 관리자 상단바 공지 흐름: 최신 공지 5건 (제목만)
+const noticeItems = ref([]);
+const noticeTitles = computed(() => noticeItems.value.map((n) => n.title));
+const tickSec = computed(() => Math.max(20, noticeItems.value.reduce((s, n) => s + String(n.title).length, 0) * 0.5));
+async function loadNoticeTicker() {
+  if (!isAdmin.value) { noticeItems.value = []; return; }
+  try {
+    const r = await axios.get(`${API_BASE}/api/v1/posts/category/NOTICE`, { params: { page: 0, size: 5 }, withCredentials: true });
+    const list = Array.isArray(r.data) ? r.data : r.data?.content || [];
+    noticeItems.value = list.map((p) => ({ id: p.postId ?? p.id, title: String(p.title || "").trim() })).filter((n) => n.id != null && n.title);
+  } catch { noticeItems.value = []; }
+}
+watch(isAdmin, loadNoticeTicker, { immediate: true });
 const isCorporateApproved = computed(() => authState.user?.userType === "CORPORATE_APPROVED");
 const isCorporatePending = computed(() => authState.user?.userType === "CORPORATE_PENDING");
 const isDriver = computed(() => isDriverType(authState.user?.userType)); // 26.10.22 통합: CONTAINER_DRIVER · LINEHAUL_DRIVER 도 기사
@@ -48,6 +70,9 @@ const roleMenu = computed(() => {
         ADMIN_MENU.vehicle,
         ADMIN_MENU.yard,
         ADMIN_MENU.etc,
+        ADMIN_MENU.tower,
+        ADMIN_MENU.port,
+        ADMIN_MENU.hubc,
         ADMIN_MENU.notice,
       ],
     };
@@ -110,7 +135,7 @@ onBeforeUnmount(() => document.removeEventListener("click", onDocClick));
 const isDriverApp = computed(() => route.path.startsWith("/driver"));
 const isAdminApp = computed(() => route.path.startsWith("/admin"));
 const isCompanyApp = computed(() => route.path.startsWith("/company"));
-const isGroup = computed(() => route.path === "/" || route.path === "/login" || route.path.startsWith("/sbot"));
+const isGroup = computed(() => route.path === "/" || route.path === "/login" || route.path === "/group" || route.path === "/plan" || route.path.startsWith("/tower") || route.path.startsWith("/sbot"));
 const hideChrome = computed(() => isGroup.value || isDriverApp.value || isAdminApp.value || isCompanyApp.value);
 
 function isSection(prefix) {
@@ -135,8 +160,8 @@ function scrollToTop() {
 </script>
 
 <template>
-  <div id="app">
-    <nav v-if="!isGroup" class="navbar navbar-expand-lg navbar-dark bg-brand sticky-top site-nav">
+  <div id="app" :class="{ 'admin-top-on': isAdmin }">
+    <nav v-if="!isGroup" class="navbar navbar-expand-lg navbar-dark bg-brand sticky-top site-nav" :class="{ 'admin-top': isAdmin }">
       <div class="container-fluid nav-grid">
         <RouterLink to="/scargo" class="navbar-brand brand-logo">
           <img :src="safeCargoLogo" alt="S Cargo" />
@@ -156,15 +181,30 @@ function scrollToTop() {
         <div id="mainNavbar" class="collapse navbar-collapse" :class="{ show: navOpen }">
           <ul class="navbar-nav main-menu">
             <li class="nav-item">
-              <RouterLink to="/" class="nav-link">홈</RouterLink>
+              <RouterLink to="/" class="nav-link" :class="{ 'home-btn': isAdmin }">{{ isAdmin ? "⌂ 본사 홈" : "홈" }}</RouterLink><!-- 26.10.26 관리자는 사이드바에 메뉴가 있어서 상단은 본사 홈 + 공지 흐름 -->
             </li>
-            <li class="nav-item">
+            <li v-if="isAdmin && !hasSidebar" class="nav-item">
+              <a href="#" class="nav-link menu-btn" :class="{ on: menuOpen }" @click.prevent="toggleMenu">☰ 메뉴 {{ menuOpen ? "▴" : "▾" }}</a>
+            </li>
+            <!-- 26.10.26 관리자 상단바: 최신 공지 제목이 흐르는 띠 (마우스를 올리면 멈춤, 누르면 공지 상세) -->
+            <li v-if="isAdmin" class="nav-item notice-tick" :title="noticeTitles.length ? '' : '등록된 공지사항이 없습니다'">
+              <b class="nt-label">📢 공지</b>
+              <div class="nt-view">
+                <div v-if="noticeItems.length" class="nt-track" :style="{ animationDuration: tickSec + 's' }">
+                  <template v-for="k in 2" :key="k">
+                    <RouterLink v-for="n in noticeItems" :key="k + '-' + n.id" :to="'/admin/notices/' + n.id" class="nt-it">{{ n.title }}</RouterLink>
+                  </template>
+                </div>
+                <span v-else class="nt-empty">등록된 공지사항이 없습니다</span>
+              </div>
+            </li>
+            <li v-if="!isAdmin" class="nav-item">
               <RouterLink :to="isAdmin ? '/admin/notices' : '/notice'" class="nav-link" :class="{ 'is-active': isNoticeSection }">공지사항</RouterLink>
             </li>
             <!-- 26.10.01: 게이트 OCR 검사는 관리자 메뉴(/admin/gate-ocr)로 이동 -->
 
             <!-- 역할별 메인 메뉴 (관리자 / 사업자 / 화물차 기사) -->
-            <li v-if="roleMenu" ref="roleMenuEl" class="nav-item dropdown">
+            <li v-if="roleMenu && !isAdmin" ref="roleMenuEl" class="nav-item dropdown">
               <a
                 href="#"
                 class="nav-link dropdown-toggle"
@@ -211,6 +251,11 @@ function scrollToTop() {
       </div>
     </nav>
 
+    <!-- 26.10.26 관리자 메뉴(사이드바) 서랍: 누르면 왼쪽에서 열리고, 바깥을 누르면 닫힘 -->
+    <div v-if="isAdmin && menuOpen" class="admin-drawer-bg" @click="menuOpen = false">
+      <div class="admin-drawer" @click.stop><div class="admin-app"><div class="admin-shell"><AdminSidebar /></div></div></div>
+    </div>
+
     <div class="wrapper" :class="{ 'wrapper-app': isDriverApp, 'wrapper-admin': isAdminApp || isCompanyApp }">
       <Main />
     </div>
@@ -229,3 +274,29 @@ function scrollToTop() {
 </template>
 
 <style src="@/components/CSS/App.css" scoped></style>
+
+<style>
+/* 26.10.26 관리자 상단바: 본사 홈(로고 옆) + 공지 흐름 띠. 다른 계정 상단바는 그대로 */
+@media (min-width: 992px) {
+  .admin-top .main-menu { position: static !important; transform: none !important; flex: 1 1 auto !important; justify-content: flex-start !important; min-width: 0; }
+  .admin-top .navbar-collapse { justify-content: space-between !important; }
+}
+.admin-top .home-btn { border: 1px solid rgba(255,255,255,.4); border-radius: 16px; padding: 4px 14px !important; font-weight: 700; font-size: 14px; }
+.admin-top .notice-tick { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,.08); border-radius: 16px; padding: 4px 14px !important; margin-left: 8px; max-width: 760px; }
+.admin-top .menu-btn { border: 1px solid rgba(255,255,255,.4); border-radius: 16px; padding: 4px 14px !important; font-weight: 700; font-size: 14px; white-space: nowrap; }
+.admin-top .menu-btn.on { background: #c9a03a; border-color: #c9a03a; color: #fff; }
+.admin-drawer-bg { position: fixed; inset: 0; background: rgba(8,16,30,.45); z-index: 1090; }
+.admin-drawer { position: fixed; left: 0; top: var(--nav-h, 60px); bottom: 0; width: 270px; z-index: 1100; box-shadow: 4px 0 18px rgba(0,0,0,.35); overflow: hidden; }
+.admin-drawer .admin-app, .admin-drawer .admin-shell { height: 100%; }
+.admin-drawer .admin-shell .admin-sidebar { width: 100% !important; height: 100% !important; }
+.admin-top .nt-label { color: #f0c35a; font-size: 12.5px; white-space: nowrap; }
+.admin-top .nt-view { flex: 1; overflow: hidden; min-width: 0; }
+.admin-top .nt-track { display: inline-flex; gap: 48px; white-space: nowrap; animation: nt-move linear infinite; padding-left: 100%; }
+.admin-top .nt-view:hover .nt-track { animation-play-state: paused; }
+.admin-top .nt-it { color: #e9eef8; font-size: 14px; text-decoration: none; }
+.admin-top .nt-it:hover { color: #f0c35a; text-decoration: underline; }
+/* 홈 화면 아래쪽 노란 공지 줄은 관리자에게는 숨김 (공지는 상단바에서 흐름) */
+.admin-top-on .notice-slide { display: none !important; }
+.admin-top .nt-empty { color: rgba(233,238,248,.65); font-size: 13.5px; }
+@keyframes nt-move { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+</style>

@@ -21,8 +21,9 @@ public class TireManagement {
     @Column(name = "vehicle_no", nullable = false, length = 20)
     private String vehicleNo;               // 차량 번호 (trucks FK)
 
-    @Column(name = "axle_position", nullable = false, length = 50)
-    private String axlePosition;            // 차량 축 기준 위치 (예: 1축_좌, 1축_우 등)
+    // 26.10.21 DB 최종통합: 컬럼명 tire_position (axle_position 컬럼 없음). 자바 필드명은 기존 API 호환 위해 유지
+    @Column(name = "tire_position", nullable = false, length = 50)
+    private String axlePosition;            // 타이어 위치 (예: 1축_좌, 1축_우 등)
 
     @Column(name = "status", nullable = false, length = 20)
     @Builder.Default

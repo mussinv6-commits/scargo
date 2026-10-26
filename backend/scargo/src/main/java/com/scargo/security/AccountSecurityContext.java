@@ -37,8 +37,10 @@ public class AccountSecurityContext {
     public static Authentication authenticationOf(Account account) {
         // userType 이름(name())을 그대로 ROLE_* 권한으로 매핑한다.
         // 기존 컨트롤러들의 hasRole('ADMIN'), hasAnyRole('CORPORATE_APPROVED', 'ADMIN') 표기와 그대로 맞는다.
+        // 통합: scargo_1(2차) 권한 규칙 CarrierLegacy.roles — 승인 전 운송사 ROLE_CORPORATE_PENDING,
+        //  S-Bot 관리자 ROLE_AMR_ADMIN, 승인 전 기사 ROLE_PENDING_DRIVER, 승인 운송사 ROLE_CARRIER 추가
         List<SimpleGrantedAuthority> authorities = new ArrayList<>();
-        authorities.add(new SimpleGrantedAuthority("ROLE_" + account.getUserType().name()));
+        com.scargo.ops.CarrierLegacy.roles(account).forEach(r -> authorities.add(new SimpleGrantedAuthority(r)));
 
         // NotificationController 등에서 쓰는 hasAuthority('COMPANY_' + #companyId) 표현식을
         // 만족시키기 위해 소속 회사가 있는 계정에는 COMPANY_<companyId> 권한도 함께 부여한다.
@@ -49,7 +51,7 @@ public class AccountSecurityContext {
         // principal을 단순 문자열이 아니라 id(getId())를 가진 객체로 바꿔서
         // "#accountId == principal.id" 같은 SpEL 표현식이 정상 동작하도록 함.
         AuthenticatedAccountPrincipal principal = new AuthenticatedAccountPrincipal(
-                account.getAccountId(), account.getUserId(), account.getCompanyId(), account.getUserType().name(),
+                account.getAccountId(), account.getUserId(), account.getCompanyId(), com.scargo.ops.CarrierLegacy.displayUserType(account),
                 account.getHubId());
 
         return new UsernamePasswordAuthenticationToken(principal, null, authorities);

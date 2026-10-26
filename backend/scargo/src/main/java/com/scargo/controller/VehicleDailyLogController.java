@@ -29,7 +29,7 @@ public class VehicleDailyLogController {
 
     // 1. 일일 운행 기록 등록
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'CORPORATE_APPROVED', 'CONTAINER_DRIVER', 'LINEHAUL_DRIVER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'CORPORATE_APPROVED', 'CONTAINER_DRIVER', 'BRANCH_DRIVER')")
     public ResponseEntity<VehicleDailyLogResponse> createDailyLog(
             @Valid @RequestBody VehicleDailyLogCreateRequest request,
             Authentication authentication) {
@@ -40,7 +40,7 @@ public class VehicleDailyLogController {
 
     // 2. 특정 차량의 전체 운행 기록 조회
     @GetMapping("/vehicle/{vehicleNo}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'CONTROL', 'HUB_OP', 'CENTER_OP', 'CONTAINER_DRIVER', 'LINEHAUL_DRIVER', 'CORPORATE_APPROVED')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'CONTROL', 'HUB_OP', 'CENTER_OP', 'CONTAINER_DRIVER', 'BRANCH_DRIVER', 'CORPORATE_APPROVED')")
     public ResponseEntity<List<VehicleDailyLogResponse>> getLogsByVehicleNo(
             @PathVariable("vehicleNo") String vehicleNo,
             Authentication authentication) {
@@ -51,7 +51,7 @@ public class VehicleDailyLogController {
 
     // 3. 운행 기록 수정
     @PutMapping("/{logId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'CORPORATE_APPROVED', 'CONTAINER_DRIVER', 'LINEHAUL_DRIVER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'CORPORATE_APPROVED', 'CONTAINER_DRIVER', 'BRANCH_DRIVER')")
     public ResponseEntity<VehicleDailyLogResponse> updateDailyLog(
             @PathVariable("logId") Long logId,
             @RequestBody VehicleDailyLogUpdateRequest request,
@@ -63,7 +63,7 @@ public class VehicleDailyLogController {
 
     // 4. 운행 기록 삭제
     @DeleteMapping("/{logId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'CORPORATE_APPROVED', 'CONTAINER_DRIVER', 'LINEHAUL_DRIVER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'CORPORATE_APPROVED', 'CONTAINER_DRIVER', 'BRANCH_DRIVER')")
     public ResponseEntity<Void> deleteDailyLog(
             @PathVariable("logId") Long logId,
             Authentication authentication) {

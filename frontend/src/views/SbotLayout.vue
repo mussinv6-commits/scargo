@@ -8,11 +8,9 @@
         <!-- 26.10.22 통합: 대시보드 · 택배 이동 · 물류센터는 S-Bot 관리자만, 관제사(CONTROL · HUB_OP)는 허브 관제만 -->
         <RouterLink v-if="sbotAdmin" to="/sbot">대시보드</RouterLink>
         <RouterLink to="/sbot/hub">허브 관제</RouterLink>
-        <RouterLink to="/sbot/inspections">도착 · 점검</RouterLink><!-- 26.10.23 허브 도착 · 인계 · 컨테이너 점검 -->
         <!-- 26.10.25 상단 메뉴에서 숨김: 출입증 감사(/sbot/amr-audit) 화면과 경로는 그대로 남겨 둠
         <RouterLink v-if="canAudit" to="/sbot/amr-audit">출입증 감사</RouterLink> -->
-        <RouterLink v-if="sbotAdmin" to="/sbot/move">택배 이동</RouterLink>
-        <RouterLink v-if="sbotAdmin" to="/sbot/center">물류센터</RouterLink>
+        <RouterLink v-if="canScargo" to="/w/W-02" class="sb-sw">S CARGO</RouterLink><!-- fix_1105 (scargo_1): S Cargo 관리자는 S Cargo 로 전환 -->
         <RouterLink to="/">홈</RouterLink>
         <a v-if="sbotAdmin" href="#" class="sb-demo" :class="{ run: demo >= 0 }" @click.prevent="demo >= 0 ? stopDemo() : startDemo()">{{ demo >= 0 ? "■ 시연 중지" : "▶ 시연" }}</a><!-- 26.10.25 시연 시나리오 -->
         <span class="sb-stat":class="stat" :title="statTip"><i></i>{{ statText }}</span><!-- 26.10.25 추가: 서버 연결 상태 -->
@@ -45,6 +43,8 @@ const displayName = computed(() => (isMaster(authState.user) ? "마스터" : aut
 const accessLabel = computed(() => hubAccess(authState.user).label || "");
 // 26.10.23 출입증 감사는 앱 연결 코드를 다루는 계정(S-Bot 관리자 · HUB_OP)만
 const canAudit = computed(() => hubAccess(authState.user).canManage);
+// fix_1105 (scargo_1): S Cargo 로 전환 (S Cargo 관리자만, sbot 계정은 숨김)
+const canScargo = computed(() => authState.user?.userType === "ADMIN" && authState.user?.adminScope !== "SBOT");
 // 26.10.22: 센터별 입고 · 통행료 공용 데이터(대시보드 · 택배 이동 · 물류센터 공유). S-Bot 화면이 열려 있는 동안 자동으로 진행된다
 //  26.10.22 통합: S-Bot 관리자 전용 API(/api/amr/sbot/**)를 2초마다 부르므로 S-Bot 관리자일 때만 불러온다 (관제사는 403)
 onMounted(() => {
@@ -197,4 +197,5 @@ function logout() {
   .sb-nav { margin-left: 0; width: 100%; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; }
   .sb-main { padding: 12px 12px 32px; }
 }
+.sb-nav .sb-sw{background:#EECC83;color:#102644 !important;font-weight:800;border-radius:14px;padding:3px 12px;font-size:13px;letter-spacing:.03em;text-decoration:none} /* scargo_1 fix_1105 */
 </style>

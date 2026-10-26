@@ -23,7 +23,7 @@ public interface AccountRepository extends JpaRepository<Account, Long> {
     List<Account> findByUserType(Account.UserType userType);
 
     // 특정 업체에 소속된 특정 권한의 계정 목록 조회
-    // 예: 업체 1에 소속된 LINEHAUL_DRIVER 목록
+    // 예: 업체 1에 소속된 BRANCH_DRIVER 목록
     List<Account> findByCompanyIdAndUserType(
             Long companyId,
             Account.UserType userType
@@ -48,7 +48,7 @@ public interface AccountRepository extends JpaRepository<Account, Long> {
      * accounts의 모든 컬럼을 조회하여 Account 엔티티로 매핑.
      */
     @Query(value = """
-            SELECT a.*
+            SELECT a.account_id
             FROM accounts a
             WHERE (
                 -- 1. 운영 계열사에 직접 소속된 계정
@@ -82,10 +82,20 @@ public interface AccountRepository extends JpaRepository<Account, Long> {
             )
             ORDER BY a.account_id
             """, nativeQuery = true)
-    List<Account> findAccountsInOperatingCompany(
+    List<Long> findAccountIdsInOperatingCompany(
             // 메서드 인자를 SQL의 :operatorId에 바인딩
             @Param("operatorId") Long operatingCompanyId
     );
+
+    // 통합(26.10.26): Account 에 @Formula(scopeCenterId) 가 있어 native "SELECT a.*" 엔티티 매핑 대신 ID 로 조회
+    default List<Account> findAccountsInOperatingCompany(Long operatingCompanyId) {
+        List<Long> ids = findAccountIdsInOperatingCompany(operatingCompanyId);
+        java.util.Map<Long, Account> byId = new java.util.HashMap<>();
+        findAllById(ids).forEach(a -> byId.put(a.getAccountId(), a));
+        List<Account> out = new java.util.ArrayList<>();
+        for (Long id : ids) { Account a = byId.get(id); if (a != null) out.add(a); }
+        return out;
+    }
 
     /*
      * 특정 계정이 지정한 운영 계열사에 연결되어 있는지 확인

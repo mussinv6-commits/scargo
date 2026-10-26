@@ -1,0 +1,167 @@
+<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><title>SCARGO 웹 관제 (예시 목업)</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:"Malgun Gothic","Noto Sans KR",system-ui,sans-serif;background:#f3f5f9;color:#1d2433;font-size:14px}
+.app{display:flex;min-height:100vh}nav{width:232px;background:#14213d;color:#cfd6e6;padding:16px 0;flex-shrink:0}
+nav h1{font-size:18px;color:#fff;margin:0 20px 4px}nav .sub{font-size:11px;margin:0 20px 16px;color:#8d98b3}
+nav .grp{font-size:11px;color:#7d89a6;padding:12px 20px 4px}nav a{display:block;padding:7px 20px;color:#cfd6e6;text-decoration:none;cursor:pointer;font-size:13px}
+nav a:hover{background:#1f2f52}nav a.on{background:#fca311;color:#14213d;font-weight:700}nav a.dis{opacity:.35;pointer-events:none}
+main{flex:1;padding:0 28px 40px}header{display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid #dde2ec;margin-bottom:18px}
+header .t{font-size:20px;font-weight:700}header .id{color:#fca311;font-weight:700;margin-right:8px}
+.meta{font-size:12px;color:#6b7590}.meta b{color:#1d2433}select{padding:5px 8px;border:1px solid #c9d0de;border-radius:6px;font-family:inherit}
+.grid{display:grid;gap:14px}.g4{grid-template-columns:repeat(4,1fr)}.g3{grid-template-columns:repeat(3,1fr)}.g2{grid-template-columns:1fr 1fr}.g5{grid-template-columns:repeat(5,1fr)}
+.card{background:#fff;border-radius:10px;padding:16px;box-shadow:0 1px 3px rgba(20,33,61,.08)}.card h3{margin:0 0 10px;font-size:14px}
+.kpi .v{font-size:26px;font-weight:700}.kpi .l{font-size:12px;color:#6b7590}
+table{width:100%;border-collapse:collapse;font-size:13px}th{text-align:left;color:#6b7590;font-weight:600;border-bottom:1px solid #e3e7ef;padding:7px 6px;background:#fafbfd}td{border-bottom:1px solid #eef1f6;padding:7px 6px}
+.b{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700}.ok{background:#e3f6ea;color:#1b7a3d}.warn{background:#fff1dc;color:#b45f00}.crit{background:#fde4e4;color:#c62828}.info{background:#e5edff;color:#2851c6}.gray{background:#eceff4;color:#55607a}
+.code{font-family:Consolas,monospace;font-size:11px;background:#eef1f6;padding:1px 5px;border-radius:4px;color:#3a4560}
+.btn{border:0;border-radius:6px;padding:7px 14px;font-family:inherit;font-weight:600;cursor:pointer;background:#14213d;color:#fff}.btn.o{background:#fff;color:#14213d;border:1px solid #c9d0de}.btn.y{background:#fca311;color:#14213d}.btn.r{background:#c62828}
+.site{border-left:6px solid;}.site.ok{border-color:#2e9e5a}.site.warn{border-color:#f08c00}.site.crit{border-color:#d32f2f}
+.dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px}
+.note{font-size:12px;color:#6b7590;background:#fffbe8;border:1px dashed #e8c96a;padding:8px 12px;border-radius:8px;margin-top:14px}
+.scr{display:none}.scr.on{display:block}.bar{height:8px;background:#eceff4;border-radius:4px;overflow:hidden}.bar i{display:block;height:100%;background:#fca311}
+.drop{border:2px dashed #b9c3d8;border-radius:10px;padding:28px;text-align:center;color:#6b7590;background:#fafbfd}
+.tabs button{border:1px solid #c9d0de;background:#fff;padding:6px 16px;font-family:inherit;cursor:pointer}.tabs button.on{background:#14213d;color:#fff}
+.map{height:300px;background:linear-gradient(135deg,#e7eef9,#f6f8fc);border-radius:10px;position:relative}
+.node{position:absolute;transform:translate(-50%,-50%);background:#fff;border:2px solid #14213d;border-radius:8px;padding:6px 10px;font-size:12px;font-weight:700;text-align:center}
+.login{max-width:380px;margin:80px auto}.login input{width:100%;padding:10px;margin:6px 0 12px;border:1px solid #c9d0de;border-radius:6px;font-family:inherit}
+.fake{position:fixed;right:12px;bottom:10px;font-size:11px;background:#c62828;color:#fff;padding:4px 10px;border-radius:12px}
+.port{display:inline-block;width:48px;text-align:center;margin:3px;font-size:11px}
+
+/* v7 추가: 로그인 아이디 저장(아이디칸 오른쪽) · 비밀번호 보기/숨기기 */
+.idw,.pww{position:relative;display:block}
+.idw input{padding-right:96px!important}.pww input{padding-right:44px!important}
+.idw .sid{position:absolute;right:10px;top:4px;bottom:12px;transform:none;display:flex;align-items:center;gap:5px;font-size:12px;color:#6b7590;cursor:pointer;white-space:nowrap;margin:0}
+.idw .sid input{width:15px!important;height:15px;margin:0!important;padding:0!important;accent-color:#fca311}
+.pww .eye{position:absolute;right:6px;top:4px;bottom:12px;transform:none;width:34px;height:auto;border:0;background:transparent;color:#6b7590;cursor:pointer;display:grid;place-items:center;padding:0}
+.pww .eye.on{color:#fca311}.lerr{color:#c62828;font-size:12px;margin:-4px 0 10px;min-height:14px}
+.login input:not([type=checkbox]){width:100%;padding:9px 10px;border:1px solid #c9d0de;border-radius:6px;margin:4px 0 12px;font-family:inherit}
+</style></head><body>
+<div class="app"><nav>
+<h1>SCARGO</h1><div class="sub">2차 · 운송 운영 관제 (예시)</div>
+<div style="padding:0 20px 8px"><div style="font-size:11px;color:#8d98b3">권한 전환 (메뉴 노출 확인용)</div>
+<select id="role" style="width:100%;margin-top:4px" onchange="applyRole()"><option value="CONTROL">통합 관제사 · CONTROL</option><option value="ADMIN">총관리자 · ADMIN</option><option value="HUB_OP">허브 관제사 · HUB_OP (곤지암 허브)</option><option value="CENTER_OP">지역센터 관제사 · CENTER_OP (서울센터)</option><option value="carrier">운송사 담당자 (역할 · 권한 값 아님)</option></select></div>
+<a data-s="W-01">W-01 로그인</a>
+<div class="grp">공통 컨트롤타워</div>
+<a data-s="W-02">W-02 통합 대시보드</a><a data-s="W-03">W-03 네트워크 관제</a><a data-s="W-09">W-09 예외 알림 센터</a><a data-s="W-14">W-14 고속도로 요금</a><a data-s="W-15">W-15 차량 점검표</a><a data-s="W-16">W-16 직원관리</a><a data-s="W-10">W-10 기사 가입 승인</a><a data-s="W-11">W-11 기준정보</a>
+<div class="grp">항만 → 허브</div><a data-s="W-07">W-07 운송오더·물품 관리</a><a data-s="W-12">W-12 톨게이트</a><a data-s="W-13">W-13 검문소</a>
+<div class="grp">허브 → 물류센터</div><a data-s="W-04">W-04 허브 관제</a><a data-s="W-05">W-05 지역센터 관제</a><a data-s="W-06">W-06 AMR 관제</a><a data-s="W-08">W-08 지선 배차 관리</a>
+</nav><main>
+<header><div class="t"><span class="id" id="hid">W-02</span><span id="htitle">통합 대시보드</span></div><div class="meta">30초 폴링 갱신 · 마지막 갱신 <b id="clock">10:13:00</b> · 다음 갱신 <b id="cd">30</b>초 · <span id="who">통합 관제사</span></div></header>
+
+<section class="scr" id="W-01"><div class="card login"><h2 style="margin-top:0">SCARGO 로그인</h2><div class="meta">웹 권한 계정 (ADMIN · CONTROL · HUB_OP · CENTER_OP) + 운송사 담당자 (운송사 CORPORATE_APPROVED 계정)</div><br>아이디<span class="idw"><input id="lgId" autocomplete="username" autocapitalize="off" placeholder="demo.control@scargo.test"><label class="sid"><input type="checkbox" id="lgSave"> 아이디 저장</label></span>비밀번호<span class="pww"><input id="lgPw" type="password" autocomplete="current-password" placeholder="비밀번호"><button type="button" class="eye" id="lgEye" aria-label="비밀번호 보기" aria-pressed="false"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/></svg></button></span><div class="lerr" id="lgErr" role="alert"></div><button class="btn y" style="width:100%" onclick="v7Login()">로그인</button><div class="note">로그인 후 첫 화면: ADMIN · CONTROL · 운송사 담당자 → W-02 (운송사 담당자는 자기 운송사 데이터만) · HUB_OP → W-04 · CENTER_OP → W-05. 기사(앱 권한) 계정은 "앱을 이용해 주세요" 안내.</div></div></section>
+
+<section class="scr" id="W-02">
+<div class="grid g4"><div class="card kpi"><div class="l">진행 중 운송오더 (컨테이너)</div><div class="v">12</div></div><div class="card kpi"><div class="l">진행 중 지선 운행</div><div class="v">7</div></div><div class="card kpi"><div class="l">미해결 예외</div><div class="v" style="color:#c62828">4</div><div class="l">긴급 1 · 경고 3</div></div><div class="card kpi"><div class="l">반납 기한 임박 공컨테이너</div><div class="v" style="color:#b45f00">2</div></div></div>
+<h3 style="margin:20px 0 10px">거점 현황 (거점 4곳)</h3>
+<div class="grid g4" id="sites"></div>
+<div class="grid g2" style="margin-top:14px"><div class="card"><h3>최근 예외</h3><table><tr><th>등급</th><th>유형</th><th>거점·차량</th><th>상태</th></tr><tbody id="exmini"></tbody></table></div>
+<div class="card"><h3>오늘 흐름 (예시 컨테이너 TEST1234567)</h3><table><tr><th>단계</th><th>수량</th><th>진행</th></tr>
+<tr><td>컨테이너 하역</td><td>240 / 240 박스</td><td><div class="bar"><i style="width:100%"></i></div></td></tr>
+<tr><td>박스 식별·분류</td><td>212 / 240</td><td><div class="bar"><i style="width:88%"></i></div></td></tr>
+<tr><td>롤테이너 적재</td><td>14 / 18</td><td><div class="bar"><i style="width:78%"></i></div></td></tr>
+<tr><td>지선 운행</td><td>1 / 3 출발</td><td><div class="bar"><i style="width:33%"></i></div></td></tr></table></div></div>
+<div class="note">거점 색 기준 — <b style="color:#1b7a3d">정상</b>: 미해결 예외 0건 &amp; 모든 차량 지연 30분 미만 · <b style="color:#b45f00">주의</b>: 경고 예외 1건 이상 또는 30분 이상 지연 차량 1대 이상 · <b style="color:#c62828">긴급</b>: 긴급 예외 1건 이상. 기준 값은 W-11에서 변경.</div>
+</section>
+
+<section class="scr" id="W-03"><div class="card"><h3>네트워크 관제 · 인천신항 → 곤지암 허브 → 물류센터 3곳 <span class="meta">(실제는 3D 경로, 목업은 2D 도식)</span></h3>
+<div class="map"><svg width="100%" height="100%" style="position:absolute"><line x1="12%" y1="50%" x2="50%" y2="50%" stroke="#14213d" stroke-width="3" stroke-dasharray="6 4"/><line x1="50%" y1="50%" x2="85%" y2="18%" stroke="#fca311" stroke-width="3"/><line x1="50%" y1="50%" x2="85%" y2="50%" stroke="#fca311" stroke-width="3"/><line x1="50%" y1="50%" x2="85%" y2="82%" stroke="#fca311" stroke-width="3"/></svg>
+<div class="node" style="left:12%;top:50%">T 인천신항</div><div class="node" style="left:30%;top:38%;font-weight:400">🚛 서울81바0001<br><span class="b warn">IN_TRANSIT · 지연 35분</span></div><div class="node" style="left:50%;top:50%;border-color:#f08c00">H 곤지암 허브</div>
+<div class="node" style="left:85%;top:18%;border-color:#2e9e5a">C 인천센터</div><div class="node" style="left:85%;top:50%;border-color:#2e9e5a">C 서울센터</div><div class="node" style="left:85%;top:82%;border-color:#d32f2f">C 경기센터</div><div class="node" style="left:68%;top:66%;font-weight:400">🚚 경기82아0003<br><span class="b info">IN_TRANSIT</span></div></div>
+<table style="margin-top:12px"><tr><th>차량</th><th>구분</th><th>구간</th><th>상태</th><th>ETA</th><th>지연</th></tr>
+<tr><td>서울81바0001</td><td>운송오더</td><td>인천신항 → 허브</td><td><span class="code">IN_TRANSIT</span></td><td>11:05</td><td><span class="b warn">35분</span></td></tr>
+<tr><td>경기82아0003</td><td>지선 운행 LT-0003</td><td>허브 → 경기센터</td><td><span class="code">IN_TRANSIT</span></td><td>10:40</td><td><span class="b ok">5분</span></td></tr>
+<tr><td>인천83자0007</td><td>공컨 반납</td><td>허브 → 인천신항 CY(가정)</td><td><span class="code">RETURNING_EMPTY</span></td><td>11:30</td><td><span class="b ok">0분</span></td></tr></table></div></section>
+
+<section class="scr" id="W-04">
+<div class="grid g5">
+<div class="card"><h3>① 들어올 것</h3><table><tr><th>컨테이너</th><th>ETA</th></tr><tr><td>TEST1234567</td><td><span class="b ok">도착</span></td></tr><tr><td>DUMY7654321</td><td>11:05 <span class="b warn">+35분</span></td></tr><tr><td>FAKE0000001</td><td>13:20</td></tr></table></div>
+<div class="card"><h3>② 도크</h3><table><tr><th>도크</th><th>상태</th></tr><tr><td>입고 D1</td><td>TEST1234567 <span class="b ok">SEAL_RECEIVED</span></td></tr><tr><td>입고 D2</td><td><span class="b crit">개봉 보류</span></td></tr><tr><td>출고 D5</td><td>LT-0001 상차</td></tr><tr><td>출고 D6</td><td>비어 있음</td></tr></table></div>
+<div class="card"><h3>③ 처리 중</h3><div class="meta">하역 240/240 · 스캔 212/240</div><div class="bar" style="margin:6px 0 10px"><i style="width:88%"></i></div><div class="meta">AMR 운반 6대 가동 · 1대 정지</div><div style="margin-top:8px"><span class="port">포트1<br><b>인천</b> 72%</span><span class="port">포트2<br><b>서울</b> 95%</span><span class="port">포트3<br><b>경기</b> 60%</span></div></div>
+<div class="card"><h3>④ 나갈 것</h3><div class="meta">지선 출발 (센터별)</div><table><tr><td>LT-0001 인천</td><td><span class="code">LOADING</span></td></tr><tr><td>LT-0002 서울</td><td><span class="code">AT_HUB</span></td></tr><tr><td>LT-0003 경기</td><td><span class="code">IN_TRANSIT</span></td></tr></table><div class="meta" style="margin-top:8px">공컨 반납</div><table><tr><td>TEST1234567</td><td><span class="code">RETURNING_EMPTY</span></td></tr></table></div>
+<div class="card"><h3>⑤ 문제</h3><div><span class="b crit">긴급</span> 씰 불일치 D2</div><div style="margin-top:6px"><span class="b warn">경고</span> 포트2 만재 임박</div><div style="margin-top:6px"><span class="b warn">경고</span> AMR-04 정지</div><div class="meta" style="margin-top:8px">처리는 허브 앱에서 (웹은 결과 표시)</div></div>
+</div><div class="note">허브 관제 5개 영역. 웹은 처리 결과만 보여주고, 씰 확인·개봉 승인·재분류 체크는 허브 앱(HUB_OP 계정 + OTP)에서 처리.</div></section>
+
+<section class="scr" id="W-05"><div class="tabs" style="margin-bottom:12px"><button class="on" onclick="ctr(this,'서울')">서울센터</button><button onclick="ctr(this,'경기')">경기센터</button><button onclick="ctr(this,'인천')">인천센터</button></div>
+<div class="grid g4"><div class="card"><h3>① 도착 예정 지선</h3><table id="ctrIn"></table></div><div class="card"><h3>② 하차 도크</h3><table><tr><td>하차 R1</td><td>LT-0002 대기</td></tr><tr><td>하차 R2</td><td>비어 있음</td></tr></table></div>
+<div class="card"><h3>③ 처리 중</h3><div class="meta">하차 → 식별 → 수량·파손 → 인수 확정</div><table><tr><td>하차 완료</td><td>10:02</td></tr><tr><td>검수 완료</td><td>10:15</td></tr><tr><td>인수 확정</td><td>—</td></tr></table></div>
+<div class="card"><h3>⑤ 문제</h3><div id="ctrEx"></div></div></div>
+<div class="note">허브 게이트인 전 화물은 "입고 예정(해외 배송 중)"으로만 표시. 센터 도착·하차 완료·검수 완료·인수 확정 시각은 각각 따로 기록.</div></section>
+
+<section class="scr" id="W-06"><div class="card"><h3>AMR 관제 (구현 완료 화면 · 요약)</h3><table><tr><th>AMR</th><th>작업</th><th>위치</th><th>배터리</th><th>상태</th></tr><tr><td>AMR-01</td><td>UNLOAD</td><td>입고 D1 → 인덕션</td><td>82%</td><td><span class="b ok">운행</span></td></tr><tr><td>AMR-02</td><td>SORT</td><td>포트2</td><td>64%</td><td><span class="b ok">운행</span></td></tr><tr><td>AMR-03</td><td>MOVE</td><td>출고 D5</td><td>55%</td><td><span class="b ok">운행</span></td></tr><tr><td>AMR-04</td><td>SORT</td><td>포트3 앞</td><td>12%</td><td><span class="b warn">정지</span></td></tr></table></div></section>
+
+<section class="scr" id="W-07"><div class="grid g2"><div class="card"><h3>운송오더 등록 · TO-20261020-001 <span class="meta">· 운송사 담당자 (등록 주체)</span></h3><table>
+<tr><td>컨테이너 번호</td><td><b>TEST1234567</b> (40ft FCL)</td></tr><tr><td>화주</td><td>(주)가상무역 <span class="meta">— 더미</span></td></tr><tr><td>출발 씰번호 (B/L)</td><td>SEAL-000123</td></tr><tr><td>목적지</td><td>곤지암 허브 (고정)</td></tr><tr><td>반납 CY (D/O)</td><td>인천신항 터미널 CY <span class="b gray">가정</span></td></tr><tr><td>반납 기한 (선사별)</td><td>2026-10-23 18:00</td></tr><tr><td>배차 기사</td><td>김테스트 (컨테이너 운송기사) · 서울81바0001</td></tr><tr><td>상태</td><td><span class="code">ASSIGNED</span></td></tr></table><br><button class="btn">저장</button></div>
+<div class="card"><h3>포장명세서 · 배분지시 Excel(CSV) 업로드</h3><div class="drop">📄 화주 파일을 끌어다 놓거나 <b>파일 선택</b><br><span class="meta">packing_list.xlsx / allocation.csv · 개발·시연은 시드 데이터</span></div>
+<div style="margin-top:12px" class="meta">업로드 결과: <b>packing_TEST1234567.xlsx</b> — 박스 240개 · 오류 0 · 배분지시 매칭 240/240</div>
+<table style="margin-top:8px"><tr><th>박스 ID</th><th>품목</th><th>수량</th><th>목적지 센터 (dest_center_id)</th></tr><tr><td>BX-0001</td><td>생활용품 A(더미)</td><td>24</td><td>서울</td></tr><tr><td>BX-0002</td><td>생활용품 B(더미)</td><td>12</td><td>경기</td></tr><tr><td>BX-0003</td><td>식품 C(더미)</td><td>36</td><td>인천</td></tr><tr><td colspan="4" class="meta">… 237개 더 · 센터별 합계 서울 96 / 경기 80 / 인천 64</td></tr></table>
+<div style="margin-top:10px"><button class="btn y">container_boxes 반영</button> <button class="btn o">템플릿 다운로드</button></div></div></div>
+<div class="card" style="margin-top:14px"><h3>운송오더 목록</h3><table><tr><th>오더</th><th>컨테이너</th><th>상태</th><th>반납 상태</th><th>반납 기한</th></tr><tr><td>TO-…001</td><td>TEST1234567</td><td><span class="code">UNLOADED</span></td><td><span class="code">RETURNING_EMPTY</span></td><td>10/23 18:00</td></tr><tr><td>TO-…002</td><td>DUMY7654321</td><td><span class="code">IN_TRANSIT</span></td><td>—</td><td>10/22 12:00 <span class="b warn">임박</span></td></tr><tr><td>TO-…003</td><td>FAKE0000001</td><td><span class="code">ASSIGNED</span></td><td>—</td><td>10/25 18:00</td></tr><tr><td>TO-…000</td><td>MOCK1111111</td><td><span class="code">HANDED_OVER</span></td><td><span class="code">EMPTY_RETURNED</span></td><td>10/19 18:00</td></tr></table></div></section>
+
+<section class="scr" id="W-08"><div class="grid g2"><div class="card"><h3>지선 운행 생성 <span class="meta">· 운송사 담당자 (배차 주체)</span></h3><table><tr><td>도착 센터 (1곳)</td><td><select><option>서울센터</option><option>경기센터</option><option>인천센터</option></select></td></tr><tr><td>예정 롤테이너</td><td>RT-S01 ~ RT-S07 (7개, 서울행)</td></tr><tr><td>차량</td><td>서울84차0002 · 5톤 윙 (롤테이너 8개 적재)</td></tr><tr><td>지선 운송기사</td><td><select><option>이데모 (BRANCH_DRIVER, APPROVED)</option><option>박샘플</option></select></td></tr><tr><td>출고 도크</td><td><select><option>출고 D6</option><option>출고 D5</option></select></td></tr><tr><td>출발 예정</td><td>2026-10-20 11:00</td></tr></table><br><button class="btn y">배차 확정</button></div>
+<div class="card"><h3>지선 운행 목록</h3><table><tr><th>운행</th><th>센터</th><th>기사·차량</th><th>롤테이너</th><th>상태</th></tr><tr><td>LT-0001</td><td>인천</td><td>최가상 · 인천83자0009</td><td>4/5</td><td><span class="code">LOADING</span></td></tr><tr><td>LT-0002</td><td>서울</td><td>이데모 · 서울84차0002</td><td>0/7</td><td><span class="code">AT_HUB</span></td></tr><tr><td>LT-0003</td><td>경기</td><td>정목업 · 경기82아0003</td><td>6/6</td><td><span class="code">IN_TRANSIT</span></td></tr></table><div class="note">배차(운행 생성·기사 배정)는 운송사 담당자가 처리. 허브 관제사(HUB_OP, △)는 조회 + 출고 도크 연결만. ADMIN·CONTROL은 조회, 과적·예외는 알림으로 개입.</div></div></div></section>
+
+<section class="scr" id="W-09"><div class="card"><h3>예외 알림 센터 (예외 17종)</h3><table><tr><th>등급</th><th>유형</th><th>발견</th><th>대상</th><th>담당</th><th>상태</th><th></th></tr><tbody id="exfull"></tbody></table></div></section>
+
+<section class="scr" id="W-10"><div class="card"><h3>기사 가입 승인 (approval_status = PENDING)</h3><table><tr><th>이름</th><th>권한</th><th>소속 운송사</th><th>차량</th><th>신청</th><th></th></tr>
+<tr><td>홍더미</td><td>지선 운송기사</td><td>(주)테스트로지스</td><td>서울85카0011 · 5톤 윙</td><td>10/20 09:12</td><td><button class="btn y" onclick="this.parentNode.innerHTML='<span class=&quot;b ok&quot;>APPROVED</span>'">승인</button> <button class="btn o" onclick="this.parentNode.innerHTML='<span class=&quot;b crit&quot;>REJECTED</span>'">반려</button></td></tr>
+<tr><td>강샘플</td><td>컨테이너 운송기사</td><td>(주)가상해운운송</td><td>인천86타0012 · 트랙터 + 40ft 섀시</td><td>10/20 08:40</td><td><button class="btn y" onclick="this.parentNode.innerHTML='<span class=&quot;b ok&quot;>APPROVED</span>'">승인</button> <button class="btn o">반려</button></td></tr></table><div class="note">운송사(is_carrier = TRUE)의 CORPORATE_APPROVED 계정이 소속 기사만 승인. 승인 계정이 없으면 ADMIN(총관리자)이 승인. 결과는 앱 푸시.</div></div></section>
+
+<section class="scr" id="W-11"><div class="card"><h3>기준정보</h3><table><tr><th>항목</th><th>값</th></tr><tr><td>주의 판정 지연 기준</td><td>30 분</td></tr><tr><td>도착 지연 예외</td><td>30 분</td></tr><tr><td>도크 대기 예외</td><td>20 분</td></tr><tr><td>GPS 끊김 예외</td><td>10 분</td></tr><tr><td>반납 기한 "임박" 기준</td><td>24 시간 전 <span class="b gray">예시 값</span></td></tr><tr><td>관제 폴링 간격</td><td>30 초</td></tr></table></div></section>
+
+<section class="scr" id="W-12"><div class="grid g3"><div class="card"><h3>OCR 인식 · 톨게이트 입구</h3><div style="height:140px;background:#222;border-radius:8px;color:#fff;display:flex;align-items:center;justify-content:center">📷 카메라 (더미)</div><p style="font-size:22px;font-weight:700;text-align:center">서울81바0001</p></div>
+<div class="card"><h3>과적 체크</h3><div class="kpi"><div class="l">측정 총중량 / 기준</div><div class="v" style="color:#c62828">43.2t / 40t</div></div><p><span class="b crit">과적</span> 톨게이트 → 과태료 부과 후 통과 (정차 없음)</p><div class="meta">판정: 사전 더미데이터 (1차 과적검사 방식)</div></div>
+<div class="card"><h3>요금표 (가상 요율)</h3><table><tr><td>차종</td><td>4종 (5축)</td></tr><tr><td>구간</td><td>인천신항 IC → 곤지암 IC 62km</td></tr><tr><td>요금</td><td>₩ 5,400 <span class="b gray">가상</span></td></tr><tr><td>과태료</td><td>부과 예정</td></tr></table></div></div></section>
+
+<section class="scr" id="W-13"><div class="card"><h3>검문소 B (샛길) · 재측정</h3><table><tr><th>차량</th><th>1차 측정</th><th>재측정</th><th>조치</th></tr><tr><td>서울81바0001</td><td>42.8t <span class="b crit">과적</span></td><td>42.6t <span class="b crit">과적</span></td><td><span class="b crit">운행 금지</span></td></tr><tr><td>경기87파0013</td><td>40.6t <span class="b crit">과적</span></td><td>39.7t</td><td><span class="b ok">통과 · 과태료 없음</span></td></tr></table><div class="note">검문소 3곳은 대기 공간이 있다고 가정. 측정 위치(checkpoint_id) 기준으로 판단.</div></div></section>
+
+<section class="scr" id="W-14"><div class="card"><h3>고속도로 요금 (기준 확정 전 · 가상 요율)</h3><table><tr><th>차종</th><th>축 수</th><th>km당</th></tr><tr><td>1종</td><td>2축</td><td>44.3원</td></tr><tr><td>3종</td><td>3축</td><td>47.0원</td></tr><tr><td>4종</td><td>4축</td><td>62.9원</td></tr><tr><td>5종</td><td>5축+</td><td>74.4원</td></tr></table></div></section>
+<section class="scr" id="W-15"><div class="card"><h3>차량 점검표 (1차 화면 재사용)</h3><div class="meta">1차 산출물 화면을 그대로 사용 — 목업 생략</div></div></section>
+<section class="scr" id="W-16"><div class="card"><h3>직원관리 (1차 값 그대로)</h3><table><tr><th>이름</th><th>web_role</th><th>거점(site_id)</th></tr><tr><td>관제사A(더미)</td><td>CONTROL</td><td>—</td></tr><tr><td>관제사B(더미)</td><td>HUB_OP</td><td>곤지암 허브</td></tr><tr><td>관제사C(더미)</td><td>CENTER_OP</td><td>서울센터</td></tr></table></div></section>
+</main></div>
+<div class="fake">모든 데이터는 가짜(예시)입니다</div>
+<script>
+const T={"W-01":"로그인","W-02":"통합 대시보드","W-03":"네트워크 관제","W-04":"허브 관제","W-05":"지역센터 관제","W-06":"AMR 관제","W-07":"운송오더·물품 관리","W-08":"지선 배차 관리","W-09":"예외 알림 센터","W-10":"기사 가입 승인","W-11":"기준정보","W-12":"톨게이트","W-13":"검문소","W-14":"고속도로 요금","W-15":"차량 점검표","W-16":"직원관리"};
+// 권한별 노출 (deck p21: 빈칸 = 메뉴 숨김)
+const R={ADMIN:"all",CONTROL:["W-01","W-02","W-03","W-04","W-05","W-06","W-07","W-08","W-09","W-12","W-13","W-14","W-15"],HUB_OP:["W-01","W-02","W-04","W-06","W-08","W-09"],CENTER_OP:["W-01","W-02","W-05","W-09"],carrier:["W-01","W-02","W-07","W-08","W-09","W-10","W-14","W-15"]};
+const RN={ADMIN:"총관리자",CONTROL:"통합 관제사",HUB_OP:"허브 관제사 · 곤지암 허브",CENTER_OP:"지역센터 관제사 · 서울센터",carrier:"운송사 담당자 · (주)가상해운운송 (자기 데이터만)"};
+const HOME={ADMIN:"W-02",CONTROL:"W-02",HUB_OP:"W-04",CENTER_OP:"W-05",carrier:"W-02"};
+function go(id){document.querySelectorAll('.scr').forEach(s=>s.classList.toggle('on',s.id==id));document.querySelectorAll('nav a').forEach(a=>a.classList.toggle('on',a.dataset.s==id));hid.textContent=id;htitle.textContent=T[id];location.hash=id}
+document.querySelectorAll('nav a').forEach(a=>a.onclick=()=>go(a.dataset.s));
+{const qr=new URLSearchParams(location.search).get("role");if(qr&&R[qr])role.value=qr}
+function applyRole(){const r=role.value,ok=R[r];who.textContent=RN[r];document.querySelectorAll('nav a').forEach(a=>a.classList.toggle('dis',ok!="all"&&!ok.includes(a.dataset.s)));go(HOME[r])}
+// 거점: 정상 = 미해결 예외 0 & 모든 차량 지연<30, 주의 = 경고 예외>=1 또는 지연>=30 차량>=1, 긴급 = 긴급 예외>=1
+const sites=[{n:"곤지암 허브",t:"H",crit:0,warn:2,delays:[35,5]},{n:"인천센터",t:"C",crit:0,warn:0,delays:[0]},{n:"서울센터",t:"C",crit:0,warn:0,delays:[12]},{n:"경기센터",t:"C",crit:1,warn:0,delays:[5]}];
+function st(s){if(s.crit>0)return["crit","긴급"];if(s.warn>0||s.delays.some(d=>d>=30))return["warn","주의"];return["ok","정상"]}
+document.getElementById('sites').innerHTML=sites.map(s=>{const[c,l]=st(s);return`<div class="card site ${c}"><div style="display:flex;justify-content:space-between"><b>${s.t} ${s.n}</b><span class="b ${c}">${l}</span></div><div class="meta" style="margin-top:8px">미해결 예외 긴급 ${s.crit} · 경고 ${s.warn}<br>최대 지연 ${Math.max(...s.delays)}분</div></div>`}).join('');
+const EX=[["crit","씰 불일치 (개봉 보류)","허브 앱 씰 확인","곤지암 허브 D2 · DUMY7654321","허브 관제사","OPEN"],["warn","도착 지연 30분+","GPS","서울81바0001","통합 관제사","OPEN"],["warn","포트 만재","AMR","허브 포트2","허브 관제사","IN_PROGRESS"],["warn","AMR 정지","AMR","AMR-04","허브 관제사","OPEN"],["crit","센터 오배송","센터 하차 스캔","경기센터 · BX-0101(서울행)","지역센터 관제사","IN_PROGRESS"],["warn","톨게이트 과적 (과태료)","톨게이트 입구","서울81바0001","통합 관제사","RESOLVED"]];
+const lv={crit:"긴급",warn:"경고"};
+exmini.innerHTML=EX.slice(0,4).map(e=>`<tr><td><span class="b ${e[0]}">${lv[e[0]]}</span></td><td>${e[1]}</td><td>${e[3]}</td><td><span class="code">${e[5]}</span></td></tr>`).join('');
+exfull.innerHTML=EX.map(e=>`<tr><td><span class="b ${e[0]}">${lv[e[0]]}</span></td><td>${e[1]}</td><td>${e[2]}</td><td>${e[3]}</td><td>${e[4]}</td><td><span class="code">${e[5]}</span></td><td>${e[5]!="RESOLVED"?'<button class="btn o" onclick="this.closest(\'tr\').children[5].innerHTML=\'<span class=code>RESOLVED</span>\';this.remove()">처리 완료</button>':''}</td></tr>`).join('');
+const CT={서울:[["LT-0002","11:50","AT_HUB"]],경기:[["LT-0003","10:40","IN_TRANSIT"]],인천:[["LT-0001","12:10","LOADING"],["TO-…003","—","입고 예정(해외 배송 중)"]]};
+const CE={서울:'<span class="b ok">정상</span> 미해결 없음',경기:'<span class="b crit">긴급</span> 오배송 BX-0101 (서울행) → 담당 직원이 직접 이동',인천:'<span class="b ok">정상</span> 미해결 없음'};
+function ctr(b,c){document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('on',x==b));ctrIn.innerHTML=CT[c].map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td><span class="code">${r[2]}</span></td></tr>`).join('');ctrEx.innerHTML=CE[c]}
+ctr(document.querySelector('.tabs button'),'서울');
+let n=30;setInterval(()=>{n--;if(n<=0){n=30;clock.textContent=new Date().toTimeString().slice(0,8)}cd.textContent=n},1000);
+const h0=location.hash.slice(1);applyRole();if(T[h0])go(h0);
+</script>
+<script>
+/* v7: 로그인 — 아이디만 localStorage 저장(비밀번호는 저장 안 함), 실제 서버 로그인은 부모 화면(Vue)이 처리 */
+(function(){
+ const K='scargo_saved_user_id';
+ const id=document.getElementById('lgId'),pw=document.getElementById('lgPw'),sv=document.getElementById('lgSave'),eye=document.getElementById('lgEye');
+ try{const s=localStorage.getItem(K);if(s){id.value=s;sv.checked=true}}catch(e){}
+ sv.onchange=()=>{if(!sv.checked)try{localStorage.removeItem(K)}catch(e){}};
+ eye.onclick=()=>{const sh=pw.type==='password';pw.type=sh?'text':'password';eye.classList.toggle('on',sh);eye.setAttribute('aria-label',sh?'비밀번호 숨기기':'비밀번호 보기');eye.setAttribute('aria-pressed',sh)};
+ window.v7Login=async function(demoTo){
+  const e=document.getElementById('lgErr');e.textContent='';
+  const u=id.value.trim();
+  if(!u||!pw.value){e.textContent='아이디와 비밀번호를 입력하세요.';return}
+  const fn=window.parent&&window.parent!==window&&window.parent.scargoPlanLogin;
+  if(!fn){try{sv.checked?localStorage.setItem(K,u):localStorage.removeItem(K)}catch(x){}pw.value='';applyRole();return}
+  try{const r=await fn(u,pw.value);try{sv.checked?localStorage.setItem(K,u):localStorage.removeItem(K)}catch(x){}pw.value='';pw.type='password';const m={ADMIN:'ADMIN',CONTROL:'CONTROL',HUB_OP:'HUB_OP',CENTER_OP:'CENTER_OP',CORPORATE_APPROVED:'carrier'};if(!m[r.userType]){e.textContent='기사 계정은 앱을 이용해 주세요.';return}role.value=m[r.userType];applyRole()}
+  catch(x){e.textContent=(x&&x.message)||'아이디 또는 비밀번호를 확인해 주세요.'}
+ };
+ [id,pw].forEach(i=>i.addEventListener('keydown',ev=>{if(ev.key==='Enter')window.v7Login()}));
+})();
+</script>
+</body></html>

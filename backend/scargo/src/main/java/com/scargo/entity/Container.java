@@ -44,8 +44,15 @@ public class Container {
     @Column(name = "tare_kg", precision = 8, scale = 1, nullable = false)
     private BigDecimal tareKg; // 컨테이너 자체 무게 TARE (kg)
 
-    @Column(name = "net_kg", precision = 8, scale = 1, nullable = false)
-    private BigDecimal netKg; // 최대 적재중량 NET = MAX GROSS - TARE (kg)
+    // 26.10.21 DB 최종통합: net_kg → max_payload_kg (CHECK max_payload_kg = max_gross_kg - tare_kg)
+    @Column(name = "max_payload_kg", precision = 8, scale = 1, nullable = false)
+    private BigDecimal netKg; // 최대 화물 적재 가능 중량 = MAX GROSS - TARE (kg)
+
+    @PrePersist
+    @PreUpdate
+    void syncPayload() {
+        if (maxGrossKg != null && tareKg != null) netKg = maxGrossKg.subtract(tareKg);
+    }
 
     @Column(name = "cubic_capacity_cbm", precision = 6, scale = 2, nullable = false)
     private BigDecimal cubicCapacityCbm; // 내부 용적 CU. CAP. (CBM)

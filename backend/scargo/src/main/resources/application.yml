@@ -1,34 +1,28 @@
 spring:
   application:
     name: scargo
-
-  # 26.10.24 기본 dev 프로필: 시드 계정(admin01 등) 비밀번호를 test1234 로 맞춤. 운영에서는 SCARGO_PROFILE 로 바꿀 것
+  # fix_1300: 프로필 지정이 없으면 dev (로컬 개발). 운영은 SPRING_PROFILES_ACTIVE=prod
   profiles:
-    active: ${SCARGO_PROFILE:dev}
+    active: ${SPRING_PROFILES_ACTIVE:${SCARGO_PROFILE:dev}}   # 통합: share 의 SCARGO_PROFILE 도 인식
 
-  # 26.10.24 로컬 DB 접속 설정 파일(선택): 실행 폴더(backend/scargo)의 application-local.yml 이 있으면 읽는다
-  #  (application-local.yml.example 참고, 공유 금지). 이 파일 값이 아래 SCARGO_DB_* 환경변수 값보다 우선
+  # 26.10.24 (share) 로컬 DB 접속 설정 파일(선택): 실행 폴더(backend/scargo)의 application-local.yml 이 있으면 읽는다
+  #  (application-local.yml.example 참고, 공유 금지). 이 파일 값이 아래 환경변수 값보다 우선
   config:
     import: optional:file:./application-local.yml
 
-  # 26.10.24 사진 첨부(점검표 손상 사진): 사진 1장 5MB, 한 번에 6MB까지
-  servlet:
-    multipart:
-      max-file-size: 5MB
-      max-request-size: 6MB
-
   # PostgreSQL 연결 설정
-  # 26.10.24 팀 공유본: 접속 정보는 환경변수로 지정 (README 11장). 기본 대상은 작업 DB scargo (DB 하나만 사용), 비밀번호 기본값 없음
   datasource:
-    url: ${SCARGO_DB_URL:jdbc:postgresql://localhost:5432/scargo}
-    username: ${SCARGO_DB_USERNAME:postgres}
-    password: ${SCARGO_DB_PASSWORD:1234} # 26.10.24 병합: 기존 로컬 비밀번호 기본값 유지 (환경변수 · application-local.yml 로 덮어쓰기)
+    # fix_1300: 접속 정보는 환경변수로 (비밀번호 기본값 없음. 로컬 기본값은 application-dev.yml)
+    # 통합: scargo_1 의 DB_* 와 share 의 SCARGO_DB_* 환경변수 둘 다 인식. 기본 DB 이름은 팀 공통 scargo (setup_db.bat)
+    url: ${DB_URL:${SCARGO_DB_URL:jdbc:postgresql://localhost:5432/scargo}}
+    username: ${DB_USERNAME:${SCARGO_DB_USERNAME:postgres}}
+    password: ${DB_PASSWORD:${SCARGO_DB_PASSWORD:}}
     driver-class-name: org.postgresql.Driver
 
   # JPA 및 Hibernate 설정
   jpa:
     hibernate:
-      ddl-auto: none # 26.10.20 11차 DB는 SQL로 만든 팀 테이블이라 Hibernate 가 수정하지 않게 함 (우리 테이블은 우리테이블_추가.sql)
+      ddl-auto: none    # 통합(우리 DB 기준): 기동 때 스키마 검증으로 막히지 않게 none (엔티티-DB 대조는 따로 확인함)   # 26.10.20: 스키마는 통합 DB + scargo_db_2차_v2_최종.sql 로만 관리 (update 금지)
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
@@ -47,14 +41,55 @@ spring:
 # (DevTools 재시작 시 "Cannot deserialize session attribute [SPRING_SECURITY_CONTEXT]" /
 #  "Exception loading sessions from persistent storage" 오류가 찍히던 문제 - 재시작 후에는 다시 로그인)
 server:
+  # fix_1400: 오류 응답에 stack trace·예외 클래스 미포함 (dev 는 devtools 가 always 로 바꿀 수 있음, prod 는 application-prod.yml 에서 다시 never)
+  error:
+    include-stacktrace: never
+    include-exception: false
+    include-binding-errors: never
   servlet:
     session:
       persistent: false
+# ==========================================
+# 26.10.03 2차 추가: 기사 앱(게이트아웃 → 전국 HUB) 설정
+# ==========================================
+spring.servlet.multipart:
+  max-file-size: 20MB      # 인계 사진·서명 업로드
+  max-request-size: 60MB
 
-# 26.10.24 업로드 파일(점검표 사진) 저장 폴더 - 실행 폴더 기준, 환경변수 SCARGO_UPLOAD_DIR 로 바꿀 수 있음
 scargo:
-  upload-dir: ${SCARGO_UPLOAD_DIR:./uploads}
-  # 26.10.24 백업 표시용 (scargo_backup.bat 이 만든 .dump 파일의 최신 시각을 화면에 보여준다)
+  # fix_1300: 업로드 저장 루트 하나로 통일 (하위 app/handover · returns · return-attachments · inspections · posts). GET /uploads/** 로 제공(로그인 필요)
+  upload-root: ${SCARGO_UPLOAD_ROOT:./uploads}
+  # 26.10.24 (share) 점검표 사진 저장 폴더 — 통합: 기본은 upload-root 와 같은 폴더 (SCARGO_UPLOAD_DIR 로 따로 지정 가능)
+  upload-dir: ${SCARGO_UPLOAD_DIR:${scargo.upload-root}}
+  # 26.10.24 (share) 백업 표시용 (scargo_backup.bat 이 만든 .dump 파일의 최신 시각을 화면에 보여준다)
   backup:
     dir: ${SCARGO_BACKUP_DIR:../../백업}
     schedule: ${SCARGO_BACKUP_SCHEDULE:매일 02:00 자동 백업 · 최근 7일 보관}
+  # fix_1300: 시드 계정(admin·sbot·데모 사업자)은 이 값이 true 일 때만 생성 (dev 프로필만 true)
+  seed-accounts: false
+  # 26.10.20: PostgreSQL 트리거가 만드는 알림(과적→운송사 OVERLOAD_WARNING, SEAL_LOST→CONTROL·운송사)을 서비스가 중복 생성하지 않음
+  db-notify-triggers: true
+  app:
+    token-days: 30                 # 앱 로그인 유지 기간(일)
+    demo-sim: ${SCARGO_DEMO_SIM:true}   # fix_1600: 앱 "시연 주행" 버튼 (모든 기사). false 면 ADMIN·시연 계정만
+    dev-tools: false               # fix_1300: 기본 false. PC 테스트용 "게이트아웃 시뮬레이션" API 는 dev 프로필에서만 true
+    off-route-m: 1000              # 경로에서 이만큼 벗어나면 "경로 이탈"
+    checkpoint-alert-m: 3000       # 과적검문소 사전 알림 거리
+    height-alert-m: 5000           # 높이제한 사전 알림 거리
+  route:
+    # 경로 엔진 순서 (앞에서부터 시도, 실패하면 다음 · 마지막은 항상 straight)
+    #   tmap     : TMAP 화물차 경로 (아래 app-key 필요, 무료 일일 한도 있음)
+    #   valhalla : 직접 띄운 Valhalla 서버 (tools/valhalla 참고, 한도 없음)
+    #   osrm     : OSRM (공개 데모 서버는 테스트용)
+    #   straight : 직선 (인터넷 없어도 동작, 턴바이턴 없음)
+    provider: fixed,tmap,osrm,straight   # fix_1500: fixed = HTML 기본 경로(인천 월미로→곤지암 메가허브) 먼저
+    tmap:
+      app-key: ${TMAP_APP_KEY:}      # 환경변수 TMAP_APP_KEY 로 넣기 (깃에 키 올리지 말 것)
+      url: https://apis.openapi.sk.com/tmap/truck/routes?version=1&format=json
+    valhalla-url: http://localhost:8002
+    osrm-url: https://router.project-osrm.org   # 공개 데모 서버 - 테스트용으로만 사용
+    truck-time-factor: 1.15        # OSRM(승용차) 소요시간에 곱하는 화물차 보정값
+    straight-speed-kmh: 65
+    truck:                         # 트레일러 기본 치수 (TMAP·Valhalla 화물차 경로에 전달)
+      width-m: 2.5
+      length-m: 16.7

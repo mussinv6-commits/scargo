@@ -12,7 +12,8 @@ public class AccountResponse {
     private Long accountId;
     private String userId;
     private String userName;
-    private String userType;
+    private String userType; // 26.10.21: 화면 표시용. CORPORATE_APPROVED 인데 회사가 아직 승인 전이면 "CORPORATE_PENDING" (DB 저장값 아님, storedUserType 참고)
+    private String storedUserType;     // accounts.user_type 저장값
 
     // 직접 소속된 운영 계열사
     private Long operatingCompanyId;
@@ -31,9 +32,8 @@ public class AccountResponse {
         this.accountId = account.getAccountId();
         this.userId = account.getUserId();
         this.userName = account.getUserName();
-        this.userType = account.getUserType() != null
-                ? account.getUserType().name()
-                : null;
+        this.userType = account.getUserType() != null ? com.scargo.ops.CarrierLegacy.displayUserType(account) : null;
+        this.storedUserType = account.getUserType() != null ? account.getUserType().name() : null;
 
         this.operatingCompanyId = account.getOperatingCompanyId();
         this.companyId = account.getCompanyId();

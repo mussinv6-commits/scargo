@@ -32,10 +32,11 @@ export default [
         children:[
             { path:'', name:'sbot', component:SbotDashboard, meta:{ requiresSbotAdmin:true } }, // 26.10.22: /sbot 은 대시보드, 허브 AMR 관제는 /sbot/hub
             { path:'hub', name:'sbot-hub', component:AdminAmrTwin, meta:{ requiresHubControl:true } },
-            { path:'inspections', name:'sbot-inspections', component:SbotInspections, meta:{ requiresHubControl:true } }, // 26.10.23 허브 관제와 같은 권한
+            { path:'inspections', redirect:'/admin/arrivals' }, // 26.10.26 카르고로 이동
             { path:'amr-audit', name:'sbot-amr-audit', component:SbotAmrAudit, meta:{ requiresHubControl:true } }, // 26.10.23 조회는 S-Bot 관리자 · HUB_OP (CONTROL 은 서버 403)
-            { path:'move', name:'sbot-move', component:SbotFrame, props:{ page:'move', title:'택배 이동' }, meta:{ requiresSbotAdmin:true } },
-            { path:'center', name:'sbot-center', component:SbotFrame, props:{ page:'center', title:'물류센터 관제' }, meta:{ requiresSbotAdmin:true } },
+            { path:'tokens', redirect:'/admin/amr-tokens' }, // 26.10.26 카르고로 이동
+            { path:'move', redirect:'/admin/move' }, // 26.10.26 카르고로 이동
+            { path:'center', redirect: (to) => ({ path:'/admin/center', query: to.query }) }, // 26.10.26 카르고로 이동
         ]
     },
     {

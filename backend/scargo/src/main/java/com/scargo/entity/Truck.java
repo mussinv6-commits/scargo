@@ -45,7 +45,7 @@ public class Truck {
     @Column(name = "truck_type", length = 30)
     private String truckType; // 차종
 
-    @Column(name = "max_load_ton", precision = 8, scale = 2)
+    @Column(name = "max_load_ton", precision = 8, scale = 2)   // 26.10.20: 11차 컬럼명 (톤)
     private BigDecimal maxLoadWeight; // 최대 적재 허용 중량
 
     @JdbcTypeCode(SqlTypes.JSON)

@@ -187,7 +187,7 @@ const userTypeLabel = computed(() => {
     ADMIN: '관리자',
     // 26.10.22 통합: 구간별 권한
     CONTAINER_DRIVER: '컨테이너 운송기사',
-    LINEHAUL_DRIVER: '간선 운송기사',
+    BRANCH_DRIVER: '지선 운송기사',
   }
   return map[user.value?.userType] || user.value?.userType || '-'
 })

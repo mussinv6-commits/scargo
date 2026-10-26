@@ -1,0 +1,10 @@
+# 26.10.20 박스 검증용 (PostgreSQL 17, 통합 DB + 2차 최종 마이그레이션 적용본). 스키마는 validate 만
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5434/scargo
+    username: postgres
+    password: ''
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false

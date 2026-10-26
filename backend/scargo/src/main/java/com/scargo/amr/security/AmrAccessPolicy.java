@@ -1,7 +1,7 @@
 package com.scargo.amr.security;
 
-import com.scargo.amr.entity.Hub;
-import com.scargo.amr.repository.HubRepository;
+import com.scargo.app.entity.Hub;
+import com.scargo.app.repository.HubRepository;
 import com.scargo.security.AuthenticatedAccountPrincipal;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;

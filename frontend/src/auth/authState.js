@@ -12,8 +12,8 @@ export function setLogin(userData) {
   authState.user = userData;
 }
 
-// 26.10.22 통합: 기사 계정 = 회원가입 일반회원(GENERAL) + 구간별 권한의 컨테이너 운송기사 · 간선 운송기사
-export const DRIVER_TYPES = ["GENERAL", "CONTAINER_DRIVER", "LINEHAUL_DRIVER"];
+// 26.10.22 통합: 기사 계정 = 회원가입 일반회원(GENERAL) + 구간별 권한의 컨테이너 운송기사 · 지선 운송기사
+export const DRIVER_TYPES = ["GENERAL", "CONTAINER_DRIVER", "BRANCH_DRIVER"];
 export function isDriverType(userType) {
   return DRIVER_TYPES.includes(userType);
 }

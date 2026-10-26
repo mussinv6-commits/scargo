@@ -101,7 +101,7 @@ public class TruckAccessPolicy {
                 return account.getCompanyId() != null
                         && account.getCompanyId().equals(truck.getCompanyId());
             case CONTAINER_DRIVER:
-            case LINEHAUL_DRIVER:
+            case BRANCH_DRIVER:
                 return count("SELECT COUNT(*) FROM trucks WHERE vehicle_no = ? AND assigned_account_id = ?",
                         vehicleNo, account.getAccountId());
             case CONTROL:

@@ -154,7 +154,7 @@ public class WeighbridgeService {
                 return saved.get();
             }
             BigDecimal tare = num(c, "tare_kg", "tareKg");
-            BigDecimal net = num(c, "net_kg", "netKg");
+            BigDecimal net = num(c, "max_payload_kg", "maxPayloadKg", "net_kg", "netKg");
             BigDecimal maxGross = num(c, "max_gross_kg", "maxGrossKg");
             if (maxGross == null && tare != null && net != null) {
                 maxGross = tare.add(net);

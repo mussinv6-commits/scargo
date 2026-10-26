@@ -26,10 +26,10 @@ public class Yard {
     @Column(name = "yard_type", length = 30, nullable = false)
     private String yardType = "GENERAL";  // 야드용도(일반/냉동/위험물 등등 디폴트값은 일반(GENERAL))
 
-    @Column(name = "latitude")
+    @Column(name = "latitude", columnDefinition = "numeric")
     private Double latitude;  // 야드 위도 좌표
 
-    @Column(name = "longitude")
+    @Column(name = "longitude", columnDefinition = "numeric")
     private Double longitude; // 야드 경도 좌표
 
     @Column(name = "status", length = 20)

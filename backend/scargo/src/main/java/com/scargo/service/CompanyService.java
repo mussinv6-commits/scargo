@@ -86,6 +86,7 @@ public class CompanyService {
     // 드롭다운/옵션용 업체 목록 조회
     public List<CompanyOptionResponse> getCompanyOptions() {
         return companyRepository.findAll().stream()
+                .filter(Company::usable) // fix_1330: 승인 대기·반려 업체는 선택 목록에서 제외
                 .map(CompanyOptionResponse::new)
                 .collect(Collectors.toList());
     }
@@ -132,5 +133,30 @@ public class CompanyService {
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 업체입니다. ID: " + companyId));
 
         companyRepository.delete(company);
+    }
+
+    // fix_1330: 가입 화면 업체 등록 → 승인 대기
+    @Transactional
+    public CompanyResponse createForSignup(CompanyCreateRequest request) {
+        CompanyResponse r = createCompany(request);
+        Company c = companyRepository.findById(r.getCompanyId()).orElseThrow();
+        c.markSignupPending();
+        return new CompanyResponse(c);
+    }
+
+    @Transactional
+    public CompanyResponse approve(Long companyId, Long adminId) {
+        Company c = companyRepository.findById(companyId).orElseThrow(() -> new IllegalArgumentException("업체가 없습니다."));
+        if (!"PENDING".equals(c.getApprovalStatus()) && !"REJECTED".equals(c.getApprovalStatus())) throw new IllegalArgumentException("승인 대기 중인 업체가 아닙니다.");
+        c.approve(adminId);
+        return new CompanyResponse(c);
+    }
+
+    @Transactional
+    public CompanyResponse reject(Long companyId, String reason) {
+        Company c = companyRepository.findById(companyId).orElseThrow(() -> new IllegalArgumentException("업체가 없습니다."));
+        if (!"PENDING".equals(c.getApprovalStatus())) throw new IllegalArgumentException("승인 대기 중인 업체가 아닙니다.");
+        c.reject(reason);
+        return new CompanyResponse(c);
     }
 }

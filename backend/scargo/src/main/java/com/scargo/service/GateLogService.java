@@ -42,6 +42,9 @@ public class GateLogService {
     // 26.10.02 추가: ENTRY / EXIT OCR 차량 워크플로우 처리
     private final TruckWorkflowService truckWorkflowService;
 
+    // 26.10.03 2차 추가: EXIT(OUT 게이트) 통과 → 기사 앱 운송오더 GATE_OUT 처리
+    private final com.scargo.app.service.TransportOrderService transportOrderService;
+
     // 파일 저장 경로 설정 (서버 환경에 맞게 변경 가능)
     private static final String UPLOAD_DIR = "/data/scargo/images/gate/";
 
@@ -163,6 +166,10 @@ public class GateLogService {
                 );
 
                 truckWorkflowService.processFinalOcr(vehicleNo);
+
+                // 26.10.03 2차 추가: 운송오더(출발지·목적지 자동 입력) 연동.
+                // 게이트 기록이 커밋된 뒤 별도 트랜잭션으로 처리되므로 여기서 실패해도 게이트 기록은 저장된다.
+                transportOrderService.scheduleGateOut(vehicleNo, savedLog.getGateLogId());
 
                 log.info(
                         "[{}] EXIT OCR 최종 출차 처리 완료",

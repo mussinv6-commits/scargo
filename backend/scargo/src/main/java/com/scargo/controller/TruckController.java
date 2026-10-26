@@ -54,7 +54,7 @@ public class TruckController {
 
     // 역할별 관리 범위의 차량 목록 조회
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'CONTROL', 'HUB_OP', 'CENTER_OP', 'CONTAINER_DRIVER', 'LINEHAUL_DRIVER', 'CORPORATE_APPROVED')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'CONTROL', 'HUB_OP', 'CENTER_OP', 'CONTAINER_DRIVER', 'BRANCH_DRIVER', 'CORPORATE_APPROVED')")
     public ResponseEntity<List<TruckResponse>> getAllTrucks(Authentication authentication) {
         List<TruckResponse> responses = truckAccessPolicy.readableTrucks(authentication, null).stream()
                 .map(TruckResponse::from)
@@ -64,7 +64,7 @@ public class TruckController {
 
     // 특정 차량 단건 상세 조회
     @GetMapping("/{vehicleNo}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'CONTROL', 'HUB_OP', 'CENTER_OP', 'CONTAINER_DRIVER', 'LINEHAUL_DRIVER', 'CORPORATE_APPROVED')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'CONTROL', 'HUB_OP', 'CENTER_OP', 'CONTAINER_DRIVER', 'BRANCH_DRIVER', 'CORPORATE_APPROVED')")
     public ResponseEntity<TruckResponse> getTruck(@PathVariable("vehicleNo") String vehicleNo, Authentication authentication) {
         truckAccessPolicy.requireRead(authentication, vehicleNo);
         TruckResponse response = truckService.getTruck(vehicleNo);
@@ -74,7 +74,7 @@ public class TruckController {
     // 업체별 드롭다운/선택용 경량 차량 옵션 목록 조회
     // 예시 경로: GET /api/trucks/options?companyId=1
     @GetMapping("/options")
-    @PreAuthorize("hasAnyRole('ADMIN', 'CONTROL', 'HUB_OP', 'CENTER_OP', 'CONTAINER_DRIVER', 'LINEHAUL_DRIVER', 'CORPORATE_APPROVED')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'CONTROL', 'HUB_OP', 'CENTER_OP', 'CONTAINER_DRIVER', 'BRANCH_DRIVER', 'CORPORATE_APPROVED')")
     public ResponseEntity<List<TruckOptionResponse>> getTruckOptions(@RequestParam("companyId") Long companyId, Authentication authentication) {
         List<TruckOptionResponse> responses = truckAccessPolicy.readableTrucks(authentication, companyId).stream()
                 .map(TruckOptionResponse::from)
@@ -163,7 +163,7 @@ public class TruckController {
     // 로그인한 기사 본인에게 배정된 차량 조회 (없으면 204 No Content)
     // 26.10.22 통합: 회원가입 일반회원(GENERAL)도 기사 앱을 열 수 있게 허용 (본인 배정 차량만 조회, DB상 배정이 없어 204)
     @GetMapping("/my")
-    @PreAuthorize("hasAnyRole('CONTAINER_DRIVER', 'LINEHAUL_DRIVER', 'GENERAL')")
+    @PreAuthorize("hasAnyRole('CONTAINER_DRIVER', 'BRANCH_DRIVER', 'GENERAL')")
     public ResponseEntity<TruckResponse> getMyAssignedTruck(
             Authentication authentication) {
         AuthenticatedAccountPrincipal principal =

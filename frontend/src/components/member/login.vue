@@ -174,6 +174,7 @@ const { cookies } = useCookies();
 import axios from "axios";
 import { setLogin } from "@/auth/authState.js";   // 추가
 import safeCargoLogo from "@/assets/scargo_logo_4x.png";
+import { homeOf } from "@/scargo2/roles.js";
 
 export default {
   data() {
@@ -246,8 +247,8 @@ export default {
 
           sessionStorage.removeItem("location"); // 26.09.15 추가
 
-          if (location === null || location === "") {
-            location = "/";
+          if (location === null || location === "" || location === "/" || location === "/login") {
+            location = homeOf(resp.data);
           }
 
           this.$router.push(location);

@@ -24,7 +24,7 @@ public class VehicleChecklistController {
 
     // GET /api/checklists: 점검표 목록 조회 (실제 기록 범위는 Service에서 제한)
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'CONTROL', 'CORPORATE_APPROVED', 'CONTAINER_DRIVER', 'LINEHAUL_DRIVER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'CONTROL', 'CORPORATE_APPROVED', 'CONTAINER_DRIVER', 'BRANCH_DRIVER')")
     public ResponseEntity<List<VehicleChecklistResponse>> getAllChecklists(Authentication authentication) {
         boolean isAdmin = extractIsAdmin(authentication);
         List<VehicleChecklistResponse> responses = vehicleChecklistService.getAllChecklists(authentication, isAdmin);
@@ -46,7 +46,7 @@ public class VehicleChecklistController {
 
     // GET /api/checklists/{id}: 점검표 단건 조회
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'CONTROL', 'CORPORATE_APPROVED', 'CONTAINER_DRIVER', 'LINEHAUL_DRIVER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'CONTROL', 'CORPORATE_APPROVED', 'CONTAINER_DRIVER', 'BRANCH_DRIVER')")
     public ResponseEntity<VehicleChecklistResponse> getChecklistById(
             @PathVariable("id") Long inspectionId,
             Authentication authentication) {
@@ -59,7 +59,7 @@ public class VehicleChecklistController {
 
     // GET /api/checklists/vehicle/{vehicleNo}: 차량별 점검 이력 조회
     @GetMapping("/vehicle/{vehicleNo}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'CONTROL', 'CORPORATE_APPROVED', 'CONTAINER_DRIVER', 'LINEHAUL_DRIVER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'CONTROL', 'CORPORATE_APPROVED', 'CONTAINER_DRIVER', 'BRANCH_DRIVER')")
     public ResponseEntity<List<VehicleChecklistResponse>> getChecklistsByVehicleNo(
             @PathVariable("vehicleNo") String vehicleNo,
             Authentication authentication) {
@@ -72,7 +72,7 @@ public class VehicleChecklistController {
 
     // GET /api/checklists/inspector/{inspectorAccountId}: 본인 작성 이력 조회, ADMIN은 전체 점검자 허용
     @GetMapping("/inspector/{inspectorAccountId}")
-    @PreAuthorize("hasRole('ADMIN') or (hasAnyRole('CONTROL', 'CORPORATE_APPROVED', 'CONTAINER_DRIVER', 'LINEHAUL_DRIVER') and #p0 == principal.id)")
+    @PreAuthorize("hasRole('ADMIN') or (hasAnyRole('CONTROL', 'CORPORATE_APPROVED', 'CONTAINER_DRIVER', 'BRANCH_DRIVER') and #p0 == principal.id)")
     public ResponseEntity<List<VehicleChecklistResponse>> getChecklistsByInspector(
             @PathVariable("inspectorAccountId") Long inspectorAccountId) {
         
@@ -82,7 +82,7 @@ public class VehicleChecklistController {
 
     // GET /api/checklists/vehicle/{vehicleNo}/date?date=2026-10-22: 일자별 조회
     @GetMapping("/vehicle/{vehicleNo}/date")
-    @PreAuthorize("hasAnyRole('ADMIN', 'CONTROL', 'CORPORATE_APPROVED', 'CONTAINER_DRIVER', 'LINEHAUL_DRIVER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'CONTROL', 'CORPORATE_APPROVED', 'CONTAINER_DRIVER', 'BRANCH_DRIVER')")
     public ResponseEntity<List<VehicleChecklistResponse>> getChecklistsByVehicleAndDate(
             @PathVariable("vehicleNo") String vehicleNo,
             @RequestParam("date") @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate inspectionDate,
@@ -96,7 +96,7 @@ public class VehicleChecklistController {
 
     // GET /api/checklists/vehicle/{vehicleNo}/period?startDate=2026-10-01&endDate=2026-10-22: 기간별 조회
     @GetMapping("/vehicle/{vehicleNo}/period")
-    @PreAuthorize("hasAnyRole('ADMIN', 'CONTROL', 'CORPORATE_APPROVED', 'CONTAINER_DRIVER', 'LINEHAUL_DRIVER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'CONTROL', 'CORPORATE_APPROVED', 'CONTAINER_DRIVER', 'BRANCH_DRIVER')")
     public ResponseEntity<List<VehicleChecklistResponse>> getChecklistsByPeriod(
             @PathVariable("vehicleNo") String vehicleNo,
             @RequestParam("startDate") @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate startDate,

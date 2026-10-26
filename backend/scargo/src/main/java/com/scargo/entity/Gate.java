@@ -46,6 +46,10 @@ public class Gate {
     @Column(name = "created_at", insertable = false, updatable = false)
     private OffsetDateTime createdAt;
 
+    // 26.10.03 2차 추가: 소속 터미널 (terminals.terminal_id) - 게이트아웃 시 운송오더의 출발 터미널 확정용
+    @Column(name = "terminal_id")
+    private Long terminalId;
+
     // 게이트 정보 수정 메서드
     public void update(GateUpdateRequest request) {
         // 게이트 코드가 null이 아니면 수정

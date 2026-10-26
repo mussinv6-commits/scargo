@@ -6,6 +6,11 @@ import AdminTrucks from "@/components/admin/screens/AdminTrucks.vue";
 import AdminContainers from "@/components/admin/screens/AdminContainers.vue";
 import AdminContainerLocations from "@/components/admin/screens/AdminContainerLocations.vue";
 import GateDemo from "@/components/gate/GateDemo.vue"; // 26.10.01: 게이트 OCR 검사를 관리자 메뉴로 이동
+import AdminMenuGuide from "@/components/admin/screens/AdminMenuGuide.vue"; // 26.10.26 메뉴 안내
+import AdminGateSeal from "@/components/admin/screens/AdminGateSeal.vue"; // 26.10.26 S-Bot 에서 이동: 게이트 OCR · 씰 확인
+import SbotInspections from "@/views/SbotInspections.vue"; // 26.10.26 S-Bot 에서 이동: 도착 · 점검
+import SbotFrame from "@/views/SbotFrame.vue"; // 26.10.26 S-Bot 에서 이동: 택배 이동 · 물류센터 관제
+import AmrTokenAdmin from "@/components/amr/AmrTokenAdmin.vue"; // 26.10.26 S-Bot 에서 이동: 앱 출입증
 import AdminWeighbridge from "@/components/admin/screens/AdminWeighbridge.vue"; // 26.10.01 추가: 검사소 계량 콘솔
 import AdminYards from "@/components/admin/screens/AdminYards.vue";
 import AdminLoadingLocations from "@/components/admin/screens/AdminLoadingLocations.vue";
@@ -60,6 +65,12 @@ export default [
       { path: "notices/:id", name: "admin-notice-detail", component: AdminNoticeDetail },
       { path: "gate-ocr", name: "admin-gate-ocr", component: GateDemo }, // 26.10.01: 기존 /gate-demo
       { path: "weighbridge", name: "admin-weighbridge", component: AdminWeighbridge }, // 26.10.01 추가: 게이트 OCR → 검사소 계량
+      { path: "menu-guide", name: "admin-menu-guide", component: AdminMenuGuide }, // 26.10.26 메뉴 안내
+      { path: "gate-seal", name: "admin-gate-seal", component: AdminGateSeal }, // 26.10.26 S-Bot 허브 관제에서 이동
+      { path: "arrivals", name: "admin-arrivals", component: SbotInspections }, // 26.10.26 도착 · 점검 (S-Bot 에서 이동)
+      { path: "move", name: "admin-move", component: SbotFrame, props: { page: "move", title: "택배 이동" } }, // 26.10.26 (S-Bot 에서 이동)
+      { path: "center", name: "admin-center", component: SbotFrame, props: { page: "center", title: "물류센터 관제" } }, // 26.10.26 (S-Bot 에서 이동)
+      { path: "amr-tokens", name: "admin-amr-tokens", component: AmrTokenAdmin }, // 26.10.26 앱 출입증 (S-Bot 에서 이동)
       { path: "amr-twin", name: "admin-amr-twin", redirect: "/sbot" }, // 26.10.20: S-Bot 전용 화면(/sbot)으로 이동 // 26.10.08 추가: 허브 AMR 3D 디지털 트윈
     ],
   },

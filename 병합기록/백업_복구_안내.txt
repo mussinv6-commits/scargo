@@ -1,8 +1,0 @@
-복구 방법 (새 DB로 되돌리기)
-1) createdb -U postgres scargo_restore
-2) pg_restore -U postgres -d scargo_restore --no-owner "C:\Users\user\Desktop\최종파일\백업\scargo_demo_날짜.dump"
-3) 사진 복구: uploads_날짜.zip 을 backend\scargo\uploads 에 풀기
-
-자동 실행 등록 (매일 새벽 2시, 관리자 CMD):
-schtasks /create /tn "SCARGO_Backup" /tr "C:\Users\user\Desktop\최종파일\scargo_backup.bat" /sc daily /st 02:00
-시연 직전에는 수동 실행:  scargo_backup.bat

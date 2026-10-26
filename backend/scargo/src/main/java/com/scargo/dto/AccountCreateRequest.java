@@ -13,7 +13,7 @@ public class AccountCreateRequest {
     private String phoneNum;    // 휴대폰 번호
 
     // 필수: ADMIN, CONTROL, HUB_OP, CENTER_OP,
-    // CONTAINER_DRIVER, LINEHAUL_DRIVER, CORPORATE_APPROVED
+    // CONTAINER_DRIVER, BRANCH_DRIVER, CORPORATE_APPROVED (회원가입 화면: GENERAL · CORPORATE_PENDING)
     private String userType;
 
     // 운송사 및 기사 계정의 소속 업체

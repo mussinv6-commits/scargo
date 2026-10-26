@@ -1,0 +1,26 @@
+# fix_1300: 운영 프로필. DB_URL·DB_USERNAME·DB_PASSWORD 환경변수 필수
+spring:
+  # fix_1330: 운영은 기본값 없이 환경변수 필수. 하나라도 없으면 "Could not resolve placeholder 'DB_…'" 로 기동 실패
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+  jpa:
+    show-sql: false
+server:
+  # fix_1400: 운영은 오류 응답에 stack trace·예외 정보 절대 미포함
+  error:
+    include-stacktrace: never
+    include-exception: false
+    include-binding-errors: never
+    include-message: always
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+scargo:
+  seed-accounts: false
+  app:
+    dev-tools: false
+    demo-sim: ${SCARGO_DEMO_SIM:false}   # fix_1600: 운영은 ADMIN·시연 계정(demo…, driver01, branch01)만 시연 주행

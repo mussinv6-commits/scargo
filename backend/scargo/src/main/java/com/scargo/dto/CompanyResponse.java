@@ -13,7 +13,10 @@ public class CompanyResponse {  //조회 및 응답
     private final String industryType;               //업종
     private final String representativeName;         //대포명
     private final String address;                    //주소
-    private final OffsetDateTime createdAt;          // 등록일
+    private final OffsetDateTime createdAt;
+    private final String approvalStatus;             // fix_1330: PENDING | APPROVED | REJECTED | null(승인 절차 없는 업체)
+    private final Boolean carrier;
+    private final String rejectReason;          // 등록일
 
     public CompanyResponse(Company company) {
         this.companyId = company.getCompanyId();
@@ -23,5 +26,8 @@ public class CompanyResponse {  //조회 및 응답
         this.representativeName = company.getRepresentativeName();
         this.address = company.getAddress();
         this.createdAt = company.getCreatedAt();
+        this.approvalStatus = company.getApprovalStatus();
+        this.carrier = company.getIsCarrier();
+        this.rejectReason = company.getRejectReason();
     }
 }

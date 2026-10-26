@@ -53,7 +53,7 @@ public class OverloadController {
 
     // 3. 과적 검사 기록 단건 상세 조회
     @GetMapping("/{checkId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'CONTROL', 'HUB_OP', 'CENTER_OP', 'CONTAINER_DRIVER', 'LINEHAUL_DRIVER', 'CORPORATE_APPROVED')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'CONTROL', 'HUB_OP', 'CENTER_OP', 'CONTAINER_DRIVER', 'BRANCH_DRIVER', 'CORPORATE_APPROVED')")
     public ResponseEntity<OverloadCheckResponse> getCheckById(@PathVariable("checkId") Long checkId, Authentication authentication) {
         truckAccessPolicy.requireRead(authentication, overloadService.getVehicleNo(checkId));
         OverloadCheckResponse response = overloadService.getCheckById(checkId);
@@ -63,7 +63,7 @@ public class OverloadController {
     // 4. 특정 차량의 과적 검사 이력 조회 (페이징 및 키워드 검색)
     // 예시: GET /api/overload-checks/vehicle?vehicleNo=12가3456
     @GetMapping("/vehicle")
-    @PreAuthorize("hasAnyRole('ADMIN', 'CONTROL', 'HUB_OP', 'CENTER_OP', 'CONTAINER_DRIVER', 'LINEHAUL_DRIVER', 'CORPORATE_APPROVED')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'CONTROL', 'HUB_OP', 'CENTER_OP', 'CONTAINER_DRIVER', 'BRANCH_DRIVER', 'CORPORATE_APPROVED')")
     public ResponseEntity<Page<OverloadCheckResponse>> getChecksByVehicleNo(
             @RequestParam("vehicleNo") String vehicleNo,
             @PageableDefault(size = 10, sort = "checkId", direction = Sort.Direction.DESC) Pageable pageable,

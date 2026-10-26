@@ -21,6 +21,7 @@ import java.util.List;
 public class CompanyController {
 
     private final CompanyService companyService;
+    private final com.scargo.config.SignupRateLimiter signupLimiter; // fix_1330 (scargo_1)
 
     // 업체 등록 API (POST /api/companies)
     @PostMapping
@@ -28,6 +29,28 @@ public class CompanyController {
     public ResponseEntity<CompanyResponse> createCompany(@Valid @RequestBody CompanyCreateRequest request) {
         CompanyResponse response = companyService.createCompany(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    // fix_1300 (scargo_1): 회원가입 화면에서 목록에 없는 업체를 새로 등록 (비로그인 허용, 등록만 가능)
+    // fix_1330: 승인 대기(PENDING)로 생성, IP 당 시간당 5건 제한 (초과 429)
+    @PostMapping("/signup")
+    public ResponseEntity<?> createCompanyForSignup(@Valid @RequestBody CompanyCreateRequest request, jakarta.servlet.http.HttpServletRequest http) {
+        if (!signupLimiter.tryAcquire(http.getRemoteAddr()))
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(java.util.Map.of("message", "업체 등록 요청이 너무 많습니다. 1시간 뒤 다시 시도하세요."));
+        return ResponseEntity.status(HttpStatus.CREATED).body(companyService.createForSignup(request));
+    }
+
+    // fix_1330 (scargo_1): 관리자 업체 승인·반려 (업체 관리 화면 '승인 대기 업체')
+    @PatchMapping("/{companyId}/approve")
+    @PreAuthorize("hasRole('ADMIN')")
+    public CompanyResponse approve(@PathVariable("companyId") Long companyId) {
+        return companyService.approve(companyId, com.scargo.app.security.CurrentAccount.id());
+    }
+
+    @PatchMapping("/{companyId}/reject")
+    @PreAuthorize("hasRole('ADMIN')")
+    public CompanyResponse reject(@PathVariable("companyId") Long companyId, @RequestBody(required = false) java.util.Map<String, String> b) {
+        return companyService.reject(companyId, b == null ? null : b.get("reason"));
     }
 
     // 전체 업체 목록 조회 API (GET /api/companies)

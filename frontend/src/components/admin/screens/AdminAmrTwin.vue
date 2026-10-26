@@ -137,7 +137,7 @@
           <div class="loc" id="tw-cLoc">-</div>
           <div class="hint" id="tw-cHint">선택한 AMR이 운반 중인 화물을 따라갑니다. 랙의 박스를 클릭하면 그 화물로 고정됩니다.</div>
         </div>
-        <div class="card">
+        <div class="card" style="display:none"><!-- 26.10.26 게이트 OCR · 씰 확인은 카르고(/admin/gate-seal)로 이동 -->
           <span class="label">Gate OCR · 입출차 번호판</span>
           <ul class="scans gates" id="tw-gates"><li><span class="sd">트럭이 입구 · 출구 게이트에 오면 번호판을 인식합니다</span></li></ul>
         </div>

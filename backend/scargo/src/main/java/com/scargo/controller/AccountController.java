@@ -85,6 +85,14 @@ public class AccountController {
         return ResponseEntity.ok(responses);
     }
 
+    // fix_1300 (scargo_1): 게시판 작성자 이름 표시용 (이름만 공개. 전화번호·사업자번호·회사는 GET /{id} 에서 본인·관리자만)
+    @GetMapping("/{id}/display-name")
+    public ResponseEntity<java.util.Map<String, String>> displayName(@PathVariable("id") Long id) {
+        String name = accountRepository.findById(id).map(Account::getUserName)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 계정입니다."));
+        return ResponseEntity.ok(java.util.Map.of("userName", name == null ? "" : name));
+    }
+
     // 특정 계정 조회 API (GET /api/accounts/{id})
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyRole('ADMIN', 'CORPORATE_APPROVED') or #p0 == principal.id")
@@ -171,8 +179,11 @@ public class AccountController {
     // 26.10.22 통합: 관리자의 기업계정 거절 API (PATCH /api/accounts/{id}/reject)
     @PatchMapping("/{id}/reject")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<Void> rejectCorporateAccount(@PathVariable("id") Long id) {
-        accountService.rejectCorporateAccount(id);
+    public ResponseEntity<Void> rejectCorporateAccount(@PathVariable("id") Long id,
+                                                       @RequestBody(required = false) java.util.Map<String, String> body) {
+        // scargo_1 26.10.20: 운송사(회사) 단위 반려는 사유를 남김 (companies.reject_reason). 사유가 없으면 "관리자 반려"
+        String reason = body == null ? null : body.get("reason");
+        accountService.rejectCorporateAccount(id, reason);
         return ResponseEntity.ok().build();
     }
 
@@ -184,7 +195,7 @@ public class AccountController {
         return ResponseEntity.noContent().build();
     }
 
-    // 26.09.22 추가: 특정 업체 소속 기사(CONTAINER_DRIVER / LINEHAUL_DRIVER) 목록 조회 (사업자 본인 업체 또는 관리자만 가능)
+    // 26.09.22 추가: 특정 업체 소속 기사(CONTAINER_DRIVER / BRANCH_DRIVER) 목록 조회 (사업자 본인 업체 또는 관리자만 가능)
     @GetMapping("/company/{companyId}/drivers")
     @PreAuthorize("hasAnyRole('ADMIN', 'CORPORATE_APPROVED')")
     public ResponseEntity<List<AccountResponse>> getDriversByCompany(
@@ -230,6 +241,6 @@ public class AccountController {
     }
 
     private boolean isDriver(String type) {
-        return "CONTAINER_DRIVER".equals(type) || "LINEHAUL_DRIVER".equals(type);
+        return "CONTAINER_DRIVER".equals(type) || "BRANCH_DRIVER".equals(type);
     }
 }

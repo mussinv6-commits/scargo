@@ -8,7 +8,7 @@ import lombok.Setter;
 import java.time.OffsetDateTime;
 
 // 26.10.15 허브 입출차: hub_vehicles (허브 출입 등록 차량 · 차종은 DB가 정한다)
-//  vehicle_kind: CARGO(입고 화물차) / COURIER(권역 출고 택배차)
+//  vehicle_kind: CARGO(입고 화물차) / COURIER(권역 출고 지선차량)
 @Entity
 @Table(name = "hub_vehicles")
 @Getter

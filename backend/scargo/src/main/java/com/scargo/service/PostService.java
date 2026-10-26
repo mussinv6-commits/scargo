@@ -40,7 +40,7 @@ public class PostService {
     private final AccountRepository accountsRepository;
 
     // 파일 저장 기본 경로
-    private final String uploadDir = "C:/scargo/uploads/posts/";
+    // fix_1300: 하드코딩 경로(C:/scargo/uploads/posts/) 제거 → scargo.upload-root/posts (UploadStorage)
 
     // 1. 게시글 생성 (파일 업로드 포함)
     @Transactional
@@ -178,10 +178,10 @@ public class PostService {
 
     // 파일 물리 저장 및 Attachment 엔티티 생성
     private void uploadAndSaveAttachments(Post post, List<MultipartFile> files) {
-        File directory = new File(uploadDir);
-        if (!directory.exists()) {
-            directory.mkdirs();
-        }
+        java.nio.file.Path directory;
+        try { directory = com.scargo.config.UploadStorage.dir("posts"); }
+        catch (IOException e) { throw new RuntimeException("업로드 폴더를 만들 수 없습니다.", e); }
+        for (MultipartFile f0 : files) if (!f0.isEmpty()) com.scargo.config.UploadStorage.checkedExt(f0); // fix_1300: 저장 전에 모두 검사
 
         for (MultipartFile file : files) {
             if (file.isEmpty()) continue;
@@ -193,7 +193,7 @@ public class PostService {
             }
 
             String storedName = UUID.randomUUID().toString() + extension;
-            String filePath = uploadDir + storedName;
+            String filePath = directory.resolve(storedName).toString();
 
             try {
                 file.transferTo(new File(filePath));

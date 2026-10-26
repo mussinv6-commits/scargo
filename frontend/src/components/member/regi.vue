@@ -431,7 +431,7 @@ export default {
         };
 
         axios
-          .post(`${API_BASE}/api/companies`, companyPayload)
+          .post(`${API_BASE}/api/companies/signup`, companyPayload) // 통합: 가입용 공개 등록 API (scargo_1 fix_1300 · 승인 대기로 생성)
           .then((resp) => {
             const newCompanyId = resp.data.companyId;
             this.createAccountWithCompany(newCompanyId);

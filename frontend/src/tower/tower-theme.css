@@ -1,0 +1,22 @@
+/* S GROUP 토큰을 컨트롤타워에 연결 (로직/마크업 변경 없음) */
+.tower{
+  --bg:var(--sg-stone-50); --panel:#fff; --line:var(--sg-stone-200); --line2:var(--sg-stone-100);
+  --ink:var(--sg-ink); --sub:var(--sg-ink-sub); --faint:var(--sg-ink-faint);
+  --bar:var(--sg-navy-900); --bar-ink:#ece6da; --bar-sub:#97a0ad;
+  --accent:var(--sg-gold-500); --accent-ink:var(--sg-navy-900);
+  --mono:var(--font-mono);
+  font-family:var(--font-sans)!important;
+}
+.tower .top{border-bottom:1px solid rgba(201,169,110,.3)}
+.tower .brand{font-family:var(--font-display);font-size:19px;letter-spacing:.22em;color:var(--sg-gold-300);font-weight:600}
+.tower .brand small{font-family:var(--font-sans);letter-spacing:0;font-size:12px}
+.tower .top select{background:var(--sg-navy-700);border-color:var(--sg-navy-600)}
+.tower nav{background:var(--sg-navy-800)}
+.tower nav a{border-left:2px solid transparent;border-radius:0}
+.tower nav a.on{background:rgba(201,169,110,.12);color:var(--sg-gold-300);border-left-color:var(--sg-gold-500)}
+.tower nav a.on .id{color:var(--sg-gold-400)}
+.tower .head h1{font-weight:700;letter-spacing:-.01em}
+.tower .btn.pri,.tower .seg button.on{background:var(--sg-navy-800);border-color:var(--sg-navy-800)}
+.tower .btn.acc{background:var(--sg-gold-500);border-color:var(--sg-gold-600)}
+.tower .bar i{background:var(--sg-navy-600)}
+.tower{text-align:left}.tower nav h4{text-align:left}

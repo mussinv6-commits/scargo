@@ -52,13 +52,13 @@ public class AmrAuthController {
     }
 
     @GetMapping("/code")
-    @PreAuthorize("hasAnyRole('ADMIN', 'HUB_OP')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'AMR_ADMIN', 'HUB_OP')")
     public Map<String, Object> code(HttpServletRequest req) {
         return auth.currentCode(req.getLocalPort());
     }
 
     @PostMapping("/rotate")
-    @PreAuthorize("hasAnyRole('ADMIN', 'HUB_OP')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'AMR_ADMIN', 'HUB_OP')")
     public Map<String, Object> rotate() {
         auth.rotate();
         return Map.of("ok", true);
@@ -71,10 +71,27 @@ public class AmrAuthController {
 
     // 26.10.23 출입증 감사 조회: ADMIN = 전체 출입증 + 실패 기록, HUB_OP = 소속 허브 키로 받은 출입증 (토큰 · 코드 값은 내려주지 않음)
     @GetMapping("/audit")
-    @PreAuthorize("hasAnyRole('ADMIN', 'HUB_OP')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'AMR_ADMIN', 'HUB_OP')")
     public Map<String, Object> audit() {
         return auth.audit();
     }
+
+    // ── 26.10.21 (scargo_1) 웹 출입증 관리: 목록 · 하나 폐기 · 전체 폐기 · 실패 기록 (출입증으로는 불가, 웹 로그인만) ──
+    @GetMapping("/tokens")
+    @PreAuthorize("hasAnyRole('ADMIN', 'AMR_ADMIN', 'HUB_OP')")
+    public java.util.List<AmrAuthService.TokenView> tokens() { return auth.activeTokens(); }
+
+    @PostMapping("/tokens/{ref}/revoke")
+    @PreAuthorize("hasAnyRole('ADMIN', 'AMR_ADMIN', 'HUB_OP')")
+    public Map<String, Object> revoke(@PathVariable("ref") String ref) { auth.revokeOne(ref); return Map.of("ok", true, "ref", ref); }
+
+    @PostMapping("/tokens/revoke-all")
+    @PreAuthorize("hasAnyRole('ADMIN', 'AMR_ADMIN', 'HUB_OP')")
+    public Map<String, Object> revokeAll() { return Map.of("ok", true, "revoked", auth.revokeAllTokens()); }
+
+    @GetMapping("/failures")
+    @PreAuthorize("hasAnyRole('ADMIN', 'AMR_ADMIN', 'HUB_OP')")
+    public java.util.List<Map<String, Object>> failures() { return auth.recentFailures(); }
 
     @PostMapping("/logout")
     public Map<String, Object> logout(HttpServletRequest req) {

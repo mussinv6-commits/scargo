@@ -3,7 +3,7 @@
   <div class="grp">
     <div class="topbar">
       <template v-if="authState.user">
-        <span class="who">{{ authState.user.userName }}님<em v-if="scopeLabel"> · {{ scopeLabel }}</em></span>
+        <span class="who">{{ whoName }}님<em v-if="scopeLabel"> · {{ scopeLabel }}</em></span>
         <a href="#" @click.prevent="logout">로그아웃</a>
       </template>
     </div>
@@ -90,12 +90,13 @@
 </template>
 
 <script setup>
+import { homeOf } from "@/scargo2/roles.js";
 import { computed, ref, nextTick, onBeforeUnmount } from "vue";
 import { useRouter } from "vue-router";
 import axios from "axios";
 import { authState, clearLogin, setLogin } from "@/auth/authState.js";
 import { API_BASE } from "@/utils/apiBase.js";
-import { hubAccess } from "@/components/amr/amrAccess.js"; // 26.10.22 통합: 관제사는 허브 관제로
+import { hubAccess, isMaster } from "@/components/amr/amrAccess.js"; // 26.10.22 통합: 관제사는 허브 관제로
 import { loadSavedId, storeSavedId } from "@/utils/savedId.js"; // 26.10.24 팀 반영: 아이디만 localStorage 저장
 
 
@@ -172,9 +173,12 @@ function login() {
     .finally(() => { busy.value = false; });
 }
 
+// 26.10.26: 통합 마스터(admin01)는 "마스터님 · S Group" 으로 표시
+const whoName = computed(() => (isMaster(authState.user) ? "마스터" : authState.user?.userName || ""));
 const scopeLabel = computed(() => {
   const u = authState.user;
   if (!u || u.userType !== "ADMIN") return "";
+  if (isMaster(u)) return "S Group";
   return u.adminScope === "SBOT" ? "S-Bot 관리자" : "S Cargo 관리자";
 });
 
@@ -202,6 +206,7 @@ function go(p) {
       msg.value = "S Cargo 는 S Cargo 관리자 계정(admin)으로 로그인해야 합니다. 오른쪽 위 '로그아웃' 후 다시 로그인해 주세요.";
       return;
     }
+    if (u) return router.push(u.userType === "ADMIN" ? "/scargo" : homeOf(u)); // 26.10.26 총관리자는 S Cargo 메인(/scargo)으로. 나머지는 아래 권한별 첫 화면 // // v13 (scargo_1): 로그인 계정은 권한별 첫 화면으로 (관제사 → 관제, 기사 → 기사 화면, 승인대기 → 안내)
   }
   router.push(p);
 }

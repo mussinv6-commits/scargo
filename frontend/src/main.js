@@ -7,6 +7,7 @@ import 'bootstrap/dist/css/bootstrap.css'
 import 'bootstrap-vue-3/dist/bootstrap-vue-3.css'
 import './components/CSS/theme.css'
 import './components/CSS/unify.css'
+import './components/CSS/sg-vars.css' // 26.10.21 v7 (통합)
 
 import router from './router/index'
 

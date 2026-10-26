@@ -40,9 +40,9 @@ public class AmrAuthToken {
     @Column(name = "revoked", nullable = false)
     private boolean revoked;
 
-    // 26.10.23 마이그레이션 14장(팀 DB v16 10장) 출입증 감사: 코드를 보여 준 관리자 · 접속 기기 · 폐기 이력
+    // 26.10.21 보안: 출입증을 "사람"에 묶는다 (누가 보여 준 코드로 발급됐는지) + 폐기 이력
     @Column(name = "issued_by_account_id")
-    private Long issuedByAccountId;
+    private Long issuedByAccountId;     // 코드를 보여 준 관리자 (accounts.account_id)
 
     @Column(name = "issued_by_user_id", length = 50)
     private String issuedByUserId;
@@ -54,8 +54,8 @@ public class AmrAuthToken {
     private OffsetDateTime revokedAt;
 
     @Column(name = "revoked_by", length = 50)
-    private String revokedBy;
+    private String revokedBy;           // 폐기한 관리자 아이디 (로그아웃이면 SELF)
 
     @Column(name = "revoke_reason", length = 30)
-    private String revokeReason; // ADMIN_REVOKE · ADMIN_REVOKE_ALL · LOGOUT · ROTATE
+    private String revokeReason;        // ADMIN_REVOKE | ADMIN_REVOKE_ALL | LOGOUT | ROTATE
 }

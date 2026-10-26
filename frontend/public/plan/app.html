@@ -1,0 +1,130 @@
+<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>SCARGO 기사 앱 (예시 목업)</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:"Malgun Gothic","Noto Sans KR",system-ui,sans-serif;background:#dfe4ee;display:flex;gap:24px;padding:24px;color:#1d2433}
+.side{width:230px;font-size:13px}.side h2{font-size:16px;margin:0 0 8px}.side a{display:block;padding:5px 8px;border-radius:6px;cursor:pointer;color:#14213d}.side a:hover{background:#fff}.side a.on{background:#14213d;color:#fff}.side .g{font-size:11px;color:#6b7590;margin:10px 0 2px}
+.phone{width:390px;height:780px;background:#fff;border-radius:36px;border:10px solid #14213d;overflow:hidden;position:relative;box-shadow:0 10px 30px rgba(0,0,0,.2);flex-shrink:0}
+.sb{height:28px;font-size:12px;display:flex;justify-content:space-between;padding:6px 20px;color:#555}
+.scr{display:none;height:732px;overflow:auto;padding:0 18px 90px}.scr.on{display:block}
+.top{display:flex;align-items:center;justify-content:space-between;padding:10px 0 14px}.top b{font-size:18px}.tag{font-size:11px;color:#fca311;font-weight:700}
+input,select{width:100%;padding:12px;border:1px solid #c9d0de;border-radius:10px;margin:4px 0 12px;font-family:inherit;font-size:14px}
+label{font-size:12px;color:#6b7590}.btn{width:100%;padding:14px;border:0;border-radius:12px;background:#fca311;color:#14213d;font-weight:700;font-size:15px;font-family:inherit;cursor:pointer}.btn.d{background:#14213d;color:#fff}.btn.o{background:#fff;border:1px solid #c9d0de}
+.steps{display:flex;gap:6px;margin-bottom:16px}.steps i{flex:1;height:5px;border-radius:3px;background:#e3e7ef}.steps i.on{background:#fca311}
+.choice{border:2px solid #e3e7ef;border-radius:14px;padding:16px;margin-bottom:10px;cursor:pointer}.choice.on{border-color:#fca311;background:#fff8ea}.choice b{display:block;font-size:15px}.choice span{font-size:12px;color:#6b7590}
+.card{border:1px solid #e3e7ef;border-radius:14px;padding:14px;margin-bottom:10px}.meta{font-size:12px;color:#6b7590}
+.b{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700}.ok{background:#e3f6ea;color:#1b7a3d}.warn{background:#fff1dc;color:#b45f00}.crit{background:#fde4e4;color:#c62828}.info{background:#e5edff;color:#2851c6}
+.code{font-family:Consolas,monospace;font-size:11px;background:#eef1f6;padding:1px 5px;border-radius:4px}
+.chk{display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px solid #eef1f6;font-size:14px}
+.cam{height:200px;background:#1d2433;border-radius:14px;color:#fff;display:flex;align-items:center;justify-content:center;position:relative;margin-bottom:12px}.cam:after{content:"";position:absolute;inset:40px 60px;border:3px solid #fca311;border-radius:10px}
+.tl{border-left:3px solid #e3e7ef;margin-left:6px;padding-left:14px}.tl div{position:relative;padding:6px 0;font-size:13px}.tl div:before{content:"";position:absolute;left:-21px;top:10px;width:11px;height:11px;border-radius:50%;background:#e3e7ef}.tl .d:before{background:#2e9e5a}.tl .c:before{background:#fca311}
+.fake{position:absolute;bottom:0;left:0;right:0;text-align:center;font-size:10px;background:#c62828;color:#fff;padding:3px}
+.tab{position:absolute;bottom:18px;left:0;right:0;display:flex;border-top:1px solid #e3e7ef;background:#fff}.tab div{flex:1;text-align:center;padding:9px 0;font-size:11px;color:#6b7590}.tab .on{color:#14213d;font-weight:700}
+
+/* v7 추가: 로그인 아이디 저장(아이디칸 오른쪽) · 비밀번호 보기/숨기기 */
+.idw,.pww{position:relative;display:block}
+.idw input{padding-right:96px!important}.pww input{padding-right:44px!important}
+.idw .sid{position:absolute;right:10px;top:4px;bottom:12px;transform:none;display:flex;align-items:center;gap:5px;font-size:12px;color:#6b7590;cursor:pointer;white-space:nowrap;margin:0}
+.idw .sid input{width:15px!important;height:15px;margin:0!important;padding:0!important;accent-color:#fca311}
+.pww .eye{position:absolute;right:6px;top:4px;bottom:12px;transform:none;width:34px;height:auto;border:0;background:transparent;color:#6b7590;cursor:pointer;display:grid;place-items:center;padding:0}
+.pww .eye.on{color:#fca311}.lerr{color:#c62828;font-size:12px;margin:-4px 0 10px;min-height:14px}
+</style></head><body>
+<div class="side"><h2>SCARGO 기사 앱 화면</h2><div class="meta">왼쪽 목록이나 앱 안 버튼으로 이동</div>
+<div class="g">공통</div><a data-s="A-01">A-01 로그인</a><a data-s="A-02-1">A-02 ① 권한 선택</a><a data-s="A-02-2">A-02 ② 기본 정보</a><a data-s="A-02-3">A-02 ③ 차량 정보</a><a data-s="A-02-4">A-02 ④ 약관 동의</a><a data-s="A-03">A-03 승인 대기</a>
+<div class="g">컨테이너 운송기사 (CONTAINER_DRIVER)</div><a data-s="T-01">T-01 홈 (운송오더)</a><a data-s="T-02">T-02 컨테이너 인수 확인</a><a data-s="T-03">T-03 운행·공컨 반납*</a>
+<div class="g">지선 운송기사 (BRANCH_DRIVER)</div><a data-s="P-01">P-01 홈 (지선 운행)</a><a data-s="P-03">P-03 상차 확인 (스캔)</a><a data-s="P-04">P-04 센터 인계*</a>
+<div class="g">허브 앱 (HUB_OP 계정 + OTP)</div><a data-s="H-01">H-01 OTP·씰 확인*</a>
+<p class="meta">* 기획서에 화면 ID가 없어 목업에서 임시로 붙인 ID</p></div>
+<div class="phone"><div class="sb"><span>9:41</span><span>LTE ▮▮▮ 🔋</span></div>
+
+<section class="scr" id="A-01"><div style="text-align:center;padding:60px 0 30px"><div style="font-size:34px;font-weight:800;color:#14213d">SCARGO</div><div class="meta">운송기사 앱</div></div>
+<label for="lgId">휴대폰 번호 (아이디)</label><span class="idw"><input id="lgId" autocomplete="username" autocapitalize="off" placeholder="010-0000-1234"><label class="sid"><input type="checkbox" id="lgSave"> 아이디 저장</label></span><label for="lgPw">비밀번호</label><span class="pww"><input id="lgPw" type="password" autocomplete="current-password" placeholder="비밀번호"><button type="button" class="eye" id="lgEye" aria-label="비밀번호 보기" aria-pressed="false"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/></svg></button></span><div class="lerr" id="lgErr" role="alert"></div><button class="btn d" onclick="v7Login()">로그인</button><br><br>
+<button class="btn" onclick="go('T-01')">로그인 (컨테이너 기사 예시)</button><br><br><button class="btn o" onclick="go('P-01')">로그인 (지선 기사 예시)</button><br><br><button class="btn o" onclick="go('A-03')">로그인 (승인 대기 계정 예시)</button>
+<p style="text-align:center;font-size:13px">처음이신가요? <a style="color:#fca311;font-weight:700;cursor:pointer" onclick="go('A-02-1')">회원가입</a></p></section>
+
+<section class="scr" id="A-02-1"><div class="top"><b>회원가입</b><span class="tag">A-02 · 1/4</span></div><div class="steps"><i class="on"></i><i></i><i></i><i></i></div>
+<h3>어떤 운송을 하시나요?</h3><div class="choice on" onclick="pick(this)"><b>🚛 컨테이너 운송기사</b><span>인천신항 → 곤지암 허브 컨테이너 운송, 공컨테이너 반납</span></div><div class="choice" onclick="pick(this)"><b>🚚 지선 운송기사</b><span>곤지암 허브 → 물류센터 1곳 지선 운송 (집배송 없음)</span></div>
+<button class="btn" onclick="go('A-02-2')">다음</button></section>
+
+<section class="scr" id="A-02-2"><div class="top"><b>기본 정보</b><span class="tag">A-02 · 2/4</span></div><div class="steps"><i class="on"></i><i class="on"></i><i></i><i></i></div>
+<label>이름</label><input value="김테스트"><label for="lgId">휴대폰 번호 (아이디)</label><span class="idw"><input id="lgId" autocomplete="username" autocapitalize="off" placeholder="010-0000-1234"><label class="sid"><input type="checkbox" id="lgSave"> 아이디 저장</label></span><label for="lgPw">비밀번호</label><span class="pww"><input id="lgPw" type="password" autocomplete="current-password" placeholder="비밀번호"><button type="button" class="eye" id="lgEye" aria-label="비밀번호 보기" aria-pressed="false"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/></svg></button></span><div class="lerr" id="lgErr" role="alert"></div><button class="btn d" onclick="v7Login()">로그인</button><br><br><label>소속 운송사 (등록된 운송사만)</label><select><option>(주)가상해운운송</option><option>(주)테스트로지스</option></select>
+<button class="btn" onclick="go('A-02-3')">다음</button></section>
+
+<section class="scr" id="A-02-3"><div class="top"><b>차량 정보</b><span class="tag">A-02 · 3/4</span></div><div class="steps"><i class="on"></i><i class="on"></i><i class="on"></i><i></i></div>
+<div class="meta" style="margin-bottom:10px">컨테이너 운송기사 입력란 (지선 기사는 톤급·적재함·롤테이너 수)</div>
+<label>차량번호</label><input value="서울81바0001"><label>차종</label><select><option>트랙터 + 40ft 섀시</option><option>트랙터 + 20ft 섀시</option></select><label>축 수 (요금 차종 산정)</label><select><option>5축 (4종)</option></select><label>화물운송 자격증 번호</label><input value="00-000000 (더미)">
+<button class="btn" onclick="go('A-02-4')">다음</button></section>
+
+<section class="scr" id="A-02-4"><div class="top"><b>약관 동의</b><span class="tag">A-02 · 4/4</span></div><div class="steps"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></div>
+<div class="chk"><span>☑ 전체 동의</span></div><div class="chk"><span>☑ 서비스 이용약관 (필수)</span></div><div class="chk"><span>☑ 개인정보 수집·이용 (필수)</span></div><div class="chk"><span>☑ <b>위치정보 이용 (필수)</b><br><span class="meta">운행 중 백그라운드 위치 수집</span></span></div><div class="chk"><span>☐ 마케팅 수신 (선택)</span></div><br>
+<button class="btn" onclick="go('A-03')">가입 신청</button></section>
+
+<section class="scr" id="A-03"><div style="text-align:center;padding-top:90px"><div style="font-size:60px">⏳</div><h2>승인 대기 중이에요</h2><span class="b warn">PENDING</span><p class="meta" style="line-height:1.6">소속 운송사 <b>(주)가상해운운송</b>에서<br>차량 정보를 확인하고 있어요.<br>승인되면 푸시 알림으로 알려 드려요.</p>
+<div class="card" style="text-align:left"><div class="tl"><div class="d">가입 신청 완료 · 10/20 08:40</div><div class="c">운송사 담당자 승인 대기 (W-10 · 승인 계정이 없으면 ADMIN)</div><div>승인 → 권한별 홈 (T-01 / P-01)</div></div></div>
+<button class="btn o" onclick="go('A-01')">로그아웃</button></div></section>
+
+<section class="scr" id="T-01"><div class="top"><b>오늘 운송오더</b><span class="tag">T-01</span></div><div class="meta">김테스트 · 서울81바0001 · 컨테이너 운송기사</div><br>
+<div class="card" onclick="go('T-02')" style="cursor:pointer;border-color:#fca311"><div style="display:flex;justify-content:space-between"><b>TEST1234567</b><span class="b info">ASSIGNED</span></div><div class="meta">TO-20261020-001 · 40ft FCL</div><div style="margin-top:8px;font-size:13px">인천신항 → <b>곤지암 허브</b></div><div class="meta">픽업 09:30 · 씰 SEAL-000123</div><div style="margin-top:8px;color:#fca311;font-weight:700;font-size:13px">인수 확인하기 ›</div></div>
+<div class="card" onclick="go('T-03')" style="cursor:pointer"><div style="display:flex;justify-content:space-between"><b>MOCK1111111</b><span class="b warn">RETURNING_EMPTY</span></div><div class="meta">공컨테이너 반납 · 기한 10/23 18:00</div><div style="margin-top:8px;font-size:13px">곤지암 허브 → 인천신항 터미널 CY</div></div>
+<div class="card"><div style="display:flex;justify-content:space-between"><b>FAKE0000001</b><span class="b info">ASSIGNED</span></div><div class="meta">픽업 13:00 예정</div></div>
+<div class="tab"><div class="on">운송오더</div><div>알림</div><div>내 정보</div></div></section>
+
+<section class="scr" id="T-02"><div class="top"><b>컨테이너 인수 확인</b><span class="tag">T-02</span></div>
+<div class="cam">📷 컨테이너 번호 촬영</div>
+<div class="chk"><span>컨테이너 번호<br><b>TEST1234567</b></span><span class="b ok">일치</span></div><div class="chk"><span>씰 번호<br><b>SEAL-000123</b></span><span class="b ok">일치</span></div><div class="chk"><span>외관 상태 (파손·누수)</span><select style="width:110px;margin:0"><option>이상 없음</option><option>이상 있음</option></select></div><div class="chk"><span>목적지</span><b>곤지암 허브</b></div><br>
+<button class="btn" onclick="go('T-03')">인수 확인 → PICKED_UP</button><p class="meta">게이트아웃(GATE_OUT)은 1차 OCR 기록으로 자동 처리</p></section>
+
+<section class="scr" id="T-03"><div class="top"><b>운행 현황</b><span class="tag">T-03*</span></div>
+<div class="card"><b>TEST1234567</b> <span class="b info">IN_TRANSIT</span><div class="tl" style="margin-top:10px"><div class="d">ASSIGNED 배차</div><div class="d">PICKED_UP 인수 확인 09:34</div><div class="d">GATE_OUT 게이트아웃 09:41</div><div class="d">톨게이트 입구 통과 · ₩5,400(가상)</div><div class="c">IN_TRANSIT 운행 중 · ETA 11:05</div><div>ARRIVED 허브 게이트인</div><div>HANDED_OVER 허브 인수 확정</div></div></div>
+<div class="card"><b>공컨테이너 반납</b><div class="meta">하역(UNLOADED) 후 별도 운행</div><div class="tl" style="margin-top:8px"><div class="c">RETURNING_EMPTY 반납 운행</div><div>RETURN_ARRIVED 반납지 도착</div><div>EMPTY_RETURNED 반납 접수 확정</div></div><br><button class="btn d">반납 증빙 사진 등록</button></div></section>
+
+<section class="scr" id="P-01"><div class="top"><b>오늘 지선 운행</b><span class="tag">P-01</span></div><div class="meta">이데모 · 서울84차0002 · 지선 운송기사</div><br>
+<div class="card" style="border-color:#fca311;cursor:pointer" onclick="go('P-03')"><div style="display:flex;justify-content:space-between"><b>LT-0002 · 서울센터</b><span class="b info">AT_HUB</span></div><div class="meta">곤지암 허브 출고 D6 · 출발 11:00</div><div style="margin-top:8px;font-size:13px">롤테이너 <b>7개</b> 예정 (RT-S01~S07)</div><div style="margin-top:8px;color:#fca311;font-weight:700;font-size:13px">상차 확인하기 ›</div></div>
+<div class="card"><div style="display:flex;justify-content:space-between"><b>LT-0005 · 서울센터</b><span class="b info">ASSIGNED</span></div><div class="meta">출발 15:00 예정</div></div>
+<div class="card" style="opacity:.6"><div style="display:flex;justify-content:space-between"><b>LT-0000 · 서울센터</b><span class="b ok">RECEIVED</span></div><div class="meta">어제 · 인수 확정 완료</div></div>
+<div class="tab"><div class="on">지선 운행</div><div>알림</div><div>내 정보</div></div></section>
+
+<section class="scr" id="P-03"><div class="top"><b>상차 확인</b><span class="tag">P-03</span></div><div class="meta">LT-0002 · 서울센터행 · 출고 D6</div>
+<div class="cam" onclick="scan()" style="cursor:pointer;height:160px">📷 롤테이너 바코드 스캔 (탭)</div>
+<div class="card"><div style="display:flex;justify-content:space-between"><b>수량</b><span id="cnt" class="b warn">5 / 7</span></div><div class="meta">운행별 예정 롤테이너 수 = 실제 상차 수</div></div>
+<div id="list"></div>
+<div class="card" style="background:#fde4e4;border-color:#f5b5b5;display:none" id="err"><b style="color:#c62828">⚠ 목적지 불일치</b><div class="meta">RT-G03 목적지 경기 ≠ 운행 목적지 서울 → 상차 불가</div></div>
+<button class="btn" id="done" style="opacity:.4" onclick="if(k>=7)go('P-04')">상차 완료 · 봉인 (LOADED)</button></section>
+
+<section class="scr" id="P-04"><div class="top"><b>센터 인계</b><span class="tag">P-04*</span></div>
+<div class="card"><b>LT-0002 → 서울센터</b> <span class="b info">ARRIVED</span><div class="meta">국내 운송 씰 DS-77001 · 지오펜스 도착 11:52</div><div class="tl" style="margin-top:10px"><div class="d">LOADED 상차 검수·봉인</div><div class="d">IN_TRANSIT 운행</div><div class="c">ARRIVED 센터 도착</div><div>UNLOADED 하차 완료</div><div>INSPECTED 검수 완료</div><div>RECEIVED 인수 확정 (센터 W-05)</div></div></div>
+<button class="btn" onclick="go('P-01')">하차 완료 → 인계</button></section>
+
+<section class="scr" id="H-01"><div class="top"><b>허브 앱 · 씰 확인</b><span class="tag">H-01*</span></div>
+<div class="card"><label>OTP (개인별 TOTP)</label><input value="•••• ••"><div class="meta">HUB_OP(허브 관제사) 계정 · 인증됨 ✓</div></div>
+<div class="card" style="border-color:#f5b5b5"><div style="display:flex;justify-content:space-between"><b>입고 D2 · DUMY7654321</b><span class="b crit">개봉 보류</span></div><div class="chk"><span>예정 씰</span><b>SEAL-000456</b></div><div class="chk"><span>사전 데이터 판정</span><b style="color:#c62828">불일치</b></div><div class="chk"><span>상태</span><span class="code">SEAL_PENDING · open_hold</span></div><br><button class="btn d">확인·보고 후 개봉 승인</button></div></section>
+
+<div class="fake">모든 데이터는 가짜(예시)입니다</div></div>
+<script>
+function go(id){document.querySelectorAll('.scr').forEach(s=>s.classList.toggle('on',s.id==id));document.querySelectorAll('.side a').forEach(a=>a.classList.toggle('on',a.dataset.s==id));location.hash=id}
+document.querySelectorAll('.side a').forEach(a=>a.onclick=()=>go(a.dataset.s));
+function pick(e){document.querySelectorAll('.choice').forEach(c=>c.classList.toggle('on',c==e))}
+let k=5;const ids=["RT-S01","RT-S02","RT-S03","RT-S04","RT-S05","RT-S06","RT-S07"];let tried=false;
+function render(){list.innerHTML=ids.map((x,i)=>`<div class="chk"><span>${x} <span class="meta">서울행 · 박스 ${12+i}개</span></span>${i<k?'<span class="b ok">상차 ✓</span>':'<span class="b warn">대기</span>'}</div>`).join('');cnt.textContent=k+" / 7";cnt.className="b "+(k>=7?"ok":"warn");done.style.opacity=k>=7?1:.4}
+function scan(){if(!tried){tried=true;err.style.display="block";return}err.style.display="none";if(k<7)k++;render()}
+render();const h=location.hash.slice(1);go(document.getElementById(h)?h:'A-01');
+</script>
+<script>
+/* v7: 로그인 — 아이디만 localStorage 저장(비밀번호는 저장 안 함), 실제 서버 로그인은 부모 화면(Vue)이 처리 */
+(function(){
+ const K='scargo_saved_user_id';
+ const id=document.getElementById('lgId'),pw=document.getElementById('lgPw'),sv=document.getElementById('lgSave'),eye=document.getElementById('lgEye');
+ try{const s=localStorage.getItem(K);if(s){id.value=s;sv.checked=true}}catch(e){}
+ sv.onchange=()=>{if(!sv.checked)try{localStorage.removeItem(K)}catch(e){}};
+ eye.onclick=()=>{const sh=pw.type==='password';pw.type=sh?'text':'password';eye.classList.toggle('on',sh);eye.setAttribute('aria-label',sh?'비밀번호 숨기기':'비밀번호 보기');eye.setAttribute('aria-pressed',sh)};
+ window.v7Login=async function(demoTo){
+  const e=document.getElementById('lgErr');e.textContent='';
+  const u=id.value.trim();
+  if(!u||!pw.value){e.textContent='아이디와 비밀번호를 입력하세요.';return}
+  const fn=window.parent&&window.parent!==window&&window.parent.scargoPlanLogin;
+  if(!fn){try{sv.checked?localStorage.setItem(K,u):localStorage.removeItem(K)}catch(x){}pw.value='';go('T-01');return}
+  try{const r=await fn(u,pw.value);try{sv.checked?localStorage.setItem(K,u):localStorage.removeItem(K)}catch(x){}pw.value='';pw.type='password';if(r.userType==='CONTAINER_DRIVER')go('T-01');else if(r.userType==='BRANCH_DRIVER')go('P-01');else if(r.userType==='HUB_OP')go('H-01');else if(r.pending)go('A-03');else{e.textContent='기사(컨테이너·지선) 또는 허브 관제사 계정만 앱을 쓸 수 있어요.'}}
+  catch(x){e.textContent=(x&&x.message)||'아이디 또는 비밀번호를 확인해 주세요.'}
+ };
+ [id,pw].forEach(i=>i.addEventListener('keydown',ev=>{if(ev.key==='Enter')window.v7Login()}));
+})();
+</script>
+</body></html>

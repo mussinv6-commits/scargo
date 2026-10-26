@@ -16,7 +16,7 @@
             <option value="GENERAL">일반회원(기사)</option>
             <!-- 26.10.22 통합: 구간별 권한 -->
             <option value="CONTAINER_DRIVER">컨테이너 운송기사</option>
-            <option value="LINEHAUL_DRIVER">간선 운송기사</option>
+            <option value="BRANCH_DRIVER">지선 운송기사</option>
             <option value="CONTROL">통합 관제사</option>
             <option value="HUB_OP">허브 관제사</option>
             <option value="CENTER_OP">지역센터 관제사</option>
@@ -177,7 +177,7 @@ function typeLabel(t) {
     CORPORATE_PENDING: '기업회원(승인대기)',
     CORPORATE_APPROVED: '기업회원(승인완료)',
     CONTAINER_DRIVER: '컨테이너 운송기사',
-    LINEHAUL_DRIVER: '간선 운송기사',
+    BRANCH_DRIVER: '지선 운송기사',
     CONTROL: '통합 관제사',
     HUB_OP: '허브 관제사',
     CENTER_OP: '지역센터 관제사',

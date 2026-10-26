@@ -43,7 +43,11 @@ public interface TruckRepository extends JpaRepository<Truck, String> {
     Optional<Truck> findByVehicleNo(String vehicleNo);
 
     // 26.09.21 추가: 고정형(지입차) 배정 조회 - 특정 기사 계정에게 배정된 차량(있으면 1건)
-    Optional<Truck> findByAssignedDriver_AccountId(Long accountId);
+    // 26.10.20: 통합 DB 는 기사 1명에 차량 여러 대 배정 가능(driver01=3대) → 첫 번째 차량 사용. TODO: 주 차량 지정 규칙 확정
+    Optional<Truck> findFirstByAssignedDriver_AccountIdOrderByVehicleNoAsc(Long accountId);
+    default Optional<Truck> findByAssignedDriver_AccountId(Long accountId) {
+        return findFirstByAssignedDriver_AccountIdOrderByVehicleNoAsc(accountId);
+    }
 
     // 26.09.21 추가: 이미 다른 차량에 배정된 기사인지 중복 배정 방지용 체크
     boolean existsByAssignedDriver_AccountId(Long accountId);

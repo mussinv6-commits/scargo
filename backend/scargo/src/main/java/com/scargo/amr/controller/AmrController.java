@@ -29,8 +29,8 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class AmrController {
 
-    static final String VIEW = "hasAnyRole('ADMIN', 'CONTROL', 'HUB_OP', 'AMR_DEVICE')";
-    static final String MANAGE = "hasAnyRole('ADMIN', 'HUB_OP', 'AMR_DEVICE')";
+    static final String VIEW = "hasAnyRole('ADMIN', 'AMR_ADMIN', 'CONTROL', 'HUB_OP', 'AMR_DEVICE')";
+    static final String MANAGE = "hasAnyRole('ADMIN', 'AMR_ADMIN', 'HUB_OP', 'AMR_DEVICE')";
 
     private final AmrService service;
     private final HubVehicleService vehicles;

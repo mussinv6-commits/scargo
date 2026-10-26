@@ -26,7 +26,7 @@ import java.util.*;
 @RequestMapping("/api/amr/sbot")
 // 26.10.22 통합: 예전 AmrAuthConfig 인터셉터와 같은 범위(웹 ADMIN 세션 또는 허브 앱 출입증)를 @PreAuthorize 로 확인
 //  (아이디가 sbot 으로 시작하기만 하면 통과하던 예외는 없앰. S-Bot 관리자 계정 sbot 은 ADMIN 이라 그대로 사용 가능)
-@PreAuthorize("hasAnyRole('ADMIN', 'AMR_DEVICE')")
+@PreAuthorize("hasAnyRole('ADMIN', 'AMR_ADMIN', 'AMR_DEVICE')")
 public class SbotController {
 
     @PersistenceContext

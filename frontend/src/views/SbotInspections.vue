@@ -251,7 +251,7 @@ onMounted(loadOrders)
 .sbi-tabs button { background: #0f2a4a; border: 1px solid #1d3b60; color: #c9d8ea; border-radius: 8px; padding: 7px 14px; cursor: pointer; }
 .sbi-tabs button.on { background: #ff9f1c; border-color: #ff9f1c; color: #0b1d36; font-weight: 700; }
 .sbi-n { margin-left: 6px; font-size: 12px; opacity: .85; }
-.sbi-card { background: #0f2a4a; border: 1px solid #1d3b60; border-radius: 12px; padding: 12px 14px; overflow-x: auto; }
+.sbi-card { color: #e6eff7; background: #0f2a4a; border: 1px solid #1d3b60; border-radius: 12px; padding: 12px 14px; overflow-x: auto; }
 .sbi-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .sbi-table th, .sbi-table td { padding: 8px; border-bottom: 1px solid #1d3b60; text-align: left; vertical-align: middle; white-space: nowrap; }
 .sbi-table th { color: #9fb0c6; font-weight: 600; }

@@ -61,7 +61,7 @@ public class NotificationService {
 
     // 2. 특정 계정의 안 읽은 알림 목록 조회
     public List<NotificationResponse> getUnreadNotificationsByAccount(Long accountId) {
-        List<Notification> notifications = notificationRepository.findByAccountIdAndIsReadFalseOrderByCreatedAtDesc(accountId);
+        List<Notification> notifications = notificationRepository.findMineUnread(accountId, carrierCompany(accountId)); // fix_1530
         return notifications.stream()
                 .map(NotificationResponse::from)
                 .collect(Collectors.toList());
@@ -116,7 +116,7 @@ public class NotificationService {
 
     // 5-1.특정 계정의 알림 페이징 조회 (대용량 대응)
     public Page<NotificationResponse> getNotificationsByAccountWithPaging(Long accountId, Pageable pageable) {
-        return notificationRepository.findByAccountIdOrderByCreatedAtDesc(accountId, pageable)
+        return notificationRepository.findMine(accountId, carrierCompany(accountId), pageable) // fix_1530: 운송사 담당자는 회사 알림 포함
                 .map(NotificationResponse::from);
     }
 
@@ -131,7 +131,7 @@ public class NotificationService {
     // 7. 특정 계정의 모든 알림 '모두 읽음' 처리
     @Transactional
     public void markAllAsReadByAccount(Long accountId) {
-        List<Notification> unreadNotifications = notificationRepository.findByAccountIdAndIsReadFalseOrderByCreatedAtDesc(accountId);
+        List<Notification> unreadNotifications = notificationRepository.findMineUnread(accountId, carrierCompany(accountId)); // fix_1530
         for (Notification notification : unreadNotifications) {
             notification.markAsRead();
         }
@@ -148,7 +148,7 @@ public class NotificationService {
     
     // 8. 특정 계정의 안 읽은 알림 개수 조회
     public long getUnreadCountByAccount(Long accountId) {
-        return notificationRepository.countByAccountIdAndIsReadFalse(accountId);
+        return notificationRepository.countMineUnread(accountId, carrierCompany(accountId)); // fix_1530
     }
 
     // 9. 특정 기업의 '전체' 알림 목록 조회 (히스토리용)
@@ -214,8 +214,18 @@ public class NotificationService {
     @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = true)
     public List<Long> findCompanyAccountIds(Long companyId) {
         return jdbcTemplate.queryForList(
-                "SELECT account_id FROM accounts WHERE company_id = ? AND user_type = 'CORPORATE_APPROVED'",
+                // 26.10.20: 승인 운송사의 담당자 (user_type CORPORATE_APPROVED, 승인 상태는 companies.approval_status)
+                "SELECT a.account_id FROM accounts a JOIN companies c ON c.company_id = a.company_id "
+              + "WHERE a.company_id = ? AND a.user_type = 'CORPORATE_APPROVED' AND c.is_carrier = TRUE AND c.approval_status = 'APPROVED'",
                 Long.class, companyId);
     }
-    
+
+    /** fix_1530: 승인된 운송사 담당자(CORPORATE_APPROVED + is_carrier + APPROVED)면 회사 ID, 아니면 null.
+     *  회사 알림(company_id)은 담당자 계정이 아니라 회사에 저장되므로 웹 알림 종에서 함께 보여 준다 (읽음 표시는 회사 담당자끼리 공유) */
+    private Long carrierCompany(Long accountId) {
+        return jdbcTemplate.query("""
+            SELECT a.company_id FROM accounts a JOIN companies c ON c.company_id = a.company_id
+             WHERE a.account_id = ? AND a.user_type = 'CORPORATE_APPROVED' AND c.is_carrier AND c.approval_status = 'APPROVED'""",
+            rs -> rs.next() ? rs.getLong(1) : null, accountId);
+    }
 }

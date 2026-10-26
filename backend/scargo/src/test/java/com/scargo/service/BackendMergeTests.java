@@ -30,6 +30,7 @@ class BackendMergeTests {
     private NotificationService notifications;
     private LoadingRecordRepository loadingRecords;
     private TruckWorkflowService workflow;
+    private com.scargo.app.service.TransportOrderService transportOrders;
     private GateLogService gateService;
 
     @BeforeEach
@@ -39,7 +40,8 @@ class BackendMergeTests {
         notifications = mock(NotificationService.class);
         loadingRecords = mock(LoadingRecordRepository.class);
         workflow = mock(TruckWorkflowService.class);
-        gateService = new GateLogService(gateLogs, gates, notifications, loadingRecords, workflow);
+        transportOrders = mock(com.scargo.app.service.TransportOrderService.class);
+        gateService = new GateLogService(gateLogs, gates, notifications, loadingRecords, workflow, transportOrders);
         when(gates.findById(1L)).thenReturn(Optional.of(Gate.builder().gateId(1L).gateName("Gate").build()));
         when(gateLogs.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
     }

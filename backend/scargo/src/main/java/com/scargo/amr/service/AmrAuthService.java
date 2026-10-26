@@ -74,6 +74,17 @@ public class AmrAuthService {
     private static final int MAX_FAIL = 5;
     private static final Duration LOCK = Duration.ofMinutes(1);
 
+    // 26.10.21 (scargo_1) 보안: 전체(모든 IP 합계) 실패 한도 — 1분에 20번 틀리면 1분 동안 누구도 코드 로그인 불가
+    public static final int GLOBAL_MAX_FAIL = 20;
+    public static final Duration GLOBAL_WINDOW = Duration.ofMinutes(1);
+    public static final Duration GLOBAL_LOCK = Duration.ofMinutes(1);
+    private final java.util.Deque<OffsetDateTime> globalFails = new java.util.concurrent.ConcurrentLinkedDeque<>();
+    private volatile OffsetDateTime globalLockedUntil = null;
+
+    /** 웹 출입증 관리 화면용 (원문 토큰·해시 전체는 내보내지 않음. ref = 해시 앞 12자리) */
+    public record TokenView(String ref, String client, Long hubId, Long issuedByAccountId, String issuedByUserId, OffsetDateTime issuedAt,
+                            OffsetDateTime expiresAt, OffsetDateTime lastUsedAt, String ip, String userAgent) {}
+
     private final AmrOtpKeyRepository keys;
     private final AmrAuthTokenRepository tokens;
     private final AmrService amr;
@@ -140,6 +151,7 @@ public class AmrAuthService {
 
     @Transactional(noRollbackFor = ResponseStatusException.class)
     public LoginResult login(String code, String client, String ip, String userAgent) {
+        checkGlobalLock(ip, userAgent);
         List<AmrOtpKey> active = keys.findByActiveTrueOrderByKeyIdDesc();
         if (active.isEmpty()) {
             auditFailure(ip, userAgent, "NO_KEY");
@@ -157,7 +169,7 @@ public class AmrAuthService {
             step = match(candidate.getSecret(), code);
             if (step >= 0) { k = candidate; break; }
         }
-        if (k == null) { auditFailure(ip, userAgent, "BAD_CODE"); failed(ip); throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "코드가 맞지 않습니다 (" + left(ip) + "번 남음)"); }
+        if (k == null) { auditFailure(ip, userAgent, "BAD_CODE"); countGlobal(ip); failed(ip); throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "코드가 맞지 않습니다 (" + left(ip) + "번 남음)"); }
         if (step <= lastUsedStep.getOrDefault(k.getKeyId(), -1L)) { auditFailure(ip, userAgent, "REUSED_CODE"); throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "이미 사용한 코드입니다. 웹에서 다음 코드를 확인하세요"); }
         lastUsedStep.put(k.getKeyId(), step);
         fails.remove(ip);
@@ -196,6 +208,83 @@ public class AmrAuthService {
             t.setRevokeReason("LOGOUT");
         });
     }
+
+    // ── 26.10.21 (scargo_1) 웹: 살아 있는 출입증 목록 · 하나/전체 폐기 · 실패 기록 ──
+    //  통합: 허브 범위 적용 (ADMIN = 전체, HUB_OP = 소속 허브 키로 받은 출입증)
+    @Transactional(readOnly = true)
+    public List<TokenView> activeTokens() {
+        Long hub = access.issuerHubId();
+        Map<Long, Long> hubOfKey = new HashMap<>();
+        keys.findAll().forEach(k -> hubOfKey.put(k.getKeyId(), k.getHubId()));
+        return tokens.findByRevokedFalseAndExpiresAtAfterOrderByCreatedAtDesc(OffsetDateTime.now()).stream()
+                .filter(t -> hub == null || hub.equals(hubOfKey.get(t.getKeyId())))
+                .map(t -> new TokenView(t.getTokenHash().substring(0, 12), t.getClient(), hubOfKey.get(t.getKeyId()),
+                        t.getIssuedByAccountId(), t.getIssuedByUserId(), t.getCreatedAt(), t.getExpiresAt(), t.getLastUsedAt(), t.getIp(), t.getUserAgent()))
+                .toList();
+    }
+
+    @Transactional
+    public void revokeOne(String ref) {
+        Long hub = access.issuerHubId();
+        String by = access.actorName();
+        if (ref == null || !ref.matches("[0-9a-f]{12}")) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "출입증 번호(ref)가 올바르지 않습니다");
+        List<AmrAuthToken> found = tokens.findByTokenHashStartingWith(ref);
+        if (found.size() != 1) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "해당 출입증이 없습니다");
+        AmrAuthToken t = found.get(0);
+        Long tokenHub = keys.findById(t.getKeyId()).map(AmrOtpKey::getHubId).orElse(null);
+        if (hub != null && !hub.equals(tokenHub)) throw new org.springframework.security.access.AccessDeniedException("소속 허브의 출입증만 폐기할 수 있습니다");
+        if (!t.isRevoked()) {
+            t.setRevoked(true); t.setRevokedAt(OffsetDateTime.now()); t.setRevokedBy(by); t.setRevokeReason("ADMIN_REVOKE");
+        }
+        amr.event(tokenHub == null ? access.defaultHubId() : tokenHub, null, "INFO", "AMR 출입증 폐기 " + ref + " (" + by + ")");
+    }
+
+    @Transactional
+    public int revokeAllTokens() {
+        Long hub = access.issuerHubId();
+        String by = access.actorName();
+        OffsetDateTime now = OffsetDateTime.now();
+        int n;
+        if (hub == null) {
+            n = jdbc.update("UPDATE amr_auth_tokens SET revoked = true, revoked_at = ?, revoked_by = ?, revoke_reason = 'ADMIN_REVOKE_ALL' WHERE revoked = false", now, by);
+        } else {
+            n = jdbc.update("UPDATE amr_auth_tokens SET revoked = true, revoked_at = ?, revoked_by = ?, revoke_reason = 'ADMIN_REVOKE_ALL' "
+                    + "WHERE revoked = false AND key_id IN (SELECT key_id FROM amr_otp_keys WHERE hub_id = ?)", now, by, hub);
+        }
+        amr.event(hub == null ? access.defaultHubId() : hub, null, "INFO", "AMR 출입증 전체 폐기 " + n + "건 (" + by + ")");
+        return n;
+    }
+
+    /** 코드 실패 기록 최근 50건 (실패 기록에는 허브 정보가 없어 ADMIN 만) */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> recentFailures() {
+        if (access.issuerHubId() != null) return List.of();
+        return jdbc.queryForList("SELECT failure_id AS \"failureId\", occurred_at AS \"occurredAt\", ip, user_agent AS \"userAgent\", reason "
+                + "FROM amr_auth_failures ORDER BY failure_id DESC LIMIT 50");
+    }
+
+    /** 26.10.21 (scargo_1): 전체 실패 한도 (여러 IP 로 나눠 시도하는 대입 공격 방어) */
+    private void checkGlobalLock(String ip, String ua) {
+        OffsetDateTime until = globalLockedUntil;
+        if (until != null && until.isAfter(OffsetDateTime.now())) {
+            auditFailure(ip, ua, "GLOBAL_LOCKED");
+            long sec = Duration.between(OffsetDateTime.now(), until).toSeconds() + 1;
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "실패가 많아 전체 코드 로그인이 잠겼습니다. " + sec + "초 뒤 다시 시도하세요");
+        }
+    }
+
+    private void countGlobal(String ip) {
+        OffsetDateTime now = OffsetDateTime.now();
+        globalFails.addLast(now);
+        while (!globalFails.isEmpty() && globalFails.peekFirst().isBefore(now.minus(GLOBAL_WINDOW))) globalFails.pollFirst();
+        if (globalFails.size() >= GLOBAL_MAX_FAIL) {
+            globalLockedUntil = now.plus(GLOBAL_LOCK); globalFails.clear();
+            amr.event(access.defaultHubId(), null, "WARN", "AMR 코드 로그인 전체 실패 " + GLOBAL_MAX_FAIL + "회/분 초과 · 전체 1분 잠금 (마지막 " + ip + ")");
+        }
+    }
+
+    /** 테스트용: 잠금 초기화 */
+    void resetGlobalForTest() { globalLockedUntil = null; globalFails.clear(); fails.clear(); }
 
     // ── 26.10.23 출입증 감사 조회 ──────────────────────────
     @Transactional(readOnly = true)

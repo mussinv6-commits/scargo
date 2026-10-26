@@ -4,7 +4,7 @@
    - JDK 17, PostgreSQL, Node.js(LTS), Python(conda), STS(또는 IntelliJ)
 
 2. DB (DB 이름은 scargo 하나만 씁니다)
-   - 가장 쉬운 방법: 최종파일 폴더의 setup_db.bat 더블클릭
+   - 가장 쉬운 방법: 최종파일\bat 폴더의 setup_db.bat 더블클릭
      · postgres 비밀번호를 입력하면 DB 생성 -> 설치 SQL -> 추가 SQL 순서로 자동 실행
      · 마지막에 "시연 데이터를 넣을까요?" 에서 y 를 누르면 최근 14일 운영 데이터가 들어갑니다
      · 예전 구조의 scargo DB 가 있으면 scargo_old_날짜 로 이름을 바꿔 두고 새로 만듭니다

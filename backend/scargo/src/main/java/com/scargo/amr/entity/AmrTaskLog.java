@@ -27,7 +27,7 @@ public class AmrTaskLog {
     private String robotCode;
 
     @Column(name = "task_type", length = 10, nullable = false)
-    private String taskType; // IN(입고 → 랙) / OUT(랙 → 택배차)
+    private String taskType; // IN(입고 → 랙) / OUT(랙 → 지선차량)
 
     @Column(name = "waybill_no", length = 30)
     private String waybillNo;

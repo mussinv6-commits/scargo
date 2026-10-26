@@ -1,0 +1,276 @@
+/* web.html(기획 목업) 스타일 그대로, .sc2 범위로 한정 */
+/* 사이트 공통 CSS(bootstrap·App.css 등)가 섞이지 않도록 브라우저 기본값으로 되돌린 뒤 목업 규칙만 적용 */
+.sc2,.sc2 :where(*:not(.nmap, .nmap *)){all:revert}
+.sc2 [hidden]{display:none}
+.sc2{text-align:left;line-height:normal;font-weight:400;letter-spacing:normal;width:100%}
+.sc2,.sc2 *{box-sizing:border-box}
+.sc2{margin:0;font-family:"Malgun Gothic","Noto Sans KR",system-ui,sans-serif;background:#f3f5f9;color:#1d2433;font-size:14px}
+.sc2 .app{display:flex;min-height:calc(100vh / var(--sc-zoom, 1))}
+.sc2 nav{width:232px;background:var(--color-primary);color:#cfd6e6;padding:16px 0;flex-shrink:0}
+.sc2 nav h1{font-size:18px;color:#fff;margin:0 20px 4px}
+.sc2 nav .sub{font-size:11px;margin:0 20px 16px;color:#8d98b3}
+.sc2 nav .grp{font-size:11px;color:#7d89a6;padding:12px 20px 4px}
+.sc2 nav a{display:block;padding:7px 20px;color:#cfd6e6;text-decoration:none;cursor:pointer;font-size:13px}
+.sc2 nav a:hover{background:rgba(255,255,255,.08)}
+.sc2 nav a.on{background:var(--color-gold);color:var(--color-primary);font-weight:700}
+.sc2 nav a.dis{opacity:.35;pointer-events:none}
+.sc2 main{flex:1;padding:0 28px 40px}
+.sc2 header{display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid #dde2ec;margin-bottom:18px}
+.sc2 header .t{font-size:20px;font-weight:700}
+.sc2 header .id{color:#fca311;font-weight:700;margin-right:8px}
+.sc2 .meta{font-size:12px;color:#6b7590}
+.sc2 .meta b{color:#1d2433}
+.sc2 select{padding:5px 8px;border:1px solid #c9d0de;border-radius:6px;font-family:inherit}
+.sc2 .grid{display:grid;gap:14px}
+.sc2 .g4{grid-template-columns:repeat(4,1fr)}
+.sc2 .g3{grid-template-columns:repeat(3,1fr)}
+.sc2 .g2{grid-template-columns:1fr 1fr}
+.sc2 .g5{grid-template-columns:repeat(5,1fr)}
+.sc2 .card{background:#fff;border-radius:10px;padding:16px;box-shadow:0 1px 3px rgba(20,33,61,.08)}
+.sc2 .card h3{margin:0 0 10px;font-size:14px}
+.sc2 .kpi .v{font-size:26px;font-weight:700}
+.sc2 .kpi .l{font-size:12px;color:#6b7590}
+.sc2 table{width:100%;border-collapse:collapse;font-size:13px}
+.sc2 th{text-align:left;color:#6b7590;font-weight:600;border-bottom:1px solid #e3e7ef;padding:7px 6px;background:#fafbfd}
+.sc2 td{border-bottom:1px solid #eef1f6;padding:7px 6px}
+.sc2 .b{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700}
+.sc2 .ok{background:#e3f6ea;color:#1b7a3d}
+.sc2 .warn{background:#fff1dc;color:#b45f00}
+.sc2 .crit{background:#fde4e4;color:#c62828}
+.sc2 .info{background:#e5edff;color:#2851c6}
+.sc2 .gray{background:#eceff4;color:#55607a}
+.sc2 .code{font-family:Consolas,monospace;font-size:11px;background:#eef1f6;padding:1px 5px;border-radius:4px;color:#3a4560}
+.sc2 .btn{border:0;border-radius:6px;padding:7px 14px;font-family:inherit;font-weight:600;cursor:pointer;background:#14213d;color:#fff}
+.sc2 .btn.o{background:#fff;color:#14213d;border:1px solid #c9d0de}
+.sc2 .btn.y{background:var(--color-gold);color:var(--color-primary)}
+.sc2 .btn.r{background:#c62828}
+.sc2 .site{border-left:6px solid;}
+.sc2 .site.ok{border-color:#2e9e5a}
+.sc2 .site.warn{border-color:#f08c00}
+.sc2 .site.crit{border-color:#d32f2f}
+.sc2 .dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px}
+.sc2 .note{font-size:12px;color:#6b7590;background:#fffbe8;border:1px dashed #e8c96a;padding:8px 12px;border-radius:8px;margin-top:14px}
+.sc2 .scr{display:none}
+.sc2 .scr.on{display:block}
+.sc2 .bar{height:8px;background:#eceff4;border-radius:4px;overflow:hidden}
+.sc2 .bar i{display:block;height:100%;background:#fca311}
+.sc2 .drop{border:2px dashed #b9c3d8;border-radius:10px;padding:28px;text-align:center;color:#6b7590;background:#fafbfd}
+.sc2 .tabs button{border:1px solid #c9d0de;background:#fff;padding:6px 16px;font-family:inherit;cursor:pointer}
+.sc2 .tabs button.on{background:#14213d;color:#fff}
+.sc2 .map{height:300px;background:linear-gradient(135deg,#e7eef9,#f6f8fc);border-radius:10px;position:relative}
+.sc2 .node{position:absolute;transform:translate(-50%,-50%);background:#fff;border:2px solid #14213d;border-radius:8px;padding:6px 10px;font-size:12px;font-weight:700;text-align:center}
+.sc2 .login{max-width:380px;margin:80px auto}
+.sc2 .login input{width:100%;padding:10px;margin:6px 0 12px;border:1px solid #c9d0de;border-radius:6px;font-family:inherit}
+.sc2 .fake{position:fixed;right:12px;bottom:10px;font-size:11px;background:#c62828;color:#fff;padding:4px 10px;border-radius:12px}
+.sc2 .port{display:inline-block;width:48px;text-align:center;margin:3px;font-size:11px}
+.sc2 nav a.router-link-active{}
+.sc2 .scr{display:block}
+.sc2 h1,.sc2 h2,.sc2 h3,.sc2 h4,.sc2 b,.sc2 strong{font-weight:700}
+
+/* ===== fix_1249: 전체 디자인 정리 (글자 크기·표 가운데 정렬·입력창·카드) ===== */
+.sc2{font-size:15px}
+.sc2 nav a{font-size:14.5px;padding:9px 20px}
+.sc2 nav .grp{font-size:12.5px}
+.sc2 header .t{font-size:22px}
+.sc2 .meta{font-size:13.5px}
+.sc2 .card{padding:18px 20px;border:1px solid #e6eaf2}
+.sc2 .card h3{font-size:16.5px;margin:0 0 12px;color:#102644;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.sc2 .card h3 .meta{font-weight:400}
+.sc2 table{font-size:14.5px}
+.sc2 th,.sc2 td{text-align:left;vertical-align:middle}
+/* fix_1434: 자유 텍스트는 왼쪽, 짧은 코드·상태·버튼만 있는 칸은 가운데 */
+.sc2 td:has(> .b:only-child),.sc2 td:has(> .code:only-child),.sc2 td:has(> .btn),.sc2 td.c,.sc2 th.c{text-align:center}
+.sc2 th{font-size:14px;color:#3d4863;background:#f3f5fa;padding:10px 8px;border-bottom:1px solid #dfe4ee;white-space:nowrap}
+.sc2 td{padding:10px 8px}
+.sc2 tr:hover td{background:#fafbfe}
+.sc2 td.meta,.sc2 .empty{text-align:center;color:#8a93a8;padding:22px 8px}
+.sc2 .b{font-size:12.5px;padding:3px 10px;line-height:1.35;white-space:nowrap}
+.sc2 .b.wrap2{white-space:normal;word-break:keep-all;max-width:max-content}
+.sc2 .code{font-size:12.5px}
+.sc2 .btn{font-size:14px;padding:8px 16px}
+.sc2 .kpi .v{font-size:30px}
+.sc2 .kpi .l{font-size:13.5px}
+.sc2 input:not([type=checkbox]):not([type=radio]):not([type=file]),.sc2 select,.sc2 textarea{font-family:inherit;font-size:14.5px;color:#1d2433;background:#fff;border:1px solid #cdd4e1;border-radius:8px;padding:8px 11px;outline:none;transition:border-color .15s,box-shadow .15s}
+.sc2 select{padding-right:30px;appearance:none;background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23556' stroke-width='1.6'/%3E%3C/svg%3E") no-repeat right 11px center}
+.sc2 input:focus,.sc2 select:focus,.sc2 textarea:focus{border-color:#102644;box-shadow:0 0 0 3px rgba(238,204,131,.45)}
+/* KPI 카드 (색·아이콘) */
+.sc2 .kc{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:4px;padding:20px 14px;border-top:4px solid var(--kc,#102644);position:relative}
+.sc2 .kc .ic{width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;background:var(--kb,#e8edf6);color:var(--kc,#102644);margin-bottom:4px}
+.sc2 .kc .v{font-size:32px;font-weight:800;color:var(--kc,#102644);line-height:1.1}
+.sc2 .kc .l{font-size:14px;color:#4a5570;font-weight:600}
+.sc2 .kc .s{font-size:12.5px;color:#7a849b}
+.sc2 .k-navy{--kc:#102644;--kb:#e6ebf4}.sc2 .k-blue{--kc:#2851c6;--kb:#e5edff}.sc2 .k-red{--kc:#c62828;--kb:#fde4e4}.sc2 .k-amber{--kc:#b45f00;--kb:#fff1dc}.sc2 .k-green{--kc:#1b7a3d;--kb:#e3f6ea}.sc2 .k-gold{--kc:#8a6a1f;--kb:#fbf1da}
+/* 범례 */
+.sc2 .legend{display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center;background:#fff;border:1px solid #e6eaf2;border-radius:10px;padding:12px 18px;margin-top:14px;font-size:13.5px;color:#4a5570}
+.sc2 .legend .lt{font-weight:700;color:#102644}
+.sc2 .legend .chip{display:inline-flex;align-items:center;gap:8px}
+.sc2 .legend .chip i{width:14px;height:14px;border-radius:4px;display:inline-block}
+.sc2 .legend .chip b{color:#1d2433}
+/* 모달·토스트 */
+.sc2 .mdl-bg{position:fixed;inset:0;background:rgba(16,38,68,.45);display:flex;align-items:center;justify-content:center;z-index:2000}
+.sc2 .mdl{background:#fff;border-radius:14px;width:440px;max-width:92vw;box-shadow:0 18px 50px rgba(16,38,68,.3);overflow:hidden}
+.sc2 .mdl .mh{background:#102644;color:#fff;padding:14px 20px;font-size:16.5px;font-weight:700}
+.sc2 .mdl .mb{padding:18px 20px;display:flex;flex-direction:column;gap:10px}
+.sc2 .mdl textarea{width:100%;min-height:96px;resize:vertical}
+.sc2 .mdl .mf{display:flex;justify-content:flex-end;gap:8px;padding:12px 20px 18px}
+.sc2 .mdl .err{color:#c62828;font-size:13.5px}
+.sc2 .toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:#102644;color:#fff;padding:11px 22px;border-radius:24px;font-size:14.5px;z-index:2100;box-shadow:0 8px 24px rgba(0,0,0,.2)}
+.sc2 .toast.bad{background:#c62828}
+/* 지도 */
+.sc2 .nmap{height:520px;border-radius:10px;overflow:hidden;border:1px solid #e3e7ef}
+.sc2 .net{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+.sc2 .net > .full{grid-column:1 / -1}
+/* 허브 관제 5개 영역 카드 머리 */
+.sc2 .card.hb{border-top:4px solid var(--kc)}
+.sc2 .card.hb h3 .hi{width:32px;height:32px;border-radius:50%;background:var(--kb);color:var(--kc);display:inline-flex;align-items:center;justify-content:center;font-size:16px}
+/* 입력 폼 표: 라벨 오른쪽 정렬, 값 왼쪽 */
+.sc2 table.form td:first-child{text-align:right;color:#4a5570;font-weight:600;width:38%;white-space:nowrap}
+.sc2 table.form td:last-child{text-align:left}
+.sc2 table.form tr:hover td{background:none}
+
+/* fix_1434: 모든 표 맨 앞 '번호' 칸 (CSS 카운터, 머리행 있는 표만, 입력 폼 표·빈 행 제외) */
+.sc2 table:has(th):not(.form):not(.nonum){counter-reset:rn}
+.sc2 table:has(th):not(.form):not(.nonum) tr::before{display:table-cell;vertical-align:middle;text-align:center;width:3.2em;padding:10px 6px;border-bottom:1px solid #eef1f6;color:#6b7590;font-size:13px}
+.sc2 table:has(th):not(.form):not(.nonum) tr:has(> th)::before{content:'번호';background:#f3f5fa;color:#3d4863;font-weight:600;font-size:14px;border-bottom:1px solid #dfe4ee}
+.sc2 table:has(th):not(.form):not(.nonum) tr:has(> td):not(:has(> td.meta[colspan]))::before{counter-increment:rn;content:counter(rn)}
+.sc2 table:has(th):not(.form):not(.nonum) tr:has(> td.meta[colspan])::before{content:''}
+/* fix_1434: 대시보드 한 화면 맞춤 (노트북 전체화면에서 세로 스크롤 없음) */
+.sc2 .dash{display:flex;flex-direction:column;gap:12px;height:calc(100vh / var(--sc-zoom, 1) - 212px);min-height:440px}
+.sc2 .dash > *{flex-shrink:0;margin:0 !important}
+.sc2 .dash .kc{flex-direction:row;gap:14px;padding:12px 16px;justify-content:flex-start;text-align:left}
+.sc2 .dash .kc .ic{margin:0;width:42px;height:42px;font-size:20px}
+.sc2 .dash .kc .v{font-size:26px}
+.sc2 .dash .kc .tx{display:flex;flex-direction:column}
+.sc2 .dash .site{padding:10px 14px}
+.sc2 .dash .bottom{flex:1 1 auto;min-height:0;display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.sc2 .dash .bottom .card{min-height:0;overflow:auto;padding:12px 16px}
+.sc2 .dash .legend{padding:8px 14px}
+.sc2 .dash td,.sc2 .dash th,.sc2 .dash tr::before{padding-top:7px !important;padding-bottom:7px !important}
+.sc2 .dash h3.sec{margin:0;font-size:15.5px}
+/* fix_1434: 운송오더 반납 작업 묶음 카드 */
+.sc2 .acts{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-content:start}
+.sc2 .act{border:1px solid #e3e7ef;border-radius:10px;padding:12px 14px;background:#fbfcfe;display:flex;flex-direction:column;gap:8px}
+.sc2 .act:first-child{grid-column:1 / -1}
+.sc2 .act h4{margin:0;font-size:15px;color:#102644;display:flex;align-items:center;gap:6px}
+.sc2 .act.danger{border-color:#f3c9c9;background:#fff8f8}
+.sc2 .act.danger h4{color:#c62828}
+.sc2 .act .ab{display:flex;gap:8px;align-items:center}
+.sc2 .act select{max-width:100%}
+/* fix_1434: 페이지 나누기 */
+.sc2 .pager{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:10px}
+.sc2 .pager .pg{min-width:34px;height:32px;padding:0 10px;border:1px solid #cdd4e1;background:#fff;color:#102644;border-radius:8px;font-family:inherit;font-size:13.5px;cursor:pointer}
+.sc2 .pager .pg.on{background:#102644;color:#fff;border-color:#102644;font-weight:700}
+.sc2 .pager .pg:disabled{opacity:.4;cursor:default}
+.sc2 .pager .meta{margin-left:8px}
+/* fix_1434: 허브·센터 관제 세로 패널 */
+.sc2 .panels{display:flex;flex-direction:column;gap:14px}
+.sc2 .panels .card h3{border-bottom:1px solid #eef1f6;padding-bottom:10px}
+.sc2 .panels .sub2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.sc2 .app{min-height:calc(100vh / var(--sc-zoom, 1) - 60px)} /* fix_1434: 상단 메인 헤더(60px) 만큼 빼서 빈 스크롤 방지 */
+/* fix_1434: 공통 입력 컨트롤 크기 통일 (높이 38px, 폼 표 안에서는 칸 너비 100%) */
+.sc2 input:not([type=checkbox]):not([type=radio]):not([type=file]),.sc2 select{height:38px;min-width:0}
+.sc2 table.form input:not([type=checkbox]):not([type=radio]):not([type=file]),.sc2 table.form select,.sc2 .frow select,.sc2 .frow input{width:100%;max-width:340px}
+.sc2 table.form td{padding:6px 8px;border-bottom:0}
+.sc2 table.form td:first-child{width:150px}
+.sc2 .frow{display:flex;align-items:center;gap:10px}
+.sc2 .frow label{width:80px;flex:0 0 auto;font-weight:600;color:#4a5570;text-align:right}
+.sc2 .frow select{max-width:none;flex:1}
+/* 배차 확정: 2열 컴팩트 폼 */
+.sc2 table.form.two tbody{display:grid;grid-template-columns:1fr 1fr;column-gap:18px}
+.sc2 table.form.two tr{display:grid;grid-template-columns:120px 1fr;align-items:center}
+.sc2 table.form.two td:first-child{width:auto}
+.sc2 table.form.two input,.sc2 table.form.two select{max-width:none}
+.sc2 .fbtns{display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap}
+.sc2 table.form.two{display:grid;grid-template-columns:1fr 1fr;column-gap:18px}
+.sc2 table.form.two > tbody{display:contents}
+.sc2 table.form.two input:not([type=checkbox]):not([type=radio]):not([type=file]),.sc2 table.form.two select{max-width:none;width:100%}
+.sc2 table.form input[type=number],.sc2 table.form input[type=datetime-local]{max-width:340px}
+.sc2 table.form.two input[type=number],.sc2 table.form.two input[type=datetime-local]{max-width:none}
+/* ===== fix_1750 ===== */
+.sc2 th,.sc2 th.c{text-align:center !important}
+.sc2 nav{padding-top:10px}
+/* 대시보드 하단 카드: 스크롤바 없음, 행 압축 */
+.sc2 .dash .bottom .card{overflow:hidden}
+.sc2 .dash .bottom td,.sc2 .dash .bottom th,.sc2 .dash .bottom tr::before{padding-top:5px !important;padding-bottom:5px !important}
+.sc2 .dash .bottom .pager{margin-top:6px}
+.sc2 .dash .bottom .b{display:inline-block;width:auto;max-width:none}
+/* 네트워크 관제: 거점·운행 차량 박스 같은 크기 */
+.sc2 .net{align-items:stretch}
+.sc2 .net .card.eq{display:flex;flex-direction:column;min-height:400px}
+.sc2 .net .card.eq .pager{margin-top:auto;padding-top:10px}
+/* 기준정보 */
+.sc2 .setw{display:inline-block;min-width:420px}
+.sc2 .setw table{width:auto;min-width:100%}
+.sc2 .setw td:first-child{padding-right:28px}
+.sc2 .savebar{display:flex;justify-content:center;align-items:center;gap:10px;margin-top:16px}
+/* 운송오더: 입력창·드롭다운 작게 */
+.sc2 .w07 input:not([type=checkbox]):not([type=radio]):not([type=file]),.sc2 .w07 select{height:34px;font-size:14px;padding-top:5px;padding-bottom:5px}
+.sc2 .w07 table.form input:not([type=checkbox]):not([type=radio]):not([type=file]),.sc2 .w07 table.form select,.sc2 .w07 table.form input[type=datetime-local]{max-width:240px}
+.sc2 .w07 .act select{max-width:240px}
+.sc2 .w07 .ab.cen{justify-content:center}
+.sc2 .w07 h3.hist{font-size:16.5px;font-weight:700;color:#102644;margin:0 0 12px}
+/* 톨게이트: 예상 통행료·통과 확정 하단 바 */
+.sc2 .tollbar{display:flex;align-items:center;gap:12px;margin-top:14px;padding:12px 16px;border:1px solid #e6eaf2;border-radius:10px;background:#fbf7ec}
+.sc2 .tollbar .fare{display:flex;align-items:baseline;gap:10px;margin-right:auto}
+.sc2 .tollbar .fare .l{color:#4a5570;font-weight:600}
+.sc2 .tollbar .fare .v{font-size:22px;font-weight:800;color:#102644}
+/* 허브 관제 2열 */
+.sc2 .hubp .sub2{align-items:start}
+/* 지역센터: 최근 운행 진행 단계 가로 */
+.sc2 .steps{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.sc2 .steps .st{border:1px solid #e3e7ef;border-radius:8px;padding:8px 10px;text-align:center;display:flex;flex-direction:column;gap:2px;font-size:13.5px;color:#8a93a8}
+.sc2 .steps .st.done{border-color:#102644;color:#1d2433;background:#f3f6fb}
+.sc2 .steps .st b{color:#102644}
+/* fix_1810: 지선 배차 관리 입력창·드롭다운 작게, 버튼 가운데 */
+.sc2 .w08 input:not([type=checkbox]):not([type=radio]):not([type=file]),.sc2 .w08 select{height:34px;font-size:14px;padding-top:5px;padding-bottom:5px}
+.sc2 .w08 table.form input:not([type=checkbox]):not([type=radio]):not([type=file]),.sc2 .w08 table.form select,.sc2 .w08 table.form.two input:not([type=checkbox]):not([type=radio]):not([type=file]),.sc2 .w08 table.form.two select,.sc2 .w08 table.form input[type=number],.sc2 .w08 table.form input[type=datetime-local]{width:100%;max-width:240px}
+.sc2 .w08 td select{max-width:240px}
+.sc2 .w08 .fbtns.cen{justify-content:center}
+/* ===== fix_1830: 표 내용도 머리 칸과 같이 가운데 정렬 ===== */
+.sc2 td{text-align:center}
+.sc2 td{word-break:keep-all}
+.sc2 table.form td:first-child{text-align:right}
+.sc2 table.form td:last-child{text-align:left}
+/* 입력창·드롭다운 공통 컴팩트 크기 */
+.sc2 input:not([type=checkbox]):not([type=radio]):not([type=file]),.sc2 select{height:34px;font-size:14px;padding-top:5px;padding-bottom:5px}
+.sc2 table.form input:not([type=checkbox]):not([type=radio]):not([type=file]),.sc2 table.form select,.sc2 table.form input[type=number],.sc2 table.form input[type=datetime-local],.sc2 table.form.two input:not([type=checkbox]):not([type=radio]):not([type=file]),.sc2 table.form.two select{width:100%;max-width:240px}
+.sc2 .fbtns{justify-content:center}
+/* 대시보드: 위쪽 압축, 하단 카드 크게 (스크롤 없음) */
+.sc2 .dash{gap:10px}
+.sc2 .dash .kc{padding:8px 14px;gap:12px}
+.sc2 .dash .kc .ic{width:36px;height:36px;font-size:17px}
+.sc2 .dash .kc .v{font-size:22px}
+.sc2 .dash .kc .l{font-size:13px}
+.sc2 .dash .kc .s{font-size:11.5px}
+.sc2 .dash .site{padding:7px 12px}
+.sc2 .dash .site .meta{margin-top:3px !important;font-size:12.5px}
+.sc2 .dash .legend{padding:6px 12px;font-size:12.5px;gap:6px 16px}
+.sc2 .dash .bottom .card h3{margin-bottom:8px}
+.sc2 .dash .bottom td,.sc2 .dash .bottom th,.sc2 .dash .bottom tr::before{padding-top:5px !important;padding-bottom:5px !important}
+.sc2 .dash .bottom td{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px}
+.sc2 .dash .bottom table{table-layout:auto}
+/* ===== fix_1130 ===== */
+/* 왼쪽 메뉴 고정 (본문만 스크롤) */
+.sc2 .app{align-items:flex-start}
+.sc2 nav{position:sticky;top:var(--nav-h,60px);height:calc(100vh / var(--sc-zoom, 1) - var(--nav-h, 60px));overflow-y:auto;scrollbar-width:none}
+.sc2 nav::-webkit-scrollbar{display:none}
+.sc2 main{padding-bottom:16px;min-width:0}
+.sc2 td.l{text-align:left}
+/* 허브 관제 */
+.sc2 h4.subh{margin:4px 0 8px;font-size:15px;font-weight:800;color:#102644;display:flex;align-items:center;gap:6px}
+.sc2 h4.subh .meta{font-weight:400;font-size:12.5px}
+.sc2 .cbars{display:flex;flex-direction:column;gap:8px}
+.sc2 .cbar{display:grid;grid-template-columns:110px 1fr 56px;align-items:center;gap:10px;font-size:14px}
+.sc2 .cbar .bar{height:10px}
+.sc2 .cbar .bar i{background:#C9962E}
+.sc2 .cbar b{text-align:right}
+.sc2 .hubp h4.subh{margin-top:14px}
+.sc2 .hubp .grid.g2 h4.subh{margin-top:0}
+/* 기준정보 3열 */
+.sc2 .setg{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.sc2 .setc{border:1px solid #e3e7ef;border-radius:10px;padding:14px 16px;background:#fbfcfe;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center}
+.sc2 .setc .sl{font-weight:700;color:#102644}
+.sc2 .setc .sv{display:flex;align-items:center;gap:6px}
+/* 톨게이트 예상 통행료 가운데 */
+.sc2 .tollbar{flex-direction:column;justify-content:center}
+.sc2 .tollbar .fare{margin:0;justify-content:center}

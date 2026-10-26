@@ -23,10 +23,35 @@ export const ADMIN_MENU = {
     { to: '/admin/gate-ocr', label: '게이트 OCR 검사', icon: 'bi-upc-scan', img: dashIcons.sidebar.검문소관리 }, // 26.10.01: 상단 메뉴에서 이동
     { to: '/admin/weighbridge', label: '검사소 계량', icon: 'bi-truck-front', img: dashIcons.sidebar.과적검사관리 }, // 26.10.01 추가
     { to: '/admin/overload-checks', label: '과적 검사 관리', icon: 'bi-speedometer', img: dashIcons.sidebar.과적검사관리 },
+    { to: '/admin/gate-seal', label: '게이트 OCR · 씰 확인', icon: 'bi-upc-scan', img: dashIcons.sidebar.검문소관리 }, // 26.10.26 S-Bot 에서 이동
+    { to: '/admin/arrivals', label: '도착 · 점검', icon: 'bi-clipboard-check', img: dashIcons.sidebar.적재기록조회 },
+    { to: '/admin/move', label: '택배 이동', icon: 'bi-truck', img: dashIcons.sidebar.차량관리 },
+    { to: '/admin/center', label: '물류센터 관제', icon: 'bi-buildings', img: dashIcons.sidebar.야드관리 },
     { to: '/admin/gates', label: '검문소 관리', icon: 'bi-shield-check', img: dashIcons.sidebar.검문소관리 },
+  ],
+  // 26.10.26 통합 관제(/w) 사이드바를 카르고 관리자 메뉴 형식으로 추가 (총관리자는 전부 열림)
+  tower: [
+    { to: '/w/W-02', label: '관제 현황', icon: 'bi-speedometer' },
+    { to: '/w/W-03', label: '네트워크 관제', icon: 'bi-diagram-3' },
+    { to: '/w/W-09', label: '예외 알림 센터', icon: 'bi-bell' },
+    { to: '/w/W-15', label: '차량 점검표', icon: 'bi-clipboard-check' },
+    { to: '/w/W-16', label: '직원관리', icon: 'bi-people' },
+    { to: '/w/W-10', label: '기사 가입 승인', icon: 'bi-person-check' },
+    { to: '/w/W-11', label: '기준정보', icon: 'bi-sliders' },
+  ],
+  port: [
+    { to: '/w/W-07', label: '운송오더·물품 관리', icon: 'bi-boxes' },
+    { to: '/w/W-12', label: '톨게이트', icon: 'bi-signpost' },
+    { to: '/w/W-13', label: '검문소', icon: 'bi-shield-check' },
+  ],
+  hubc: [
+    { to: '/w/W-04', label: '허브 관제', icon: 'bi-hdd-network' },
+    { to: '/w/W-05', label: '지역센터 관제', icon: 'bi-buildings' },
+    { to: '/w/W-08', label: '지선 배차 관리', icon: 'bi-truck-front' },
   ],
   notice: [
     { to: '/admin/notices', label: '공지사항', icon: 'bi-megaphone', img: dashIcons.sidebar.적재기록조회 },
+    { to: '/admin/menu-guide', label: '메뉴 안내', icon: 'bi-signpost-split', img: dashIcons.sidebar.적재기록조회 }, // 26.10.26 사이드바 전체 구성을 펼쳐서 보여 주는 화면
   ],
 }
 
@@ -35,5 +60,8 @@ export const ADMIN_MENU_FLAT = [
   ...ADMIN_MENU.vehicle,
   ...ADMIN_MENU.yard,
   ...ADMIN_MENU.etc,
+  ...ADMIN_MENU.tower,
+  ...ADMIN_MENU.port,
+  ...ADMIN_MENU.hubc,
   ...ADMIN_MENU.notice,
 ]

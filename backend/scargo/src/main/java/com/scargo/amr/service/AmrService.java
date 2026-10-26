@@ -3,6 +3,8 @@ package com.scargo.amr.service;
 import com.scargo.amr.dto.AmrDtos.*;
 import com.scargo.amr.entity.*;
 import com.scargo.amr.repository.*;
+import com.scargo.app.entity.Hub; // 통합: amr.entity.Hub → app.entity.Hub (같은 hubs 테이블)
+import com.scargo.app.repository.HubRepository;
 import com.scargo.amr.security.AmrAccessPolicy;
 import com.scargo.amr.security.AmrAccessPolicy.Access;
 import lombok.RequiredArgsConstructor;

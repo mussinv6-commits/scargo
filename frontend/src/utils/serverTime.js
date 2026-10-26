@@ -12,3 +12,11 @@ export function toDate(v) {
   }
   return new Date(v)
 }
+
+// fix_1630 (scargo_1): YYYY-MM-DD [HH:mm] (기존 fmtDate 문자열 형식과 동일)
+const p2 = (n) => String(n).padStart(2, '0')
+export function ymd(t, withTime = false) {
+  const d = toDate(t); if (!d || isNaN(d)) return ''
+  const s = d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate())
+  return withTime ? s + ' ' + p2(d.getHours()) + ':' + p2(d.getMinutes()) : s
+}

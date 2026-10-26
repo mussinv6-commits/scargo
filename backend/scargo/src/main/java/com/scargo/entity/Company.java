@@ -44,6 +44,23 @@ public class Company {
     @Column(name = "representative_name", length = 50)
     private String representativeName; // 대표자명
 
+    // 26.10.20 2차 추가: 운송사 여부. TRUE 인 회사의 CORPORATE_APPROVED 계정 = 운송사 담당자 (W-07·W-08·W-10)
+    @Column(name = "is_carrier", nullable = false)
+    private Boolean isCarrier = false;
+
+    // 26.10.20 최종: 운송사 승인은 회사 단위 (is_carrier 일 때만 값이 있다)
+    @Column(name = "approval_status", length = 20)
+    private String approvalStatus;          // PENDING | APPROVED | REJECTED
+
+    @Column(name = "approved_at")
+    private OffsetDateTime approvedAt;
+
+    @Column(name = "approved_by_account_id")
+    private Long approvedByAccountId;       // FK accounts ON DELETE SET NULL
+
+    @Column(name = "reject_reason", columnDefinition = "TEXT")
+    private String rejectReason;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private OffsetDateTime createdAt; // 등록 일시 (타임존 포함)
@@ -56,6 +73,30 @@ public class Company {
         this.industryType = industryType;
         this.representativeName = representativeName;
     }
+
+    // 26.10.20 운송사 등록·승인 (CHECK: APPROVED 면 approved_at, REJECTED 면 reject_reason 필수)
+    public void markCarrierPending() { this.isCarrier = true; if (this.approvalStatus == null) this.approvalStatus = "PENDING"; }
+    public void approveCarrier(Long adminAccountId) {
+        if (!Boolean.TRUE.equals(isCarrier)) throw new IllegalStateException("운송사가 아닌 업체입니다.");
+        this.approvalStatus = "APPROVED"; this.approvedAt = OffsetDateTime.now(); this.approvedByAccountId = adminAccountId; this.rejectReason = null;
+    }
+    public void rejectCarrier(String reason) {
+        if (!Boolean.TRUE.equals(isCarrier)) throw new IllegalStateException("운송사가 아닌 업체입니다.");
+        if (reason == null || reason.isBlank()) throw new IllegalArgumentException("반려 사유를 입력하세요.");
+        this.approvalStatus = "REJECTED"; this.rejectReason = reason.trim(); this.approvedAt = null; this.approvedByAccountId = null;
+    }
+
+    // fix_1330: 가입 화면에서 새로 만든 업체는 승인 대기 (운송사 여부와 무관). 관리자 승인 전에는 목록·선택에 안 나옴
+    public void markSignupPending() { this.approvalStatus = "PENDING"; this.approvedAt = null; this.approvedByAccountId = null; }
+    public void approve(Long adminAccountId) {
+        this.approvalStatus = "APPROVED"; this.approvedAt = OffsetDateTime.now(); this.approvedByAccountId = adminAccountId; this.rejectReason = null;
+    }
+    public void reject(String reason) {
+        if (reason == null || reason.isBlank()) throw new IllegalArgumentException("반려 사유를 입력하세요.");
+        this.approvalStatus = "REJECTED"; this.rejectReason = reason.trim(); this.approvedAt = null; this.approvedByAccountId = null;
+    }
+    /** 승인 대기·반려 업체는 쓸 수 없음 (approval_status NULL = 승인 절차 없는 기존 화주 업체) */
+    public boolean usable() { return approvalStatus == null || "APPROVED".equals(approvalStatus); }
 
     // 비즈니스 메서드: 정보 수정 로직
     public void update(String companyName, String address, String businessNo, String industryType, String representativeName) {

@@ -1,0 +1,21 @@
+/* 26.10.21 v7: 컨트롤타워·그룹 랜딩용 변수만 (팀 색상 theme.css 는 그대로 유지) */
+:root {
+  --sg-navy-900: #0b1626;
+  --sg-navy-800: #0f1d33;
+  --sg-navy-700: #16263f;
+  --sg-navy-600: #213452;
+  --sg-gold-500: #c9a96e;
+  --sg-gold-400: #dcc293;
+  --sg-gold-300: #ead8b4;
+  --sg-gold-600: #a8834a;
+  --sg-gold-700: #8c6c3b;
+  --sg-stone-50: #f6f5f1;
+  --sg-stone-100: #efede7;
+  --sg-stone-200: #e2dfd6;
+  --sg-stone-300: #cdc9bd;
+  --sg-ink: #1a1f27;
+  --sg-ink-sub: #5a606a;
+  --sg-ink-faint: #8b9099;
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px;
+  --sp-5: 24px; --sp-6: 32px; --sp-7: 48px; --sp-8: 64px; --sp-9: 96px;
+}

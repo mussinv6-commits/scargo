@@ -3,10 +3,10 @@
        숫자는 예시 데이터(DB 연결은 다음 단계). 3D 화면은 각 화면에서 따로 띄운다. -->
   <div class="sbd">
     <!-- 26.10.25 추가: 맨 위 한 줄 요약 -->
-    <div class="sumline">오늘 허브 처리 <b>{{ kpis[2].v }}</b> · AMR 가동 <b>{{ kpis[1].v }}</b> · 운송 중 <b>{{ inTransitN }}대</b><template v-if="downN"> · 정비·충전 중 <em>AMR {{ downN }}대</em></template></div>
+    <div class="sumline">오늘 허브 처리 <b>{{ kpis[2].v }}</b> · AMR 가동 <b>{{ kpis[1].v }}</b><template v-if="downN"> · 정비·충전 중 <em>AMR {{ downN }}대</em></template></div>
     <!-- 26.10.25 추가: 경보 알림(누르면 해당 화면) · 센터 필터 · CSV -->
     <div class="alerts" v-if="alerts.length"><span class="al-t">⚠ 확인 필요</span><RouterLink v-for="a in alerts" :key="a.k" :to="a.to" class="al" :class="a.lv">{{ a.t }}</RouterLink></div>
-    <div class="tools">
+    <div class="tools" v-if="false">
       <span class="tl">센터</span><button v-for="f in FILTERS" :key="f.q" type="button" :class="{ on: fc === f.q }" @click="fc = f.q">{{ f.n }}</button>
       <button type="button" class="csv" @click="exportCsv">⭳ 운영 현황 보고서(엑셀)</button>
       <button type="button" class="csv" @click="exportXlsx">⭳ 통행료 정산 보고서(엑셀)</button>
@@ -16,15 +16,15 @@
       <div v-for="k in kpis" :key="k.t" class="kpi"><small>{{ k.t }}</small><b>{{ k.v }}</b></div>
     </div>
 
-    <div class="flow">
-      <span class="flow-t">운송 흐름</span>
-      <RouterLink v-for="(f, i) in flow" :key="f.t" :to="f.to" class="chip">{{ f.t }}<i v-if="i < flow.length - 1" class="ar">→</i></RouterLink>
+    <div class="flow" style="border-radius:10px">
+      <span class="flow-t">AMR 작동 내역</span>
+      
       <span class="spd">배속<button v-for="x in [1, 2, 4, 8]" :key="x" type="button" :class="{ on: speed === x }" @click="setSpeed(x)">{{ x }}×</button></span>
       <span class="flow-h"><i class="dot" :class="hasDb || sbotDb ? 'on' : 'off'"></i>{{ statusText }}</span>
     </div>
 
-    <div class="grid">
-      <section class="card scene">
+    <div class="grid" style="grid-template-columns:1fr">
+      <section class="card scene" v-if="false">
         <h3 class="ctr">허브 → 물류센터 운송 현황 <small class="dim">건물을 누르면 해당 센터 관제</small></h3>
         <svg viewBox="0 0 330 280" role="img" aria-label="허브와 물류센터 위치">
           <defs>
@@ -93,7 +93,7 @@
             </div>
           </div>
         </section>
-        <section class="card">
+        <section class="card" v-if="false">
           <h3 class="ctr">센터 운송 현황</h3>
           <svg viewBox="0 0 400 118" class="chart">
             <g v-for="(c, j) in CATL" :key="'k' + j"><rect :x="40 + j * 62" y="4" width="8" height="8" rx="1" :fill="CATC[j]"/><text :x="52 + j * 62" y="11.5" class="tx dim">{{ c }}</text></g>
@@ -112,10 +112,8 @@
       </div>
     </div>
 
-    <div class="btns">
+    <div class="btns" style="grid-template-columns:1fr">
       <RouterLink to="/sbot/hub" class="btn"><b>허브 관제 →</b><span>AMR 실시간 위치 · 작업 지시</span></RouterLink>
-      <RouterLink to="/sbot/move" class="btn"><b>택배 이동 →</b><span>톨게이트 통과 · 통행료 정산</span></RouterLink>
-      <RouterLink to="/sbot/center" class="btn"><b>물류센터 관제 →</b><span>센터별 입고 · 택배차 · 통행료</span></RouterLink>
     </div>
 
   </div>
@@ -210,7 +208,6 @@ const alerts = computed(() => {
   const out = [];
   amrRows.value.filter((r) => r.cls === "fault").forEach((r) => out.push({ k: "f" + r.code, t: r.code + " 정비 중", to: "/sbot/hub", lv: "bad" }));
   amrRows.value.filter((r) => r.cls === "chg").forEach((r) => out.push({ k: "c" + r.code, t: r.code + " 충전 중", to: "/sbot/hub", lv: "warn" }));
-  transport.value.filter((t) => t.transit.length >= 5).forEach((t) => out.push({ k: "t" + t.q, t: t.n + "센터 운송 중 " + t.transit.length + "대", to: "/sbot/center?c=" + t.q, lv: "warn" }));
   if (!online.value) out.push({ k: "off", t: "서버 연결 확인 필요 (시뮬레이션 값)", to: "/sbot", lv: "warn" });
   return out;
 });
