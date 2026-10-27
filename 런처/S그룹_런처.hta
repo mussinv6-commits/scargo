@@ -1,0 +1,274 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="x-ua-compatible" content="ie=edge">
+<title>S Group 통합 실행</title>
+<HTA:APPLICATION ID="sg" APPLICATIONNAME="SGroupLauncher" BORDER="thin" CAPTION="yes" MAXIMIZEBUTTON="no" MINIMIZEBUTTON="yes" SCROLL="no" SINGLEINSTANCE="yes" SYSMENU="yes" ICON="sgroup.ico" />
+<style>
+html,body{margin:0;padding:0;background:#0f2447;font-family:"Malgun Gothic","맑은 고딕",sans-serif;color:#e8eef8;overflow:hidden;-ms-user-select:none;user-select:none}
+.body{padding:26px 34px 22px;text-align:center}
+.logo{width:92px;height:92px;display:block;margin:0 auto 6px}
+h1{margin:4px 0 2px;font-size:25px;font-weight:bold}
+.sub{color:#cfe0ff;font-size:15px;height:22px;margin-bottom:6px;opacity:1;-ms-transition:opacity .45s;transition:opacity .45s}
+.sub.off{opacity:0}
+.dots{height:7px;margin-bottom:16px}
+.dots i{display:inline-block;width:7px;height:7px;border-radius:50%;background:#36507f;margin:0 3px}
+.dots i.on{background:#6fb0ff}
+.card{background:#162f5c;border-radius:10px;padding:8px 16px;text-align:left;font-size:15px}
+.row{height:36px;line-height:36px;border-bottom:1px solid #24427a;overflow:hidden}
+.row.last{border-bottom:0}
+.row .nm{float:left}
+.row .st{float:right;font-size:13px;color:#9db1d1}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:10px;background:#6b7d9c}
+.d-up{background:#35d07f}.d-go{background:#ffb020}.d-fail{background:#ff5a5a}.d-skip{background:#6b7d9c}
+.t-up{color:#35d07f!important}.t-go{color:#ffb020!important}.t-fail{color:#ff7a7a!important}
+.bar{height:10px;background:#0a1a36;border-radius:6px;margin:16px 0 8px;overflow:hidden}
+.bar i{display:block;height:10px;width:0;background:#2f9bff;border-radius:6px;-ms-transition:width .6s;transition:width .6s}
+.note{font-size:13.5px;color:#c4d2ea;line-height:1.6;height:44px}
+.btns{margin-top:14px;overflow:hidden}
+.btn{float:left;width:48%;padding:13px 0;border-radius:8px;font-size:17px;font-weight:bold;cursor:pointer;text-align:center}
+.go{background:#2f7bff;color:#fff;margin-right:4%}
+.stop{background:#33425f;color:#cdd8ea}
+.dis{opacity:.45;cursor:default}
+.web{margin-top:10px;font-size:13px;color:#7fb2ff;height:18px}
+</style>
+</head>
+<body>
+<div class="body">
+  <img class="logo" src="logo.png">
+  <h1>S Group 통합 실행</h1>
+  <div class="sub" id="sub"></div>
+  <div class="dots" id="dots"><i></i><i></i><i></i></div>
+  <div class="card" id="card"></div>
+  <div class="bar"><i id="bar"></i></div>
+  <div class="note" id="note"></div>
+  <div class="btns"><div class="btn go" id="bgo" onclick="doStart()">▶ 실행</div><div class="btn stop" id="bstop" onclick="doStop()">■ 종료</div></div>
+  <div class="web" id="web"></div>
+</div>
+
+<script language="JavaScript">
+// ===== 기본 준비 ===========================================================
+var sh = new ActiveXObject("WScript.Shell");
+var fso = new ActiveXObject("Scripting.FileSystemObject");
+
+function findHere() {
+  var p = "";
+  try { p = decodeURIComponent(location.pathname).replace(/^[\/\\]/, "").replace(/\//g, "\\"); } catch (e) {}
+  if (p && fso.FileExists(p)) return fso.GetParentFolderName(p);
+  try {
+    var m = String(sg.commandLine).match(/"[^"]*"\s+"([^"]+)"/);
+    if (m && fso.FileExists(m[1])) return fso.GetParentFolderName(m[1]);
+  } catch (e2) {}
+  return fso.GetParentFolderName(p);
+}
+var HERE = findHere();
+var ROOT = fso.GetParentFolderName(HERE);
+var LOGS = HERE + "\\logs";
+try { if (!fso.FolderExists(LOGS)) fso.CreateFolder(LOGS); } catch (e3) {}
+
+var PHRASES = [
+  "S Group 통합 시스템에 오신 것을 환영합니다",
+  "안전한 물류, 스마트한 이동",
+  "시스템을 켜는 중입니다. 잠시만 기다려 주세요"
+];
+
+var SV = [
+  { key: "be",   name: "백엔드",    port: 8080, url: "http://127.0.0.1:8080/api/amr/kpi", timeout: 300 },
+  { key: "ocr",  name: "OCR 서버",  port: 8001, url: "http://127.0.0.1:8001/docs",       timeout: 240 },
+  { key: "web",  name: "웹 화면",   port: 5173, url: "http://localhost:5173/",           timeout: 180 },
+  { key: "toll", name: "구간 관제", port: 8002, url: "http://127.0.0.1:8002/",           timeout: 150 }
+];
+var i;
+for (i = 0; i < SV.length; i++) { SV[i].st = "idle"; SV[i].t0 = 0; SV[i].alive = false; SV[i].busy = false; }
+
+var mode = "idle";        // idle | starting | running
+var opened = false;
+
+// ===== 화면 그리기 =========================================================
+function build() {
+  var h = "";
+  for (var k = 0; k < SV.length; k++) {
+    h += '<div class="row' + (k == SV.length - 1 ? ' last' : '') + '"><span class="nm"><i class="dot" id="dot' + k + '"></i>' + SV[k].name + ' (' + SV[k].port + ')</span><span class="st" id="st' + k + '">대기</span></div>';
+  }
+  document.getElementById("card").innerHTML = h;
+}
+function now() { return new Date().getTime(); }
+function secs(s) { return Math.floor((now() - s.t0) / 1000); }
+
+function render() {
+  var done = 0;
+  for (var k = 0; k < SV.length; k++) {
+    var s = SV[k], d = document.getElementById("dot" + k), t = document.getElementById("st" + k);
+    var dc = "dot", tc = "st", tx = "대기";
+    if (s.st == "up")        { dc += " d-up";   tc += " t-up";   tx = "실행 중 ✔"; done++; }
+    else if (s.st == "starting") { dc += " d-go"; tc += " t-go"; tx = "시작 중… " + secs(s) + "초"; }
+    else if (s.st == "fail") { dc += " d-fail"; tc += " t-fail"; tx = "실패 (로그 확인)"; done++; }
+    else if (s.st == "skip") { dc += " d-skip"; tx = "건너뜀 (설치 필요)"; done++; }
+    d.className = dc; t.className = tc; t.innerHTML = tx;
+  }
+  document.getElementById("bar").style.width = Math.round(done * 100 / SV.length) + "%";
+
+  var allUp = true, anyUp = false;
+  for (k = 0; k < SV.length; k++) { if (SV[k].st != "up" && SV[k].st != "skip") allUp = false; if (SV[k].st == "up" || SV[k].st == "starting") anyUp = true; }
+
+  var note = document.getElementById("note"), web = document.getElementById("web");
+  if (mode == "starting") {
+    note.innerHTML = done + " / " + SV.length + " 단계 진행 중 · 모두 켜지면 브라우저가 자동으로 열립니다.<br>구간 관제는 설치(setup_toll)가 안 되어 있으면 건너뜁니다.";
+    web.innerHTML = "완료 후 → http://localhost:5173";
+  } else if (mode == "running" || (mode == "idle" && allUp)) {
+    note.innerHTML = "모두 켜졌습니다. 이 창을 닫아도 서버는 계속 켜져 있어요.<br>끄려면 [종료]를 누르세요.";
+    web.innerHTML = "<span style='cursor:pointer' onclick=\"openWeb()\">▶ 웹 화면 열기 (http://localhost:5173)</span>";
+  } else {
+    note.innerHTML = "[실행]을 누르면 검은 창 없이 한 번에 켜집니다.<br>처음에는 1~3분 걸릴 수 있어요.";
+    web.innerHTML = "";
+  }
+  var go = document.getElementById("bgo"), st = document.getElementById("bstop");
+  go.className = "btn go" + ((mode != "idle" || allUp) ? " dis" : "");
+  st.className = "btn stop" + ((mode == "idle" && !anyUp) ? " dis" : "");
+}
+
+// ===== 문구 전환 (3초) =====================================================
+var pi = 0;
+function showPhrase() {
+  document.getElementById("sub").innerHTML = PHRASES[pi];
+  var ds = document.getElementById("dots").getElementsByTagName("i");
+  for (var k = 0; k < ds.length; k++) ds[k].className = (k == pi ? "on" : "");
+}
+function rotate() {
+  var sub = document.getElementById("sub");
+  sub.className = "sub off";
+  setTimeout(function () {
+    pi = (pi + 1) % PHRASES.length;
+    showPhrase();
+    sub.className = "sub";
+  }, 480);
+}
+
+// ===== 서버 점검 (포트가 LISTENING 이면 켜진 것 - 프록시 영향 없음) =======
+var NSFILE = LOGS + "\\_ports.txt";
+var listening = {};
+function readPorts() {
+  try {
+    sh.Run('cmd /c netstat -ano > "' + NSFILE + '" 2>nul', 0, true);
+    var f = fso.OpenTextFile(NSFILE, 1, false), t = f.ReadAll(); f.Close();
+    var L = t.split("\n"), o = {};
+    for (var q = 0; q < L.length; q++) {
+      if (L[q].indexOf("LISTENING") < 0) continue;
+      var m = L[q].match(/:(\d+)\s+\S+\s+LISTENING/);
+      if (m) o[m[1]] = true;
+    }
+    listening = o;
+  } catch (e) {}
+}
+function probe(s) {
+  var on = listening[String(s.port)] ? true : false;
+  if (s.key == "be") {
+    // 백엔드는 포트가 열린 뒤에도 계정 생성 등 마무리가 있어서 20초 더 기다린다
+    if (on) { if (!s.seen) s.seen = now(); s.alive = (now() - s.seen) >= 20000; }
+    else { s.seen = 0; s.alive = false; }
+  } else { s.alive = on; }
+}
+
+// ===== 켜기 ================================================================
+function runHidden(batPath, logName) {
+  var cmd = 'cmd /c ""' + batPath + '" > "' + LOGS + '\\' + logName + '.log" 2>&1"';
+  sh.Run(cmd, 0, false);
+}
+function launch(s) {
+  s.t0 = now();
+  if (s.key == "be") {
+    if (!fso.FileExists(ROOT + "\\backend\\scargo\\gradlew.bat")) { s.st = "fail"; return; }
+    runHidden(HERE + "\\scripts\\backend.bat", "backend");
+  } else if (s.key == "ocr") {
+    var p = ROOT + "\\AMR_업데이트\\2_OCR서버_실행.bat";
+    if (!fso.FileExists(p)) { s.st = "fail"; return; }
+    runHidden(p, "ocr");
+  } else if (s.key == "web") {
+    runHidden(HERE + "\\scripts\\web.bat", "web");
+  } else if (s.key == "toll") {
+    if (!fso.FileExists(ROOT + "\\toll_demo\\gate_env\\Scripts\\activate.bat") || !fso.FileExists(ROOT + "\\toll_demo\\models\\ocr.pth")) { s.st = "skip"; return; }
+    runHidden(HERE + "\\scripts\\toll.bat", "toll");
+  }
+  s.st = "starting";
+}
+function doStart() {
+  if (mode != "idle") return;
+  mode = "starting"; opened = false;
+  for (var k = 0; k < SV.length; k++) { if (SV[k].st == "fail" || SV[k].st == "skip") SV[k].st = "idle"; }
+  render();
+}
+function openWeb() { try { sh.Run('cmd /c start "" http://localhost:5173', 0, false); } catch (e) {} }
+
+// ===== 끄기 ================================================================
+function doStop() {
+  var any = false, k;
+  for (k = 0; k < SV.length; k++) if (SV[k].st == "up" || SV[k].st == "starting") any = true;
+  if (mode == "idle" && !any) return;
+  document.getElementById("note").innerHTML = "끄는 중입니다…";
+  try { sh.Run('cmd /c ""' + HERE + '\\scripts\\stop.bat""', 0, true); } catch (e) {}
+  mode = "idle"; opened = false;
+  for (k = 0; k < SV.length; k++) { SV[k].st = "idle"; SV[k].alive = false; }
+  render();
+}
+
+// ===== 1초 단위 진행 =======================================================
+function tick() {
+  var k, s;
+  readPorts();
+  for (k = 0; k < SV.length; k++) probe(SV[k]);
+
+  if (mode == "starting") {
+    var be = SV[0];
+    if (be.alive) be.st = "up";
+    else if (be.st == "idle") launch(be);
+    // 백엔드가 켜진 뒤에 나머지를 함께 켠다
+    if (be.st == "up") {
+      for (k = 1; k < SV.length; k++) {
+        s = SV[k];
+        if (s.alive) s.st = "up";
+        else if (s.st == "idle") launch(s);
+      }
+    } else if (be.st == "fail") {
+      for (k = 1; k < SV.length; k++) if (SV[k].st == "idle") SV[k].st = "fail";
+    }
+    for (k = 0; k < SV.length; k++) {
+      s = SV[k];
+      if (s.st == "starting") {
+        if (s.alive) s.st = "up";
+        else if (secs(s) > s.timeout) s.st = "fail";
+      }
+    }
+    var fin = true;
+    for (k = 0; k < SV.length; k++) if (SV[k].st == "idle" || SV[k].st == "starting") fin = false;
+    if (fin) {
+      mode = "running";
+      if (!opened && SV[0].st == "up" && SV[2].st == "up") { opened = true; openWeb(); }
+    }
+  } else {
+    // 대기/실행 상태: 이미 켜져 있는지 계속 반영
+    for (k = 0; k < SV.length; k++) {
+      s = SV[k];
+      if (s.alive) { if (s.st == "idle" || s.st == "fail" || s.st == "skip") s.st = "up"; }
+      else if (s.st == "up") { s.st = "idle"; }
+    }
+    if (mode == "running") {
+      var anyUp = false;
+      for (k = 0; k < SV.length; k++) if (SV[k].st == "up") anyUp = true;
+      if (!anyUp) mode = "idle";
+    }
+  }
+  render();
+}
+
+// ===== 시작 ================================================================
+window.onload = function () {
+  try { window.resizeTo(560, 760); window.moveTo(Math.max(0, (screen.availWidth - 560) / 2), Math.max(0, (screen.availHeight - 760) / 2)); } catch (e) {}
+  build(); showPhrase(); render();
+  setInterval(tick, 1000);
+  setInterval(rotate, 3000);
+  tick();
+};
+</script>
+</body>
+</html>

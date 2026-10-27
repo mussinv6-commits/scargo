@@ -89,6 +89,7 @@ if not errorlevel 1 (
 echo.
 
 echo 브라우저를 엽니다 : http://localhost:5173
+call :tollstart
 start "" http://localhost:5173
 echo.
 echo 모두 켜졌습니다. 종료는 전체_종료.bat 을 실행하세요. 이 창은 닫아도 됩니다.
@@ -96,6 +97,20 @@ pause
 exit /b 0
 
 rem ====================== 함수 ======================
+:tollstart
+call :http http://127.0.0.1:8002/
+if not errorlevel 1 goto toll_already
+if not exist "%ROOT%toll_demo\gate_env\Scripts\activate.bat" goto toll_nosetup
+echo [구간] 구간 관제 서버 8002 시작...
+start "구간 관제 8002" /D "%ROOT%toll_demo" cmd /k call run_toll.bat
+exit /b 0
+:toll_already
+echo [구간] 구간 관제 서버 이미 실행 중
+exit /b 0
+:toll_nosetup
+echo [구간] 구간 관제 서버 건너뜀 : toll_demo 폴더의 setup_toll.bat 을 처음 한 번 실행하세요
+exit /b 0
+
 :findjava
 rem PATH 에 Java 가 없을 때 STS / IntelliJ / 설치형 JDK 폴더에서 JDK 17 우선으로 자동 탐지
 set "J17=" & set "JBIN="

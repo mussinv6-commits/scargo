@@ -637,7 +637,14 @@ export function mountAmrTwin(root, access = { canView: true, canManage: true, al
 
   /* ── 루프 ── */
   let last = performance.now(), panelAcc = 0
+  // 26.10.27 프레임 한 번에서 오류가 나도 애니메이션이 끊기지 않게 한다 (전엔 한 번 오류 나면 다음 프레임 예약이 사라져 새로고침 전까지 화면이 멈췄다)
+  let frameErr = 0
   function frame(now) {
+    if (destroyed) return
+    try { frameStep(now) } catch (e) { if (frameErr++ < 5) console.warn('[AMR] 프레임 오류 (계속 진행)', e) }
+    raf = requestAnimationFrame(frame)
+  }
+  function frameStep(now) {
     if (destroyed) return
     const dt = Math.min(0.05, (now - last) / 1000); last = now
     let simDt = 0
@@ -662,7 +669,6 @@ export function mountAmrTwin(root, access = { canView: true, canManage: true, al
       }
     }
     frame.prev = now
-    raf = requestAnimationFrame(frame)
   }
 
   /* ── 관리자 운영 기준 (정비 · 충전) + 자동 정비 상태 ── */

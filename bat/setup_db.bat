@@ -84,6 +84,10 @@ if errorlevel 1 goto fail
 psql -d %DBNAME% -v ON_ERROR_STOP=1 -q -f "%D%\add_6b_share.sql" >>"%LOG%" 2>&1
 if errorlevel 1 goto fail
 
+echo [6/6] toll section control tables - safe to run again
+psql -d %DBNAME% -v ON_ERROR_STOP=1 -q -f "%D%\add_7_toll_section.sql" >>"%LOG%" 2>&1
+if errorlevel 1 goto fail
+
 set /p SEED=Add rehearsal sample data too? y or N: 
 if /i not "%SEED%"=="y" goto done
 psql -d %DBNAME% -v ON_ERROR_STOP=1 -q -f "%D%\add_4_seed.sql" >>"%LOG%" 2>&1

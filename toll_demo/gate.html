@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>계측 이력</title>
+<style>
+  .wg{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+  .wg .card{padding:12px 14px}
+  .wg .n{font-size:28px;font-weight:800;line-height:1.2}
+  .wg .l{font-size:12px;color:#5b6479}
+  .rt{position:relative;height:158px;margin:4px 14px 0}
+  .rt .band{position:absolute;top:66px;left:0;right:0;height:22px;border-radius:11px;background:#e3e8f4;overflow:hidden;display:flex}
+  .rt .seg{height:100%;display:flex;align-items:center;justify-content:center;font-size:10px;color:#475069;white-space:nowrap;overflow:hidden;border-right:2px solid #fff;box-sizing:border-box}
+  .rt .done{position:absolute;top:0;left:0;height:100%;background:rgba(19,32,63,.28);pointer-events:none}
+  .rt .mk{position:absolute;top:69px;width:16px;height:16px;border-radius:50%;background:#fff;border:3px solid #9aa6c4;transform:translateX(-50%);z-index:2;box-sizing:border-box}
+  .rt .mk.ok{background:#2fa66a;border-color:#0b6b3a}.rt .mk.cau{background:#f5a300;border-color:#c2570c}.rt .mk.bad{background:#e5483b;border-color:#b42318}
+  .rt .mk.skip{border-style:dashed;background:#f4f5f9}.rt .mk.end{border-radius:3px}
+  .rt .lb{position:absolute;font-size:11px;line-height:1.3;text-align:center;white-space:nowrap}
+  .rt .lb b{font-size:12px}
+  .rt .veh{position:absolute;top:42px;transform:translateX(-50%);background:#1d4ed8;color:#fff;font-size:11px;font-weight:700;border-radius:99px;padding:1px 9px;z-index:3;white-space:nowrap}
+  .rt .veh.dev{background:#b42318}.rt .veh:after{content:'';position:absolute;left:calc(50% - 4px);bottom:-4px;border:4px solid transparent;border-top-color:inherit;border-bottom:0}
+  .rt .dt{position:absolute;top:116px;height:0;border-top:3px dashed #c2570c;z-index:1}
+  .rt .dt.live{border-top-color:#b42318}
+  .rt .dv{position:absolute;top:88px;width:0;height:30px;border-left:3px dashed #c2570c}.rt .dv.live{border-left-color:#b42318}
+  .rt .dl{position:absolute;top:122px;font-size:11px;color:#8a4b00;white-space:nowrap;transform:translateX(-50%)}
+  .pc{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;margin-top:10px}
+  .pc>div{border:1px solid #e3e6ee;border-radius:8px;padding:8px 10px;font-size:12px;background:#fbfcfe}
+  .pc .nm{font-weight:700;font-size:13px}.pc .big{font-size:18px;font-weight:800}
+</style>
+</head>
+<body>
+<div id="nav"></div>
+<main>
+  <h1 style="margin:0;font-size:22px">계측 이력 <span class="sub" style="font-weight:400">도로공사 연계로 받은 계측·통행료 결과</span></h1>
+  <div id="demo"></div>
+  <div id="err" class="sub" style="color:#b42318"></div>
+  <section class="wg" id="wg"></section>
+  <section class="card" style="overflow-x:auto">
+    <h3>차량별 경로 타임라인 <span id="tlwho" class="sub" style="font-weight:400"></span></h3>
+    <div id="tl"></div>
+  </section>
+  <section class="card" style="overflow-x:auto">
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:8px">
+      <h3 style="margin:0">계측 기록</h3><span id="tabs" style="display:none"></span>
+      <span class="sub" style="margin-left:auto">정상 = 기준 이내 · 주의 = 기준 초과, 허용 오차(10%) 이내 · 확정 = 허용 오차 초과</span>
+    </div>
+    <div class="scroll" style="max-height:320px"><div id="log" style="min-width:860px"></div></div>
+  </section>
+</main>
+<script src="/common.js"></script>
+<script>
+const COLS = '72px 112px 90px minmax(120px,1fr) 84px 64px minmax(190px,1.6fr)';
+const PTAB = [['all', '전체'], ['CK18', '검문소 18'], ['TG_NAMINCHEON', '남인천TG'], ['TG_CHEONGGYE', '청계TG']];
+let tab = 'all', sel = null, busy = false, data = { trips: [], issues: [] };
+
+setupChrome('gate', { refresh: load, selectedPid: () => sel, onStarted: k => { sel = k; } });
+
+function widgets() {
+  const T = data.trips, lv = k => T.filter(t => t.level === k).length;
+  const moving = T.filter(t => { const p = posOf(t); return p.status !== 'ARRIVED' && p.status !== 'STOPPED'; }).length;
+  const pend = T.reduce((a, t) => a + t.pending, 0);
+  const exp = T.reduce((a, t) => a + (tollOf(t).now || 0), 0), fine = T.reduce((a, t) => a + Number(t.fine_manwon || 0), 0);
+  const w = (n, l, sub, cls) => `<div class="card"><div class="n" ${cls ? `style="color:${cls}"` : ''}>${n}</div><div class="l">${l}</div>${sub ? `<div class="sub">${sub}</div>` : ''}</div>`;
+  document.getElementById('wg').innerHTML =
+    w(T.length + '대', '출차한 차량', `운행 중 ${moving}대 · 운행 완료 ${T.filter(isDone).length}대`) + w(lv('NORMAL') + '대', '정상', '', '#0b6b3a') + w(lv('CAUTION') + '대', '주의', '기준 초과·오차 이내', '#c2570c') +
+    w(lv('CONFIRMED') + '대', '확정', '허용 오차 초과', '#b42318') + w(pend + '건', '권고 대기', pend ? '차량 관제에서 권고 발송' : '대기 중인 권고 없음', pend ? '#b42318' : '') +
+    w(won(exp), '예상 통행료 합계', `도로공사 통보 과태료 ${fine}만원`) + w(data.issues.length + '건', '출차 확인 필요', data.issues.length ? 'OCR 실패·미등록' : '', data.issues.length ? '#c2570c' : '');
+}
+
+let MD = null;
+api('/api/map/data').then(d => { MD = d; render(); }).catch(() => {});
+const pct = km => Math.max(0, Math.min(100, km / ROUTE_KM_TOTAL * 100));
+function timeline(t) {
+  const el = document.getElementById('tl');
+  if (!t) { el.innerHTML = '<div class="empty">차량이 없습니다. 위의 "인천항 출차 (OCR)"를 눌러 보세요.</div>'; document.getElementById('tlwho').textContent = ''; return; }
+  const pos = posOf(t), ps = t.point_list, evs = t.route_events || [];
+  const rr = t.actions.find(a => a.action_type === 'REROUTE_ADVISE');
+  const dev = evs.some(e => e.kind === 'DEVIATE'), back = evs.some(e => e.kind === 'RETURN'), devLive = pos.status === 'DEVIATING';
+  document.getElementById('tlwho').innerHTML = `· <span class="plate" style="font-size:12px;padding:0 7px">${esc(t.vehicle_no)}</span> ${lvPill(t.level)} ${pill(pos.state[0], pos.state[1])}${rr ? ' ' + pill('org', '대안 경로 안내됨') : ''} <span class="sub">마스터 경로(최단 경로) ${ROUTE_KM_TOTAL}km</span>`;
+  const segs = (MD && MD.segments) || [{ from_km: 0, to_km: ROUTE_KM_TOTAL, name: '전 구간', road: '' }];
+  const cols = ['#d5def2', '#c3cfe9', '#d5def2'];
+  let h = '<div class="rt"><div class="band">' + segs.map((g, i) => `<div class="seg" style="width:${pct(g.to_km) - pct(g.from_km)}%;background:${cols[i % 3]}" title="${esc(g.road)}">${esc(g.name)}</div>`).join('') + `<div class="done" style="width:${pct(pos.km)}%"></div></div>`;
+  const mk = (km, cls, extra = '') => `<span class="mk ${cls}" style="left:${pct(km)}%" ${extra}></span>`;
+  const lab = (km, top, html, al) => `<div class="lb" style="left:${pct(km)}%;top:${top}px;transform:translateX(${al === 'l' ? '0' : al === 'r' ? '-100%' : '-50%'})">${html}</div>`;
+  h += mk(0, 'ok') + lab(0, 96, '<b>인천항 출차</b><br><span class="sub">0 km · ' + (t.quote ? clk(new Date(t.quote.departed_at)) + ' 출발' : '') + '</span>', 'l');
+  ps.forEach(p => {
+    const cls = p.final ? (p.level === 'CONFIRMED' ? 'bad' : p.level === 'CAUTION' ? 'cau' : 'ok') : p.skipped ? 'skip' : '';
+    h += mk(p.km, cls) + lab(p.km, 2, `<b>${esc(p.name)}</b><br><span class="sub">${p.km} km · ${p.final ? lvPill(p.level).replace('class="pill', 'class="pill') : p.skipped ? '미통과(우회)' : '예정 ' + clk(passAt(t, p.km))}</span>`);
+  });
+  h += mk(ROUTE_KM_TOTAL, pos.status === 'ARRIVED' ? 'ok end' : 'end') + lab(ROUTE_KM_TOTAL, 96, `<b>성남IC 진출 · 곤지암 허브</b><br><span class="sub">${ROUTE_KM_TOTAL} km · ${pos.status === 'ARRIVED' ? '도착' : '예정 ' + clk(passAt(t, ROUTE_KM_TOTAL))}</span>`, 'r');
+  if (dev && MD) {                                   // 이탈 기록이 있을 때만 우회 가지선을 그린다
+    const a = MD.detour_leave_km, b = MD.detour_rejoin_km, live = devLive ? ' live' : '';
+    h += `<span class="dv${live}" style="left:${pct(a)}%"></span><span class="dt${live}" style="left:${pct(a)}%;width:${pct(b) - pct(a)}%"></span><span class="dv${live}" style="left:${pct(b)}%"></span>` +
+      `<div class="dl" style="left:${(pct(a) + pct(b)) / 2}%">${devLive ? '<b style="color:#b42318">경로 이탈 중</b>' : back ? '이탈 후 복귀' : '이탈'} · 우회 약 ${MD.detour_len_km}km (기본 ${(b - a).toFixed(1)}km 구간 대신)</div>`;
+  }
+  h += `<div class="veh${devLive ? ' dev' : ''}" style="left:${pct(pos.km)}%">${esc(t.vehicle_no)} ${pos.km.toFixed(1)}km</div></div>`;
+  const dep = t.departure;
+  const card = (nm, km, body) => `<div><div class="nm">${nm}</div><div class="sub">${km}</div>${body}</div>`;
+  let c = card('인천항 출차', '0 km', `<div>${t.quote ? clk(new Date(t.quote.departed_at)) + ' 출발' : ''}</div><div class="sub">번호판 OCR ${dep && dep.plate_confidence != null ? Number(dep.plate_confidence).toFixed(1) + '%' : t.plate_confidence != null ? Number(t.plate_confidence).toFixed(1) + '%' : '—'} · 여기서 한 번만 인식</div>`);
+  ps.forEach(p => {
+    const f = p.final;
+    c += f ? card(esc(p.name), p.km + ' km', `<div class="big" style="color:${p.level === 'CONFIRMED' ? '#b42318' : 'inherit'}">${tons(f.total_weight_kg)} <span class="sub">/ ${tons(t.limit_kg)}</span></div>
+      <div>${lvPill(p.level)} <span class="sub">최대 축 ${tons(Math.max(...f.axles))}</span></div><div class="sub">${hms(f.checked_at)} 계측${p.retest ? ' (재측정 포함)' : ''}</div><div style="margin-top:2px">${esc(pointNote(p))}</div>`)
+      : p.skipped ? card(esc(p.name), p.km + ' km', '<div class="sub">경로 이탈로 지나지 않음 — 이 톨게이트 통행료는 발생하지 않습니다</div>')
+      : card(esc(p.name), p.km + ' km', `<div class="sub">예정 ${clk(passAt(t, p.km))} · ${t.status === 'HALTED' ? '정차로 도달하지 못함' : '아직 도달 전'}</div>`);
+  });
+  el.innerHTML = h + `<div class="pc">${c}</div><div class="sub" style="margin-top:8px">현재 위치 ${pos.km.toFixed(1)} / ${ROUTE_KM_TOTAL} km · ${esc(pos.state[1])}${devLive ? ` (경로선에서 ${pos.dist_m >= 1000 ? (pos.dist_m / 1000).toFixed(1) + 'km' : pos.dist_m + 'm'})` : ''} · 선 위 거리는 실제 km 에 비례합니다. 도로 구간 이름은 톨게이트 위치로 나눈 대략값입니다.</div>`;
+}
+
+function render() {
+  const T = data.trips;
+  if (!T.some(t => t.trip_id === sel)) sel = T.length ? T[0].trip_id : null;
+  widgets();
+  timeline(T.find(t => t.trip_id === sel));
+  const rows = [];
+  T.forEach(t => t.point_list.forEach(p => { if (p.final) rows.push({ t, p }); }));
+  rows.sort((a, b) => new Date(b.p.final.checked_at) - new Date(a.p.final.checked_at));
+  const cnt = k => rows.filter(r => k === 'all' || r.p.code === k).length;
+  document.getElementById('tabs').innerHTML = PTAB.map(([k, l]) => `<button class="tab ${tab === k ? 'on' : ''}" data-t="${k}">${l} ${cnt(k)}</button>`).join('');
+  document.querySelectorAll('#tabs .tab').forEach(b => b.onclick = () => { tab = b.dataset.t; render(); });
+  const shown = rows.filter(r => tab === 'all' || r.p.code === tab).slice(0, 60);
+  document.getElementById('log').innerHTML = `<div class="row h" style="grid-template-columns:${COLS}"><span>시각</span><span>차량</span><span>지점</span><span>총중량 / 기준</span><span>최대 축하중</span><span>판정</span><span>조치·통보 (도로공사)</span></div>` +
+    (shown.length ? shown.map(({ t, p }) => `<button class="row ${t.trip_id === sel ? 'sel' : ''}" data-k="${t.trip_id}" style="grid-template-columns:${COLS}"><span>${hms(p.final.checked_at)}</span>
+      <span><span class="plate" style="font-size:11px;padding:0 6px">${esc(t.vehicle_no)}</span></span><span>${esc(p.name)}</span><span>${tons(p.final.total_weight_kg)} / ${tons(t.limit_kg)}</span>
+      <span>${tons(Math.max(...p.final.axles))}</span><span>${lvPill(p.level)}</span><span>${esc(pointNote(p)) || '<span class="sub">—</span>'}</span></button>`).join('') : '<div class="empty">계측 기록이 없습니다</div>');
+  document.querySelectorAll('#log button.row').forEach(b => b.onclick = () => { sel = Number(b.dataset.k); render(); });
+}
+
+async function load() {
+  if (busy) return; busy = true;
+  try {
+    data = await api('/api/db/overview');
+    setSim(data.sim);
+    document.getElementById('err').textContent = '';
+    render(); stamp();
+  } catch (e) { document.getElementById('err').textContent = 'DB 조회 실패: ' + e.message; }
+  busy = false;
+}
+load(); setInterval(load, 3000);
+</script>
+</body>
+</html>

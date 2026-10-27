@@ -80,3 +80,40 @@ _제외목록.txt
 backend/scargo/uploads/
 backend/scargo/application-local.yml
 .env
+
+# ===== 26.10.26 추가: 구간 관제(toll_demo) =====
+toll_demo/gate_env/
+toll_demo/models/
+toll_demo/photos/
+toll_demo/__pycache__/
+
+# ===== 26.10.27 추가: 깃허브 공개 전 정리 (민감자료 · 키 · 쓸모없는 파일) =====
+# 비밀번호 · 키 · 환경설정
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
+google-services.json
+serviceAccount*.json
+toll_demo/db_url.txt
+런처/logs/
+# 실제 번호판 사진 (개인정보) · 시연용 사진
+시연용_사진/
+python/게이트_수신함/
+python/허브_수신함/
+AMR_업데이트/연결키트/
+# 학습 모델 · 큰 파일 (따로 전달)
+*.pth
+*.pt
+# 분석 · 학습 결과물
+python/*.csv
+python/*.spec
+python/plate_detector_gui_backup*.py
+python/CHANGELOG.md
+AMR_업데이트/문서/
+*.zip
+*.7z
+*.pyc

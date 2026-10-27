@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>차량 관제</title>
+<style>
+  .rec{border:1px solid #e0b84a;background:#fff7e0;border-radius:10px;padding:12px 14px}
+  .rec.confirmed{border-color:#e5483b;background:#fdf1f0}
+  .rec.done{border-color:#b9e0c8;background:#f1faf4}
+  .rec button.go{padding:8px 14px;border:0;border-radius:8px;background:#13203f;color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
+  .rec button.go:disabled{background:#9aa6c4;cursor:default}
+  .msgbox{background:#fff;border:1px solid #e3e6ee;border-radius:8px;padding:8px 10px;margin:8px 0;font-size:12px;color:#334}
+</style>
+</head>
+<body>
+<div id="nav"></div>
+<main>
+  <h1 style="margin:0;font-size:22px">차량 관제 <span class="sub" style="font-weight:400">차량별 위치 · 판정 · 예상 통행료 · 관제 권고</span></h1>
+  <div id="demo"></div>
+  <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px">
+    <span id="tabs" style="display:flex;gap:8px;flex-wrap:wrap"></span>
+    <span id="sum" style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap"></span>
+  </div>
+  <div id="err" class="sub" style="color:#b42318"></div>
+  <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start">
+    <section class="card" style="flex:999 1 620px;overflow-x:auto">
+      <h3>관제 대상 차량 <span id="shown" class="sub" style="font-weight:400"></span> <span class="sub" title="톨게이트·검문소는 도로공사 등 외부 기관 시설입니다. 이 화면의 계측 결과·과태료·운행 중지는 도로공사 연계로 통보받은 내용이고, SCARGO 는 단속하거나 차량을 막지 않습니다. 확정 판정이 나오면 진출 권고를 만들고, 관제자가 지시를 보내면 기록이 남습니다. 표는 DB 조회 결과로 3초마다 새로고침됩니다.판정: 정상 기준 이내 · 주의 기준 초과, 허용 오차(10%) 이내 · 확정 허용 오차 초과 (재측정이 있으면 재측정 결과 기준)" style="cursor:help;border:1px solid #9aa6c4;border-radius:99px;padding:0 6px;margin-left:6px">ⓘ 안내</span></h3>
+      <div class="scroll" style="max-height:460px"><div id="list" style="min-width:820px"></div></div>
+    </section>
+    <aside style="flex:1 1 340px;display:flex;flex-direction:column;gap:14px;min-width:0" id="side"></aside>
+  </div>
+</main>
+<script src="/common.js"></script>
+<script>
+const COLS = '156px minmax(170px,1.3fr) repeat(3,minmax(104px,1fr)) 64px 84px';
+let tab = 'run', selId = null, busy = false, data = { trips: [], issues: [] };
+
+function cell(t, p) {
+  if (p.skipped) return '<span class="sub">미통과(우회)</span>';
+  if (!p.final) return '<span class="sub">—</span>';
+  return `${tons(p.final.total_weight_kg)} ${lvPill(p.level)}${p.retest ? '<br><span class="sub">재측정 포함</span>' : ''}`;
+}
+function actCell(t) {
+  const iss = t.actions.filter(a => a.action_type !== 'CHECKPOINT_NOTICE').length;
+  if (t.pending) return pill('red', `권고 대기 ${t.pending}`);
+  if (t.recs.some(r => !r.issued && r.type === 'REROUTE_ADVISE')) return pill('red', '권고 대기');
+  const optional = t.recs.some(r => !r.issued);
+  if (optional) return pill('gry', '선택 안내');
+  return iss ? pill('grn', '발송 완료') : '<span class="sub">—</span>';
+}
+
+function render() {
+  const T = data.trips;
+  const rank = { CONFIRMED: 0, CAUTION: 1, NORMAL: 2 };
+  const order = [...T].sort((a, b) => (b.pending > 0) - (a.pending > 0) || rank[a.level] - rank[b.level] || new Date(b.updated_at) - new Date(a.updated_at));
+  const f = { run: t => !isDone(t), done: t => isDone(t), all: () => true };
+  const cnt = k => T.filter(f[k]).length;
+  document.getElementById('tabs').innerHTML = [['run', '운행 중'], ['done', '운행 완료']]
+    .map(([k, l]) => `<button class="tab ${tab === k ? 'on' : ''}" data-t="${k}">${l} ${cnt(k)}</button>`).join('');
+  document.querySelectorAll('#tabs .tab').forEach(b => b.onclick = () => { tab = b.dataset.t; render(); });
+  const pend = T.reduce((a, t) => a + t.pending, 0), dev = T.filter(t => posOf(t).status === 'DEVIATING').length;
+  document.getElementById('sum').innerHTML = (dev ? pill('red', `경로 이탈 ${dev}대`) : '') + (pend ? pill('red', `권고 대기 ${pend}건`) : '');
+  const list = order.filter(f[tab]);
+  document.getElementById('shown').textContent = `· 권고 대기 → 확정 → 주의 → 정상 순 (${list.length}대)`;
+  if (!list.some(t => t.trip_id === selId)) selId = list.length ? list[0].trip_id : null;
+  document.getElementById('list').innerHTML = `<div class="row h" style="grid-template-columns:${COLS}"><span>차량</span><span>현재 위치</span><span>인천 과적검문소</span><span>남인천TG</span><span>청계TG</span><span>판정</span><span>관제 권고</span></div>` +
+    (list.length ? list.map(t => {
+      const pos = posOf(t), bad = pos.status === 'DEVIATING' || pos.status === 'STOPPED';
+      return `<button class="row ${t.trip_id === selId ? 'sel' : ''}" data-id="${t.trip_id}" style="grid-template-columns:${COLS};${t.pending && t.trip_id !== selId ? 'background:#fdf3f2' : ''}">
+      <span style="white-space:nowrap"><span class="plate" style="font-size:12px;padding:1px 7px">${esc(t.vehicle_no)}</span>${t.vehicle_class ? ` <span class="sub">${t.vehicle_class}종</span>` : ''}</span>
+      <span>${pill(pos.state[0], isDone(t) ? '운행 완료' : pos.state[1])}<br><span class="sub">${isDone(t) ? `곤지암 허브 ${hms(arrivedAt(t))} 도착` : `${pos.km.toFixed(1)} / ${ROUTE_KM_TOTAL}km`}</span><span style="display:block;height:4px;background:#eceff5;border-radius:2px;margin-top:2px"><i style="display:block;height:4px;border-radius:2px;width:${Math.min(100, pos.km / ROUTE_KM_TOTAL * 100).toFixed(0)}%;background:${bad ? '#b42318' : '#6b7ba8'}"></i></span></span>
+      ${t.point_list.map(p => `<span>${cell(t, p)}</span>`).join('')}<span>${lvPill(t.level)}</span><span>${actCell(t)}</span></button>`;
+    }).join('') : `<div class="empty">${tab === 'done' ? '아직 운행을 완료한 차량이 없습니다. 곤지암 허브에 도착하면 여기로 넘어옵니다.' : '관제 대상 차량이 없습니다. 관제 지도에서 차량을 출차시키면 여기에 표시됩니다.'}</div>`);
+  document.querySelectorAll('#list button.row').forEach(b => b.onclick = () => { selId = Number(b.dataset.id); render(); });
+  side(T.find(t => t.trip_id === selId));
+}
+
+function doneCard(t) {
+  const x = tollOf(t), dev = t.route_events.filter(e => e.kind === 'DEVIATE').length, fine = Number(t.fine_manwon || 0);
+  return `<div class="card" style="border:1px solid #b9e0c8;background:#f7fcf9"><h3>✔ 운행 완료 기록</h3><dl class="kv" style="grid-template-columns:96px 1fr">
+    <dt>구간</dt><dd>인천항(월미로 181) → 곤지암 허브 ${t.quote ? ' · ' + (ROUTE_NAME[t.quote.route_type] || '') : ''}</dd>
+    <dt>출발 / 도착</dt><dd>${t.quote ? hm(t.quote.departed_at) : '—'} 출발 → ${hms(arrivedAt(t))} 도착 <span class="sub">(예상 소요 ${t.quote ? t.quote.expected_minutes : '—'}분)</span></dd>
+    <dt>판정</dt><dd>${lvPill(t.level)} <span class="sub">${t.point_list.filter(p => p.final).map(p => esc(p.name) + ' ' + LV[p.level][1]).join(' · ')}</span></dd>
+    <dt>통행료</dt><dd>통보 ${won(t.paid_won)} <span class="sub">(예상 ${x.re != null ? won(x.re) + ' · 경로 이탈로 재계산' : won(x.exp)})</span></dd>
+    <dt>과태료</dt><dd>${fine ? fine + '만원 (도로공사 통보)' : '없음'}</dd>
+    <dt>경로 이탈</dt><dd>${dev ? dev + '회' : '없음'} <span class="sub">· 발송한 권고 ${t.actions.length}건</span></dd></dl></div>`;
+}
+function recCard(t, r) {
+  const a = r.issued, conf = r.level === 'CONFIRMED' || r.level === 'DEVIATION';
+  return `<div class="rec ${a ? 'done' : conf ? 'confirmed' : ''}"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b>${a ? '✔ ' : conf ? '⚠ ' : ''}${esc(r.title)}</b>${lvPill(r.level)}</div>
+    <div class="sub" style="margin-top:4px">${esc(r.reason)}</div>
+    <div class="msgbox"><span class="sub">운전자에게 전달할 내용</span><br>${esc(r.message)}</div>
+    ${a ? `<div class="sub">${esc(a.issued_by)}가 ${hms(a.issued_at)} 에 권고를 발송했습니다 (${a.delivery_status === 'SENT' ? '발송됨' : a.delivery_status})</div>` :
+      t.live || true ? `<button class="go" data-t="${t.trip_id}" data-type="${r.type}">${r.type === 'REROUTE_ADVISE' ? '대안 경로 안내 발송' : conf ? '운전자에게 권고 발송' : '안내 발송 (선택)'}</button> <span class="sub">${conf ? '강제가 아니라 권고입니다. 단속·차단은 도로공사·경찰 권한' : '주의 단계는 참고용 안내입니다'}</span>` : ''}</div>`;
+}
+
+function side(t) {
+  const el = document.getElementById('side');
+  if (!t) { el.innerHTML = '<div class="card"><h3>선택 차량 상세</h3><div class="empty">차량을 선택하세요</div></div>'; return; }
+  const pos = posOf(t), x = tollOf(t);
+  const bars = t.point_list.map(p => p.final ? { v: p.final.total_weight_kg, bad: p.level === 'CONFIRMED', cau: p.level === 'CAUTION' } : null);
+  const dev = t.route_events.filter(e => e.kind === 'DEVIATE' || e.kind === 'RETURN').length;
+  const ev = [];
+  t.checks.forEach(c => {
+    const nm = c.point_name, lv = '', fine = c.fine_manwon ? `, 과태료 ${c.fine_manwon}만원 통보` : '';
+    let txt;
+    if (c.retry_count > 0) txt = `${nm} 재측정 ${tons(c.total_weight_kg)} — ${c.is_violation ? '다시 확정 → 검문소 조치(운행 중지)' + fine : '재측정 통과'}`;
+    else if (c.is_violation && !c.is_passed) txt = `${nm} ${tons(c.total_weight_kg)} — 확정 → 재측정`;
+    else if (c.is_violation) txt = `${nm} ${tons(c.total_weight_kg)} — 확정, 통과${fine}`;
+    else txt = `${nm} ${tons(c.total_weight_kg)} — ${c.total_weight_kg > t.limit_kg ? '주의(오차 이내)' : '정상'}`;
+    ev.push({ at: new Date(c.checked_at), k: '계측', txt });
+  });
+  t.route_events.forEach(e => ev.push({ at: new Date(e.occurred_at), k: '경로', txt: e.text, warn: e.level === 'warn' }));
+  t.actions.forEach(a => ev.push({ at: new Date(a.issued_at), k: '권고', txt: `${esc(a.issued_by)} → 운전자: ${ACT_NAME[a.action_type] || a.action_type} 발송` }));
+  ev.sort((a, b) => b.at - a.at);
+  const evh = ev.map(e => `<div style="display:flex;gap:10px;font-size:12px;padding:5px 0;border-bottom:1px solid #eceff5;${e.warn ? 'color:#8a4b00' : ''}"><span class="sub" style="flex:0 0 56px">${hms(e.at.toISOString())}</span><span class="sub" style="flex:0 0 28px">${e.k}</span><span>${e.k === '권고' ? e.txt : esc(e.txt)}</span></div>`).join('');
+  const notified = t.paid_won, fine = Number(t.fine_manwon || 0);
+  el.innerHTML = `<div class="card"><h3>선택 차량 상세</h3>
+    <div style="display:flex;gap:12px;align-items:center;margin-bottom:10px">
+      <div style="flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:4px;background:#f4f5f9;border-radius:8px;padding:8px 12px">
+        <span class="sub">출차 OCR</span>${t.plate_crop_url ? `<img class="crop" src="${esc(t.plate_crop_url)}" alt="번호판 크롭">` : ''}<span class="plate" style="font-size:15px">${esc(t.vehicle_no)}</span></div>
+      <div class="sub">${esc(t.company_name || '')}<br>${esc(t.truck_type || '')}${t.axle_count ? ` (${t.axle_count}축${t.vehicle_class ? ` · ${t.vehicle_class}종` : ''})` : ''}<br>OCR ${t.plate_confidence != null ? Number(t.plate_confidence).toFixed(1) + '%' : '—'} · 기준 총중량 ${tons(t.limit_kg)}</div></div>
+    <dl class="kv" style="margin-bottom:10px"><dt>현재 상태</dt><dd>${pill(pos.state[0], pos.state[1])} <span class="sub">${pos.km.toFixed(1)} / ${ROUTE_KM_TOTAL}km${t.quote ? ' · ' + (ROUTE_NAME[t.quote.route_type] || '') : ''}</span></dd>
+      <dt>판정</dt><dd>${lvPill(t.level)} <span class="sub">지점별 최종 판정 중 가장 무거운 것</span></dd></dl>
+    <div class="sub" style="margin-bottom:4px">지점별 총중량 (기준 ${tons(t.limit_kg)} · 허용 상한 ${tons(Math.round(t.limit_kg * 1.1))})</div>
+    <div class="bars" style="gap:8px;height:90px;padding:0 6px"><div class="lim" style="bottom:${t.limit_kg * 66 / 50000}px"></div>
+      ${bars.map(b => b ? `<i class="${b.bad ? 'bad' : ''}" style="height:${Math.round(b.v * 66 / 50000)}px;${b.cau ? 'background:#f5a300' : ''}"></i>` : '<i style="height:0"></i>').join('')}</div>
+    <div class="barlab" style="gap:8px;padding:2px 6px">${t.point_list.map(p => `<span>${esc(p.name)}</span>`).join('')}</div></div>
+    ${t.recs.length ? `<div class="card"><h3>관제 권고</h3><div style="display:flex;flex-direction:column;gap:10px">${t.recs.map(r => recCard(t, r)).join('')}</div></div>` :
+      `<div class="card"><h3>관제 권고</h3><div class="sub">${t.point_list.some(p => p.final) ? '권고할 사항이 없습니다 (정상).' : '아직 계측 결과가 없습니다.'}</div></div>`}
+    ${isDone(t) ? doneCard(t) : `<div class="card"><h3>통행료 · 과태료</h3><dl class="kv" style="grid-template-columns:96px 1fr">
+      <dt>예상 통행료</dt><dd>${esc(tollText(t))}<br><span class="sub">${t.quote ? `출발 ${esc(hm(t.quote.departed_at))} 기준 · 평균 60km/h 가정 · ` : ''}통행료는 도로공사가 청구하는 값이며 실제와 다를 수 있음</span></dd>
+      <dt>통보된 통행료</dt><dd>${notified ? won(notified) : '아직 없음'} <span class="sub">(지나간 톨게이트 기준)</span></dd>
+      <dt>과태료</dt><dd>${fine ? `<b>${fine}만원</b> ${pill('red', '도로공사 통보')}` : '없음'}</dd></dl></div>`}
+    ${dev ? `<div class="card" style="padding:10px 14px"><span class="sub">경로 이탈 기록 ${dev}건 — 자세한 위치는 </span><a href="/${SUFFIX}">관제 지도</a></div>` : ''}
+    <div class="card"><h3>이벤트 기록</h3><div style="max-height:200px;overflow:auto">${evh || '<div class="empty">기록 없음</div>'}</div></div>`;
+  el.querySelectorAll('button.go').forEach(b => b.onclick = async () => {
+    b.disabled = true; b.textContent = '발송 중…';
+    try { await api(`/api/trip/${b.dataset.t}/action`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: b.dataset.type }) }); } catch (e) { document.getElementById('err').textContent = '권고 발송 실패: ' + e.message; }
+    load();
+  });
+}
+const ACT_NAME = { REROUTE_ADVISE: '대안 경로 안내', EXIT_ADVISE: '진출 권고', HOLD_NOTICE: '검문소 조치 확인 요청', CAUTION_NOTICE: '적재 점검 안내', CHECKPOINT_NOTICE: '검문소 전방 안내' };
+
+async function load() {
+  if (busy) return; busy = true;
+  try {
+    data = await api('/api/db/overview');
+    setSim(data.sim);
+    document.getElementById('err').textContent = '';
+    render(); stamp();
+  } catch (e) { document.getElementById('err').textContent = 'DB 조회 실패: ' + e.message; }
+  busy = false;
+}
+setupChrome('ck', { refresh: load, selectedPid: () => selId, onStarted: k => { selId = k; } });
+load(); setInterval(load, 3000);
+</script>
+</body>
+</html>

@@ -41,8 +41,9 @@ export const ADMIN_MENU = {
   ],
   port: [
     { to: '/w/W-07', label: '운송오더·물품 관리', icon: 'bi-boxes' },
-    { to: '/w/W-12', label: '톨게이트', icon: 'bi-signpost' },
-    { to: '/w/W-13', label: '검문소', icon: 'bi-shield-check' },
+    { to: '/w/W-12', label: '구간 관제 지도', icon: 'bi-signpost' },
+    { to: '/w/W-13', label: '구간 차량 관제', icon: 'bi-shield-check' },
+    { to: '/w/W-14', label: '구간 계측 이력', icon: 'bi-speedometer2' },
   ],
   hubc: [
     { to: '/w/W-04', label: '허브 관제', icon: 'bi-hdd-network' },

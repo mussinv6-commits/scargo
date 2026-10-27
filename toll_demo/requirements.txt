@@ -1,0 +1,9 @@
+ultralytics==8.4.166
+numpy
+opencv-python
+pillow
+fastapi
+uvicorn
+scipy
+lapx
+psycopg2-binary

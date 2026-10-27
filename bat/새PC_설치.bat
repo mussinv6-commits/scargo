@@ -95,11 +95,11 @@ if exist "%ROOT%bat\바로가기_만들기.ps1" powershell -NoProfile -Execution
 echo.
 echo ==============================================
 echo   설치가 끝났습니다
-echo   앞으로는 바탕화면 S그룹 실행 아이콘만 누르면 됩니다
+echo   앞으로는 바탕화면 S그룹 아이콘을 열고 [실행] 버튼만 누르면 됩니다
 echo ==============================================
 choice /c YN /m "지금 바로 실행할까요?"
 if errorlevel 2 goto :end
-start "" "%ROOT%bat\S그룹_전체실행.bat"
+start "" mshta.exe "%ROOT%런처\S그룹_런처.hta"
 :end
 echo.
 pause

@@ -1,31 +1,17 @@
-﻿[S GROUP 설치 방법]  (S Cargo + S-Bot)
+﻿[S GROUP 설치 방법]
 
-1. 필요 프로그램
-   - JDK 17, PostgreSQL, Node.js(LTS), Python(conda), STS(또는 IntelliJ)
+1. 압축을 풉니다. (한글 경로가 아닌 곳이 좋습니다. 예: C:\SGroup)
+2. bat 폴더의 "새PC_설치.bat" 을 더블클릭합니다. (필요한 프로그램·DB·화면 설치가 자동으로 진행됩니다)
+3. 설치가 끝나면 바탕화면에 "S그룹" 아이콘이 생깁니다. 열어서 [실행] 을 누릅니다.
+   - 모두 켜지면 브라우저가 자동으로 열립니다 (http://localhost:5173)
+   - 끌 때는 같은 창에서 [종료] 를 누릅니다.
 
-2. DB (DB 이름은 scargo 하나만 씁니다)
-   - 가장 쉬운 방법: 최종파일\bat 폴더의 setup_db.bat 더블클릭
-     · postgres 비밀번호를 입력하면 DB 생성 -> 설치 SQL -> 추가 SQL 순서로 자동 실행
-     · 마지막에 "시연 데이터를 넣을까요?" 에서 y 를 누르면 최근 14일 운영 데이터가 들어갑니다
-     · 예전 구조의 scargo DB 가 있으면 scargo_old_날짜 로 이름을 바꿔 두고 새로 만듭니다
-   - 직접 실행하려면 (DB 폴더, 이 순서):
-     SCARGO_Integrated_Full_Install_20261024.sql -> add_1_features.sql -> add_2_ops.sql -> add_3_gate.sql -> add_4_seed.sql(선택)
-     실행: psql -U postgres -d scargo -v ON_ERROR_STOP=1 -f 파일
-   - application.yml 의 DB 접속 정보(기본: localhost:5432/scargo, 비밀번호 1234)를 본인 PC 에 맞게 수정
+[선택] 구간 관제(인천항 -> 곤지암) 화면을 쓸 때만 (용량 때문에 모델 파일이 빠져 있습니다)
+   - 보낸 사람에게서 ocr.pth 파일(195MB)을 따로 받아 toll_demo\models 폴더에 넣습니다
+   - toll_demo 폴더의 setup_toll.bat 을 한 번 실행합니다 (10~20분 걸립니다)
+   - 위 두 가지가 없으면 구간 관제만 "건너뜀"으로 표시되고, 나머지는 정상 동작합니다
 
-3. 실행 (순서 중요)
-   - 백엔드: backend\scargo 를 STS 에서 Run As > Spring Boot App (포트 8080)
-     · 기본 프로필은 dev 입니다 (SCARGO_PROFILE 로 바꿀 수 있음)
-   - OCR 서버: conda create -n yolo python=3.10 / pip install -r python\requirements.txt
-               cd python / uvicorn gate_api:app --host 0.0.0.0 --port 8001
-   - 프론트: cd frontend / npm install / npm run dev (포트 5173, /api 는 8080 으로 프록시)
-
-4. 접속: http://localhost:5173  (S Group 메인에서 로그인 후 S Cargo / S-Bot 선택)
-   - 계정은 서버 시작 시 자동 생성됩니다. DB 에 직접 만들 필요 없음 (아이디/비밀번호는 팀 공유)
-   - dev 프로필에서는 시드 계정 비밀번호가 시작할 때마다 맞춰집니다
-
-5. 자주 나는 문제
-   - 코드를 저장하면 백엔드가 자동 재시작되며 로그인이 풀려 401 이 날 수 있습니다 -> 다시 로그인
-   - DB 연결 문구가 "오프라인" 이면 백엔드(8080)가 켜져 있는지, application.yml 의 DB 이름이 scargo 인지 확인
-
-6. 알림 키(firebase) 파일과 AMR 앱(amr-app)은 압축에 포함되지 않음 (AMR 구축 중)
+[참고]
+   - 계정은 서버가 켜질 때 자동으로 만들어집니다.
+   - DB 는 scargo 하나만 씁니다. 접속 정보는 backend\scargo 의 application.yml 에서 바꿀 수 있습니다.
+   - 문제가 생기면 런처\logs 폴더의 로그를 확인합니다.
