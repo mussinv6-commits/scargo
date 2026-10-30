@@ -121,6 +121,13 @@ public class AmrController {
         return vehicles.recent(hubId, limit);
     }
 
+    // 26.10.29 입차 대기열 (구간 관제 도착 순서)
+    @GetMapping("/vehicles/queue")
+    @PreAuthorize(VIEW)
+    public List<Map<String, Object>> arrivalQueue(@RequestParam(name = "hubId", required = false) Long hubId) {
+        return vehicles.arrivalQueue(hubId);
+    }
+
     // 26.10.16 인식 사진 (앱은 출입증을 ?t= 로 붙여 요청: 이미지 태그는 헤더를 못 보내서)
     // 입출차 기록의 허브로 확인
     @GetMapping("/vehicles/{id}/photo")

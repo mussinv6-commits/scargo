@@ -35,10 +35,17 @@ public class DailyReportService {
 
     @Transactional(readOnly = true)
     public Map<String, Object> report(Authentication authentication, LocalDate date) {
+        return report(authentication, date, null);
+    }
+
+    // 26.10.30 기간 보고: date ~ last(포함). last 가 없으면 하루. 주간 · 월간 · 연간은 화면에서 시작일 · 끝일을 계산해 보낸다
+    @Transactional(readOnly = true)
+    public Map<String, Object> report(Authentication authentication, LocalDate date, LocalDate last) {
         HubScope scope = hubScopePolicy.view(authentication);
         LocalDate day = date == null ? LocalDate.now(KST) : date;
+        LocalDate lastDay = last == null || last.isBefore(day) ? day : last;
         OffsetDateTime from = day.atStartOfDay(KST).toOffsetDateTime();
-        OffsetDateTime to = from.plusDays(1);
+        OffsetDateTime to = lastDay.plusDays(1).atStartOfDay(KST).toOffsetDateTime();
         Long hub = scope.hubId();
 
         List<Line> lines = new ArrayList<>();
@@ -76,6 +83,7 @@ public class DailyReportService {
         }
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("date", day.toString());
+        result.put("to", lastDay.toString());
         result.put("scope", hub == null ? "전체 허브" : "소속 허브 " + hub);
         result.put("generatedAt", OffsetDateTime.now(KST).toString());
         result.put("rows", rows);

@@ -63,6 +63,15 @@
 /* 단계 설명 · 데이터 흐름: 3D 화면 왼쪽 아래에 자막처럼 */
 .amr-twin .capbar{position:absolute;left:12px;bottom:12px;z-index:3;max-width:min(720px,calc(100% - 24px));display:flex;flex-direction:column;gap:6px;padding:9px 13px;background:rgba(var(--glass),.82);backdrop-filter:blur(6px);border:1px solid var(--edge2);border-left:3px solid var(--cyan);border-radius:8px;pointer-events:none}
 .amr-twin .caption{margin:0;font-size:.84rem;line-height:1.5;color:var(--ink)}
+/* 26.10.30 단계 설명은 기본 접힘 — 버튼을 눌러야 펼쳐져서 3D 화면이 가려지지 않음 */
+.amr-twin .capbar .cap-tg{pointer-events:auto;display:inline-flex;align-items:center;gap:6px;align-self:flex-start;margin:-3px -5px;padding:3px 7px;background:none;border:0;border-radius:6px;color:var(--cyan);font:inherit;font-size:.78rem;font-weight:600;cursor:pointer}
+.amr-twin .capbar .cap-tg:hover{background:rgba(63,224,204,.12)}
+.amr-twin .capbar .cap-tg i{font-style:normal}
+.amr-twin .capbar .cap-tg em{width:7px;height:7px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(-45deg);transition:transform .2s;margin-left:2px}
+.amr-twin .capbar.open .cap-tg em{transform:rotate(45deg) translate(-2px,-2px)}
+.amr-twin .capbar:not(.open){gap:0}
+.amr-twin .capbar:not(.open) .caption,.amr-twin .capbar:not(.open) .pipe{display:none}
+.amr-twin .capbar.open{pointer-events:auto}
 .amr-twin .pipe{display:flex;flex-wrap:wrap;gap:3px;align-items:center;font-size:.66rem}
 .amr-twin .pipe .node{padding:3px 8px;border-radius:4px;border:1px solid var(--edge);color:var(--dim);transition:all .35s}
 .amr-twin .pipe .node.on{border-color:var(--cyan);color:var(--cyan);box-shadow:0 0 12px rgba(63,224,204,.25) inset}
@@ -79,7 +88,7 @@
 .amr-twin .twin-views button{background:rgba(var(--glass),.78);backdrop-filter:blur(6px);font-size:.74rem;padding:5px 10px}
 .amr-twin .twin-views button[aria-pressed="true"]{background:var(--cyan);color:#081016;border-color:var(--cyan)}
 .amr-twin .twin-help{position:absolute;left:12px;top:12px;z-index:3;font-size:.7rem;color:var(--muted);background:rgba(var(--glass),.65);padding:4px 9px;border-radius:999px;pointer-events:none}
-.amr-twin .twin-banner{position:absolute;left:50%;top:54px;z-index:4;transform:translate(-50%,-8px);opacity:0;transition:opacity .3s,transform .3s;display:flex;align-items:center;gap:8px;padding:6px 16px 6px 12px;border-radius:999px;background:rgba(var(--glass),.9);border:1px solid var(--c,var(--cyan));font-weight:700;font-size:.86rem;white-space:nowrap;pointer-events:none}
+.amr-twin .twin-banner{position:absolute;left:50%;top:12px;z-index:4;transform:translate(-50%,-8px);opacity:0;transition:opacity .3s,transform .3s;display:flex;align-items:center;gap:8px;padding:6px 16px 6px 12px;border-radius:999px;background:rgba(var(--glass),.9);border:1px solid var(--c,var(--cyan));font-weight:700;font-size:.86rem;white-space:nowrap;pointer-events:none}
 .amr-twin .twin-banner i{width:8px;height:8px;border-radius:50%;background:var(--c,var(--cyan));box-shadow:0 0 10px var(--c,var(--cyan))}
 .amr-twin .twin-banner.show{opacity:1;transform:translate(-50%,0)}
 .amr-twin .twin-fallback{position:absolute;inset:0;display:grid;place-items:center;padding:24px;text-align:center;color:var(--muted);font-size:.9rem}
@@ -333,3 +342,26 @@
 .amr-twin .cfg-card button:disabled{opacity:.35;cursor:not-allowed}
 .amr-twin.remote-view .sim-only{opacity:.45;position:relative}
 .amr-twin.remote-view .sim-only::after{content:"시뮬레이터 화면 · DB 아님";position:absolute;top:8px;right:10px;font-size:10.5px;font-weight:700;color:var(--muted,#8a9bb0)}
+
+/* 26.10.29 3D 위에 겹치던 메뉴를 위쪽 띠 한 줄로 모음 */
+.amr-twin .twin-bar{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:6px 12px;background:rgba(var(--glass),.96);border-bottom:1px solid var(--edge)}
+.amr-twin .twin-bar .twin-views,.amr-twin .twin-bar .twin-presets,.amr-twin .twin-bar .twin-fire-ctl,.amr-twin .twin-bar .twin-clock{position:static !important;inset:auto !important;max-width:none;pointer-events:auto}
+.amr-twin .twin-bar .twin-views{order:1;justify-content:flex-start}
+.amr-twin .twin-bar .twin-presets{order:2;justify-content:flex-start}
+.amr-twin .twin-bar .twin-bar-br{order:3;flex-basis:100%;height:0}
+.amr-twin .twin-bar .twin-fire-ctl{order:4;flex-wrap:wrap}
+.amr-twin .twin-bar .twin-clock{order:5;margin-left:auto;white-space:nowrap}
+.amr-twin .twin-bar .twin-clock{display:flex !important;align-items:baseline;gap:8px;padding:4px 10px !important}
+
+/* 26.10.29 QA: 넓은 화면에서 STEP 단계 글자가 잘리던 문제 → 단계를 한 줄 아래로 (시안 A)
+   1줄: 제목 · 조작 버튼 / 2줄: STEP 01~05 (이름 전체) · 오른쪽 상태 배지는 두 줄에 걸쳐 그대로 */
+@media (min-width:1200px){
+  .amr-twin header.twin-head{display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-rows:auto auto;column-gap:16px;row-gap:8px;align-items:center}
+  .amr-twin header.twin-head > :nth-child(1){grid-column:1;grid-row:1}
+  .amr-twin header.twin-head > .controls{grid-column:2;grid-row:1;justify-self:end;flex-wrap:wrap;justify-content:flex-end}
+  .amr-twin header.twin-head > .stages{grid-column:1 / 3;grid-row:2;flex:none;width:100%}
+  .amr-twin header.twin-head > :nth-child(4){grid-column:3;grid-row:1 / 3;align-self:center}
+  .amr-twin .stages .stage{display:flex;align-items:center;gap:8px;padding:6px 12px;border-radius:8px}
+  .amr-twin .stages .stage .n{font-size:.66rem;flex:none}
+  .amr-twin .stages .stage .t{display:inline;font-size:.82rem;min-width:0}
+}

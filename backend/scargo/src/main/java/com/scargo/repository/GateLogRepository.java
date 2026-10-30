@@ -14,6 +14,39 @@ import java.util.List;
 @Repository
 public interface GateLogRepository extends JpaRepository<GateLog, Long> {
 
+    // 업체 범위 조회: 해당 업체 소속 차량(trucks.company_id)으로 매칭된 이력만 (actual_vehicle_no 가 없는 이력은 관리자 전용)
+    String COMPANY_SCOPE =
+            "g.actualVehicleNo in (select t.vehicleNo from Truck t where t.company.companyId = :companyId)";
+
+    @Query(value = "select g from GateLog g where " + COMPANY_SCOPE,
+            countQuery = "select count(g) from GateLog g where " + COMPANY_SCOPE)
+    Page<GateLog> findScoped(@Param("companyId") Long companyId, Pageable pageable);
+
+    @Query(value = "select g from GateLog g where " + COMPANY_SCOPE
+            + " and g.actualVehicleNo like concat('%', :vehicleNo, '%')",
+            countQuery = "select count(g) from GateLog g where " + COMPANY_SCOPE
+            + " and g.actualVehicleNo like concat('%', :vehicleNo, '%')")
+    Page<GateLog> findScopedByVehicle(@Param("companyId") Long companyId,
+                                      @Param("vehicleNo") String vehicleNo,
+                                      Pageable pageable);
+
+    @Query(value = "select g from GateLog g where " + COMPANY_SCOPE
+            + " and g.gate.gateType = :gateType",
+            countQuery = "select count(g) from GateLog g where " + COMPANY_SCOPE
+            + " and g.gate.gateType = :gateType")
+    Page<GateLog> findScopedByGateType(@Param("companyId") Long companyId,
+                                       @Param("gateType") String gateType,
+                                       Pageable pageable);
+
+    @Query(value = "select g from GateLog g where " + COMPANY_SCOPE
+            + " and g.passAt between :start and :end",
+            countQuery = "select count(g) from GateLog g where " + COMPANY_SCOPE
+            + " and g.passAt between :start and :end")
+    Page<GateLog> findScopedBetween(@Param("companyId") Long companyId,
+                                    @Param("start") OffsetDateTime start,
+                                    @Param("end") OffsetDateTime end,
+                                    Pageable pageable);
+
     // 차량 번호 기반 이력 조회
     Page<GateLog> findByActualVehicleNo(
             String actualVehicleNo,

@@ -255,7 +255,8 @@
 .sc2 nav{position:sticky;top:var(--nav-h,60px);height:calc(100vh / var(--sc-zoom, 1) - var(--nav-h, 60px));overflow-y:auto;scrollbar-width:none}
 .sc2 nav::-webkit-scrollbar{display:none}
 .sc2 main{padding-bottom:16px;min-width:0}
-.sc2 td.l{text-align:left}
+/* 26.10.29 사유·메모·메시지처럼 문장이 들어가는 칸만 왼쪽. 짧은 칸은 가운데 유지 */
+.sc2 td.l,.sc2 td .l{text-align:left !important}
 /* 허브 관제 */
 .sc2 h4.subh{margin:4px 0 8px;font-size:15px;font-weight:800;color:#102644;display:flex;align-items:center;gap:6px}
 .sc2 h4.subh .meta{font-weight:400;font-size:12.5px}
@@ -274,3 +275,23 @@
 /* 톨게이트 예상 통행료 가운데 */
 .sc2 .tollbar{flex-direction:column;justify-content:center}
 .sc2 .tollbar .fare{margin:0;justify-content:center}
+
+/* 26.10.28 QA#16 · #17 한 화면에 나열된 목록을 탭 버튼으로 전환 (허브 관제 · 지역센터 관제 공통)
+   모양은 운영 센터 탭(.oc-tabs)과 같게: 흰 버튼 + 선택된 탭은 주황 채움 */
+.sc2 .w-tabs{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 14px;padding:0}
+/* 26.10.28 탭 모양 통일: 지역센터 인수 현황 탭(.crp-tabs)과 같은 모양 (회색 버튼 + 선택 탭은 파란 채움) */
+.sc2 .w-tabs button{display:inline-flex;align-items:center;gap:6px;border:1px solid #cfd6df;background:#f8fafc;color:#1f2937;border-radius:8px;padding:7px 14px;font-family:inherit;font-size:13.5px;font-weight:600;cursor:pointer}
+.sc2 .w-tabs button:hover:not(.on){border-color:#1d4ed8;color:#1d4ed8}
+.sc2 .w-tabs button.on{background:#1d4ed8;border-color:#1d4ed8;color:#fff;font-weight:700}
+.sc2 .w-tabs button .n{min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:#eef1f6;color:#0b1d36;font-size:12px;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
+.sc2 .w-tabs button.on .n{background:rgba(255,255,255,.55)}
+.sc2 .w-tabs button .bi{display:none}
+
+/* 26.10.28 관제 현황: 카드 크기는 그대로 두고, 영역 사이 간격만 넓힘
+   (상단 카드 ↔ 거점 현황 ↔ 최근 예외 · 오늘의 배송 내역 ↔ 거점 색 기준) */
+.sc2 .dash{gap:24px}
+.sc2 .dash h3.sec{margin:0 0 -14px !important} /* '거점 현황' 제목은 아래 거점 카드에 붙여 둠 */
+/* 관리자 화면 안에서는 아래 여백을 줄여, 넓힌 간격만큼 표 칸이 줄지 않게 */
+.admin-main:has(.sc2-in-admin .dash){padding-bottom:12px}
+.admin-main .sc2-in-admin main:has(> .dash){padding-bottom:0}
+.admin-main .sc2-in-admin .dash{height:calc(100vh / var(--sc-zoom, 1) - 140px);min-height:520px}

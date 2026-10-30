@@ -33,7 +33,7 @@
               <td>{{ r.locationName || (r.locationId ? `#${r.locationId}` : '-') }}</td>
               <td class="is-center"><span class="pill" :class="statusTone(r.status)">{{ statusLabel(r.status) }}</span></td>
               <td>{{ formatDate(r.loadedAt) }}</td>
-              <td class="is-center"><button class="btn-admin btn-admin-danger" @click="remove(r)">삭제</button></td>
+              <td class="is-center"><button class="btn-act del" @click="remove(r)">삭제</button></td>
             </tr>
           </tbody>
         </table>

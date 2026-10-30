@@ -29,8 +29,9 @@ public class DailyReportController {
     @GetMapping("/daily")
     public ResponseEntity<Map<String, Object>> daily(
             Authentication authentication,
-            @RequestParam(name = "date", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
-        return ResponseEntity.ok(service.report(authentication, date));
+            @RequestParam(name = "date", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(name = "to", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        return ResponseEntity.ok(service.report(authentication, date, to));
     }
 
     @GetMapping("/daily/xlsx")

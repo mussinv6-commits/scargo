@@ -20,21 +20,25 @@
   <div id="demo"></div>
   <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px">
     <span id="tabs" style="display:flex;gap:8px;flex-wrap:wrap"></span>
+    <span id="rangeBar" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-left:14px"></span>
     <span id="sum" style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap"></span>
   </div>
   <div id="err" class="sub" style="color:#b42318"></div>
   <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start">
-    <section class="card" style="flex:999 1 620px;overflow-x:auto">
+    <section class="card" style="flex:999 1 620px;min-width:0;align-self:stretch;display:flex;flex-direction:column">
       <h3>관제 대상 차량 <span id="shown" class="sub" style="font-weight:400"></span> <span class="sub" title="톨게이트·검문소는 도로공사 등 외부 기관 시설입니다. 이 화면의 계측 결과·과태료·운행 중지는 도로공사 연계로 통보받은 내용이고, SCARGO 는 단속하거나 차량을 막지 않습니다. 확정 판정이 나오면 진출 권고를 만들고, 관제자가 지시를 보내면 기록이 남습니다. 표는 DB 조회 결과로 3초마다 새로고침됩니다.판정: 정상 기준 이내 · 주의 기준 초과, 허용 오차(10%) 이내 · 확정 허용 오차 초과 (재측정이 있으면 재측정 결과 기준)" style="cursor:help;border:1px solid #9aa6c4;border-radius:99px;padding:0 6px;margin-left:6px">ⓘ 안내</span></h3>
-      <div class="scroll" style="max-height:460px"><div id="list" style="min-width:820px"></div></div>
+      <div class="scroll"><div id="list"></div></div>
+      <div id="pager" style="display:flex;gap:10px;align-items:center;justify-content:center;margin-top:auto;padding-top:10px"></div>
     </section>
     <aside style="flex:1 1 340px;display:flex;flex-direction:column;gap:14px;min-width:0" id="side"></aside>
   </div>
 </main>
 <script src="/common.js"></script>
 <script>
-const COLS = '156px minmax(170px,1.3fr) repeat(3,minmax(104px,1fr)) 64px 84px';
-let tab = 'run', selId = null, busy = false, data = { trips: [], issues: [] };
+const COLS = 'minmax(160px,1fr) minmax(150px,1.2fr) repeat(3,minmax(70px,1fr)) 52px 74px';
+const PAGE = 10;
+const pendOf = t => isDone(t) ? 0 : t.pending;      // 운행 완료 차량은 권고할 일이 없다
+let tab = 'run', page = 1, selId = null, busy = false, again = false, data = { trips: [], issues: [] };
 
 function cell(t, p) {
   if (p.skipped) return '<span class="sub">미통과(우회)</span>';
@@ -43,6 +47,7 @@ function cell(t, p) {
 }
 function actCell(t) {
   const iss = t.actions.filter(a => a.action_type !== 'CHECKPOINT_NOTICE').length;
+  if (isDone(t)) return '<span class="sub">—</span>';
   if (t.pending) return pill('red', `권고 대기 ${t.pending}`);
   if (t.recs.some(r => !r.issued && r.type === 'REROUTE_ADVISE')) return pill('red', '권고 대기');
   const optional = t.recs.some(r => !r.issued);
@@ -53,26 +58,31 @@ function actCell(t) {
 function render() {
   const T = data.trips;
   const rank = { CONFIRMED: 0, CAUTION: 1, NORMAL: 2 };
-  const order = [...T].sort((a, b) => (b.pending > 0) - (a.pending > 0) || rank[a.level] - rank[b.level] || new Date(b.updated_at) - new Date(a.updated_at));
-  const f = { run: t => !isDone(t), done: t => isDone(t), all: () => true };
+  const order = [...T].sort((a, b) => (pendOf(b) > 0) - (pendOf(a) > 0) || rank[a.level] - rank[b.level] || new Date(b.updated_at) - new Date(a.updated_at));
+  const f = { run: t => !isDone(t) && !isHalted(t), done: t => isDone(t), halt: t => isHalted(t), all: () => true };
   const cnt = k => T.filter(f[k]).length;
-  document.getElementById('tabs').innerHTML = [['run', '운행 중'], ['done', '운행 완료']]
+  document.getElementById('tabs').innerHTML = [['run', '운행 중'], ['halt', '운행 중지 (검문소 조치)'], ['done', '운행 완료']]
     .map(([k, l]) => `<button class="tab ${tab === k ? 'on' : ''}" data-t="${k}">${l} ${cnt(k)}</button>`).join('');
-  document.querySelectorAll('#tabs .tab').forEach(b => b.onclick = () => { tab = b.dataset.t; render(); });
-  const pend = T.reduce((a, t) => a + t.pending, 0), dev = T.filter(t => posOf(t).status === 'DEVIATING').length;
+  document.querySelectorAll('#tabs .tab').forEach(b => b.onclick = () => { tab = b.dataset.t; page = 1; render(); });
+  const pend = T.reduce((a, t) => a + pendOf(t), 0), dev = T.filter(t => posOf(t).status === 'DEVIATING').length;
   document.getElementById('sum').innerHTML = (dev ? pill('red', `경로 이탈 ${dev}대`) : '') + (pend ? pill('red', `권고 대기 ${pend}건`) : '');
-  const list = order.filter(f[tab]);
-  document.getElementById('shown').textContent = `· 권고 대기 → 확정 → 주의 → 정상 순 (${list.length}대)`;
-  if (!list.some(t => t.trip_id === selId)) selId = list.length ? list[0].trip_id : null;
+  const full = order.filter(f[tab]), pages = Math.max(1, Math.ceil(full.length / PAGE)); if (page > pages) page = pages;
+  const list = full.slice((page - 1) * PAGE, page * PAGE);
+  document.getElementById('shown').textContent = `· 권고 대기 → 확정 → 주의 → 정상 순 (${full.length}대)`;
+  if (!full.some(t => t.trip_id === selId)) selId = full.length ? full[0].trip_id : null;
   document.getElementById('list').innerHTML = `<div class="row h" style="grid-template-columns:${COLS}"><span>차량</span><span>현재 위치</span><span>인천 과적검문소</span><span>남인천TG</span><span>청계TG</span><span>판정</span><span>관제 권고</span></div>` +
     (list.length ? list.map(t => {
       const pos = posOf(t), bad = pos.status === 'DEVIATING' || pos.status === 'STOPPED';
-      return `<button class="row ${t.trip_id === selId ? 'sel' : ''}" data-id="${t.trip_id}" style="grid-template-columns:${COLS};${t.pending && t.trip_id !== selId ? 'background:#fdf3f2' : ''}">
+      return `<button class="row ${t.trip_id === selId ? 'sel' : ''}" data-id="${t.trip_id}" style="grid-template-columns:${COLS};${pendOf(t) && t.trip_id !== selId ? 'background:#fdf3f2' : ''}">
       <span style="white-space:nowrap"><span class="plate" style="font-size:12px;padding:1px 7px">${esc(t.vehicle_no)}</span>${t.vehicle_class ? ` <span class="sub">${t.vehicle_class}종</span>` : ''}</span>
-      <span>${pill(pos.state[0], isDone(t) ? '운행 완료' : pos.state[1])}<br><span class="sub">${isDone(t) ? `곤지암 허브 ${hms(arrivedAt(t))} 도착` : `${pos.km.toFixed(1)} / ${ROUTE_KM_TOTAL}km`}</span><span style="display:block;height:4px;background:#eceff5;border-radius:2px;margin-top:2px"><i style="display:block;height:4px;border-radius:2px;width:${Math.min(100, pos.km / ROUTE_KM_TOTAL * 100).toFixed(0)}%;background:${bad ? '#b42318' : '#6b7ba8'}"></i></span></span>
+      <span><span style="display:block;margin-bottom:4px">${pill(pos.state[0], isDone(t) ? '운행 완료' : pos.state[1])}</span><span class="sub" style="display:block;white-space:nowrap">${isDone(t) ? `곤지암 허브 ${hms(arrivedAt(t))} 도착` : isHalted(t) ? `${pos.km.toFixed(1)}km 지점에서 중지` : `${pos.km.toFixed(1)} / ${ROUTE_KM_TOTAL}km`}</span><span style="display:block;height:4px;background:#eceff5;border-radius:2px;margin-top:2px"><i style="display:block;height:4px;border-radius:2px;width:${Math.min(100, pos.km / ROUTE_KM_TOTAL * 100).toFixed(0)}%;background:${bad ? '#b42318' : '#6b7ba8'}"></i></span></span>
       ${t.point_list.map(p => `<span>${cell(t, p)}</span>`).join('')}<span>${lvPill(t.level)}</span><span>${actCell(t)}</span></button>`;
-    }).join('') : `<div class="empty">${tab === 'done' ? '아직 운행을 완료한 차량이 없습니다. 곤지암 허브에 도착하면 여기로 넘어옵니다.' : '관제 대상 차량이 없습니다. 관제 지도에서 차량을 출차시키면 여기에 표시됩니다.'}</div>`);
+    }).join('') : `<div class="empty">${tab === 'halt' ? '검문소 조치로 운행이 중지된 차량이 없습니다.' : tab === 'done' ? '아직 운행을 완료한 차량이 없습니다. 곤지암 허브에 도착하면 여기로 넘어옵니다.' : '관제 대상 차량이 없습니다. 관제 지도에서 차량을 출차시키면 여기에 표시됩니다.'}</div>`);
   document.querySelectorAll('#list button.row').forEach(b => b.onclick = () => { selId = Number(b.dataset.id); render(); });
+  document.getElementById('pager').innerHTML = full.length <= PAGE ? '' :
+    `<button class="tab" id="pgP" ${page <= 1 ? 'disabled' : ''}>‹ 이전</button><span class="sub">${page} / ${pages} 쪽 · 총 ${full.length}대</span><button class="tab" id="pgN" ${page >= pages ? 'disabled' : ''}>다음 ›</button>`;
+  const pp = document.getElementById('pgP'), pn = document.getElementById('pgN');
+  if (pp) pp.onclick = () => { page--; render(); }; if (pn) pn.onclick = () => { page++; render(); };
   side(T.find(t => t.trip_id === selId));
 }
 
@@ -127,7 +137,7 @@ function side(t) {
     <div class="bars" style="gap:8px;height:90px;padding:0 6px"><div class="lim" style="bottom:${t.limit_kg * 66 / 50000}px"></div>
       ${bars.map(b => b ? `<i class="${b.bad ? 'bad' : ''}" style="height:${Math.round(b.v * 66 / 50000)}px;${b.cau ? 'background:#f5a300' : ''}"></i>` : '<i style="height:0"></i>').join('')}</div>
     <div class="barlab" style="gap:8px;padding:2px 6px">${t.point_list.map(p => `<span>${esc(p.name)}</span>`).join('')}</div></div>
-    ${t.recs.length ? `<div class="card"><h3>관제 권고</h3><div style="display:flex;flex-direction:column;gap:10px">${t.recs.map(r => recCard(t, r)).join('')}</div></div>` :
+    ${isDone(t) ? '' : t.recs.length ? `<div class="card"><h3>관제 권고</h3><div style="display:flex;flex-direction:column;gap:10px">${t.recs.map(r => recCard(t, r)).join('')}</div></div>` :
       `<div class="card"><h3>관제 권고</h3><div class="sub">${t.point_list.some(p => p.final) ? '권고할 사항이 없습니다 (정상).' : '아직 계측 결과가 없습니다.'}</div></div>`}
     ${isDone(t) ? doneCard(t) : `<div class="card"><h3>통행료 · 과태료</h3><dl class="kv" style="grid-template-columns:96px 1fr">
       <dt>예상 통행료</dt><dd>${esc(tollText(t))}<br><span class="sub">${t.quote ? `출발 ${esc(hm(t.quote.departed_at))} 기준 · 평균 60km/h 가정 · ` : ''}통행료는 도로공사가 청구하는 값이며 실제와 다를 수 있음</span></dd>
@@ -144,16 +154,18 @@ function side(t) {
 const ACT_NAME = { REROUTE_ADVISE: '대안 경로 안내', EXIT_ADVISE: '진출 권고', HOLD_NOTICE: '검문소 조치 확인 요청', CAUTION_NOTICE: '적재 점검 안내', CHECKPOINT_NOTICE: '검문소 전방 안내' };
 
 async function load() {
-  if (busy) return; busy = true;
+  if (busy) { again = true; return; } busy = true;
   try {
-    data = await api('/api/db/overview');
+    data = await api('/api/db/overview?' + rangeQuery());
     setSim(data.sim);
     document.getElementById('err').textContent = '';
     render(); stamp();
   } catch (e) { document.getElementById('err').textContent = 'DB 조회 실패: ' + e.message; }
   busy = false;
+  if (again) { again = false; load(); }
 }
 setupChrome('ck', { refresh: load, selectedPid: () => selId, onStarted: k => { selId = k; } });
+mountRange(document.getElementById('rangeBar'), () => { page = 1; load(); });
 load(); setInterval(load, 3000);
 </script>
 </body>

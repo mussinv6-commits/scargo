@@ -12,7 +12,8 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js'
-import { AISLES, ROWS, NS, SX, DOCK_Y, HXL, HXR, STATION_Y, CHARGERS, BAY, GW, HUBS, ZONES, COLORS, status, lvCol, COLD_ROW, COLD_ROOM, LEVEL_H, FL_HOME, sideOn, ean13Bits, fmtPlate, INTER_NODES, INTER_R } from './amrSim.js'
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js'
+import { AISLES, ROWS, NS, SX, DOCK_Y, HXL, HXR, STATION_Y, CHARGERS, BAY, GW, HUBS, ZONES, COLORS, status, lvCol, COLD_ROW, COLD_ROOM, LEVEL_H, FL_HOME, FIRE_REFUGE, QUAR, FIRE_ZONE_RECT, sideOn, ean13Bits, fmtPlate, INTER_NODES, INTER_R } from './amrSim.js'
 
 const M = 0.05
 const X = (x) => (x - 500) * M
@@ -262,7 +263,7 @@ function waybillTex(c) {
 /* ── 공용 재질 ── */
 function makeMaterials(tex) {
   return {
-    floor: new THREE.MeshStandardMaterial({ map: tex.concrete, color: 0xb4b9be, roughness: 0.48, metalness: 0.0, envMapIntensity: 0.6 }),
+    floor: new THREE.MeshStandardMaterial({ map: tex.concrete, color: 0xb4b9be, roughness: 0.4, metalness: 0.0, envMapIntensity: 0.7 }),
     asphalt: new THREE.MeshStandardMaterial({ map: tex.asphalt, roughness: 0.95 }),
     ground: new THREE.MeshStandardMaterial({ color: 0x14181c, roughness: 1 }),
     wall: new THREE.MeshStandardMaterial({ map: tex.panel, roughness: 0.55, metalness: 0.35 }),
@@ -302,8 +303,19 @@ export function createAmrScene(container, sim, opts = {}) {
   renderer.toneMappingExposure = 0.92
   renderer.shadowMap.enabled = true
   renderer.shadowMap.type = THREE.PCFSoftShadowMap
+  // 26.10.28 시계: 실제 현재 시각 (+ 낮/밤 표시) — 3D 화면 왼쪽 위
+  const clockEl = document.createElement('div')
+  clockEl.className = 'twin-clock'
+  clockEl.style.cssText = 'position:absolute;left:12px;top:10px;z-index:6;pointer-events:none;font:600 13px/1.25 ui-monospace,Consolas,"Malgun Gothic",monospace;padding:6px 10px;border-radius:8px;background:rgba(10,16,24,.62);color:#e8eef6;border:1px solid rgba(255,255,255,.14);backdrop-filter:blur(4px);text-align:left;white-space:nowrap'
+  const clockTick = () => { const d = new Date(), p = (n) => String(n).padStart(2, '0'), wd = '일월화수목금토'[d.getDay()]
+    const day = clockEl.dataset.theme === 'light'
+    clockEl.style.background = day ? 'rgba(255,255,255,.75)' : 'rgba(10,16,24,.62)'; clockEl.style.color = day ? '#1c2733' : '#e8eef6'; clockEl.style.borderColor = day ? 'rgba(0,0,0,.14)' : 'rgba(255,255,255,.14)'
+    clockEl.innerHTML = '<div style="font-size:17px;letter-spacing:.5px">' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds()) + '</div><div style="font-size:11px;opacity:.75;font-weight:500">' + d.getFullYear() + '.' + p(d.getMonth() + 1) + '.' + p(d.getDate()) + ' (' + wd + ')</div>' }
+  clockTick(); const clockTimer = setInterval(clockTick, 1000)
   renderer.domElement.className = 'twin-gl'
   container.appendChild(renderer.domElement)
+  try { if (getComputedStyle(container).position === 'static') container.style.position = 'relative' } catch (e) { /* 무시 */ }
+  container.appendChild(clockEl)
 
   const labelRenderer = new CSS2DRenderer()
   labelRenderer.domElement.className = 'twin-labels'
@@ -352,11 +364,31 @@ export function createAmrScene(container, sim, opts = {}) {
   let is2D = false
   const activeCam = () => (is2D ? cam2 : camera)
 
-  const composer = new EffectComposer(renderer)
+  // 26.10.28 화질: 후처리 화면에도 4배 안티앨리어싱(MSAA)을 적용해 랙 · 선반 모서리가 계단처럼 보이지 않게 한다
+  const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 }))
   composer.addPass(new RenderPass(scene, camera))
   const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.45, 0.5, 1.3)
   composer.addPass(bloom)
   composer.addPass(new OutputPass())
+  // 26.10.28 색 보정: 어두운 곳은 차가운 청록, 밝은 곳은 따뜻하게(영화 같은 색 분리) + 약한 대비 + 가장자리 어둡게 + 아주 약한 필름 입자
+  const GradeShader = {
+    uniforms: { tDiffuse: { value: null }, uTime: { value: 0 }, uVig: { value: 0.30 }, uGrain: { value: 0.018 } },
+    vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: `uniform sampler2D tDiffuse; uniform float uTime, uVig, uGrain; varying vec2 vUv;
+      float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233)) + uTime) * 43758.5453); }
+      void main(){
+        vec3 c = texture2D(tDiffuse, vUv).rgb;
+        float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+        c = mix(c, c * c * (3.0 - 2.0 * c), 0.22);                       // 부드러운 S 곡선 대비
+        c += mix(vec3(-0.010, 0.006, 0.020), vec3(0.020, 0.010, -0.014), smoothstep(0.15, 0.85, l)) * 0.9; // 그림자 청록 · 하이라이트 따뜻
+        c = mix(vec3(dot(c, vec3(0.2126, 0.7152, 0.0722))), c, 1.08);   // 채도 소폭 상승
+        vec2 q = vUv - 0.5; c *= 1.0 - uVig * smoothstep(0.30, 0.95, length(q * vec2(1.15, 1.0)));
+        c += (h(vUv * 1024.0) - 0.5) * uGrain;
+        gl_FragColor = vec4(c, 1.0);
+      }`,
+  }
+  const grade = new ShaderPass(GradeShader)
+  composer.addPass(grade)
 
   /* ── 조명 ── */
   // 실내 조명: 천장 고천장등(따뜻한 백색) 느낌의 키 라이트 + 약한 하늘빛
@@ -387,9 +419,372 @@ export function createAmrScene(container, sim, opts = {}) {
   ;[[-34, 26], [34, 26]].forEach(([cx, wdt]) => {
     const p = mesh(new THREE.PlaneGeometry(wdt, 44), MAT.asphalt, cx, -0.01, 0, false); p.rotation.x = -Math.PI / 2; world.add(p)
   })
+  /* ── 26.10.28 주변 환경: 하늘 · 야적장 · 울타리 · 가로등 · 먼 도시 (대기 차량 영역은 건드리지 않음) ── */
+  {
+    const env = new THREE.Group(); env.name = 'env'; world.add(env)
+    const cvs = (w, h, fn) => { const c = document.createElement('canvas'); c.width = w; c.height = h; fn(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; disposables.push(t); return t }
+    let rs = 11; const rnd = () => { rs = (rs * 16807) % 2147483647; return rs / 2147483647 }
+    // 하늘 돔 (위: 짙은 남색 → 지평선: 연한 보랏빛)
+    const skyTex = cvs(8, 256, (g, w, h) => { const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#060b18'); gr.addColorStop(0.55, '#14233d'); gr.addColorStop(0.85, '#2c3d5e'); gr.addColorStop(1, '#46587a'); g.fillStyle = gr; g.fillRect(0, 0, w, h) })
+    const skyDay = cvs(8, 256, (g, w, h) => { const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#3f7fc4'); gr.addColorStop(0.55, '#7db3e3'); gr.addColorStop(0.88, '#cfe3f2'); gr.addColorStop(1, '#e6eef3'); g.fillStyle = gr; g.fillRect(0, 0, w, h) })
+    const sky = new THREE.Mesh(new THREE.SphereGeometry(190, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide, fog: false, depthWrite: false }))
+    sky.position.y = -2; sky.renderOrder = -10; env.add(sky); disposables.push(sky.geometry, sky.material)
+    // 별
+    { const n = 160, pos = new Float32Array(n * 3); for (let i = 0; i < n; i++) { const a = rnd() * Math.PI * 2, e = 0.25 + rnd() * 1.1, r = 180; pos[i * 3] = Math.cos(a) * Math.cos(e) * r; pos[i * 3 + 1] = Math.sin(e) * r; pos[i * 3 + 2] = Math.sin(a) * Math.cos(e) * r }
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); const pm = new THREE.PointsMaterial({ color: 0xcfe0ff, size: 1.3, sizeAttenuation: false, fog: false, transparent: true, opacity: 0.8, depthWrite: false }); const pts = new THREE.Points(g, pm); pts.renderOrder = -9; env.add(pts); env.userData.stars = pts; disposables.push(g, pm) }
+    // 지면: 야적장 콘크리트 + 바깥 도로/잔디
+    const concT = cvs(256, 256, (g, w, h) => { g.fillStyle = '#4b5159'; g.fillRect(0, 0, w, h); for (let i = 0; i < 1400; i++) { const v = 70 + rnd() * 40; g.fillStyle = `rgba(${v},${v + 3},${v + 8},0.35)`; g.fillRect(rnd() * w, rnd() * h, 2, 2) } g.strokeStyle = 'rgba(20,24,30,0.5)'; g.lineWidth = 2; g.strokeRect(0, 0, w, h) })
+    concT.wrapS = concT.wrapT = THREE.RepeatWrapping; concT.repeat.set(14, 14)
+    const apron = new THREE.Mesh(new THREE.PlaneGeometry(130, 90), new THREE.MeshStandardMaterial({ map: concT, roughness: 0.92 })); apron.rotation.x = -Math.PI / 2; apron.position.set(0, -0.015, 0); apron.receiveShadow = true; env.add(apron); disposables.push(apron.geometry, apron.material)
+    const grassT = cvs(128, 128, (g, w, h) => { g.fillStyle = '#18251d'; g.fillRect(0, 0, w, h); for (let i = 0; i < 900; i++) { g.fillStyle = `rgba(${30 + rnd() * 30},${55 + rnd() * 40},${35 + rnd() * 20},0.5)`; g.fillRect(rnd() * w, rnd() * h, 2, 3) } })
+    grassT.wrapS = grassT.wrapT = THREE.RepeatWrapping; grassT.repeat.set(40, 40)
+    const grass = new THREE.Mesh(new THREE.PlaneGeometry(320, 320), new THREE.MeshStandardMaterial({ map: grassT, roughness: 1 })); grass.rotation.x = -Math.PI / 2; grass.position.y = -0.03; env.add(grass); disposables.push(grass.geometry, grass.material)
+    // 바깥 도로 (남쪽) + 점선
+    const roadT = cvs(512, 128, (g, w, h) => { g.fillStyle = '#23272d'; g.fillRect(0, 0, w, h); for (let i = 0; i < 1500; i++) { const v = 40 + rnd() * 30; g.fillStyle = `rgba(${v},${v},${v + 4},0.4)`; g.fillRect(rnd() * w, rnd() * h, 2, 2) } g.fillStyle = '#d8c25a'; for (let x = 0; x < w; x += 64) g.fillRect(x + 8, h / 2 - 2, 36, 4); g.fillStyle = '#c9ced6'; g.fillRect(0, 6, w, 3); g.fillRect(0, h - 9, w, 3) })
+    roadT.wrapS = THREE.RepeatWrapping; roadT.repeat.set(8, 1)
+    const road = new THREE.Mesh(new THREE.PlaneGeometry(320, 12), new THREE.MeshStandardMaterial({ map: roadT, roughness: 0.9 })); road.rotation.x = -Math.PI / 2; road.position.set(0, -0.01, 40); road.receiveShadow = true; env.add(road); disposables.push(road.geometry, road.material)
+    // 울타리 (야적장 둘레, 입구 쪽 비움)
+    const fenceMat = new THREE.MeshStandardMaterial({ color: 0x8a94a0, metalness: 0.6, roughness: 0.5 })
+    const postG = box(0.14, 2.6, 0.14), railG = box(1, 0.08, 0.06)
+    const fence = (x0, z0, x1, z1) => { const L = Math.hypot(x1 - x0, z1 - z0), n = Math.max(1, Math.round(L / 3)), ang = Math.atan2(z1 - z0, x1 - x0)
+      for (let i = 0; i <= n; i++) { const t = i / n; env.add(mesh(postG, fenceMat, x0 + (x1 - x0) * t, 1.3, z0 + (z1 - z0) * t, false)) }
+      ;[0.5, 1.3, 2.3].forEach((y) => { const r = mesh(railG, fenceMat, (x0 + x1) / 2, y, (z0 + z1) / 2, false); r.scale.x = L; r.rotation.y = -ang; env.add(r) })
+      const mesh2 = mesh(box(L, 1.7, 0.02), new THREE.MeshStandardMaterial({ color: 0x9aa4b0, transparent: true, opacity: 0.22, roughness: 0.6 }), (x0 + x1) / 2, 1.45, (z0 + z1) / 2, false); mesh2.rotation.y = -ang; env.add(mesh2) }
+    fence(-62, -30, 62, -30); fence(-62, -30, -62, 28); fence(62, -30, 62, 28); fence(-62, 28, -8, 28); fence(8, 28, 62, 28)
+    // 정문 (남쪽 가운데) — 차단기 + 경비실
+    env.add(mesh(box(2.6, 2.6, 2.6), new THREE.MeshStandardMaterial({ color: 0xcfd6de, roughness: 0.6 }), -9.5, 1.3, 28.2))
+    env.add(mesh(box(2.8, 0.2, 2.8), new THREE.MeshStandardMaterial({ color: 0x2a3340 }), -9.5, 2.7, 28.2))
+    env.add(mesh(box(1.4, 0.9, 0.05), new THREE.MeshStandardMaterial({ color: 0x7fd4ff, emissive: 0x2f7fa8, emissiveIntensity: 0.9 }), -9.5, 1.6, 26.85, false))
+    const bar = mesh(box(8, 0.14, 0.14), new THREE.MeshStandardMaterial({ color: 0xffffff }), -4.2, 1.2, 28.2, false); env.add(bar)
+    for (let i = 0; i < 6; i++) env.add(mesh(box(0.55, 0.15, 0.15), new THREE.MeshStandardMaterial({ color: 0xe0352b }), -7.6 + i * 1.5, 1.2, 28.2, false))
+    env.add(mesh(box(0.3, 1.4, 0.3), new THREE.MeshStandardMaterial({ color: 0x2a3340 }), -8.2, 0.7, 28.2))
+    // 직원·방문 주차장 (동·서 바깥) — 허브 주변은 컨테이너 야적이 아니라 주차장과 적재 대기 공간
+    const lineMat = new THREE.MeshBasicMaterial({ color: 0xcfd6de }), carCols = [0xd9dde3, 0x20252c, 0x8b1e2d, 0x2f5f9a, 0x9aa3ad, 0x3b6b4e, 0xe8e4d8]
+    const carBody = box(4.3, 0.75, 1.8), carCab = box(2.2, 0.62, 1.64), wheelG = new THREE.CylinderGeometry(0.34, 0.34, 0.24, 12); disposables.push(wheelG)
+    const wheelM = new THREE.MeshStandardMaterial({ color: 0x15181c, roughness: 0.9 }), glassM = new THREE.MeshStandardMaterial({ color: 0x1b2836, roughness: 0.2, metalness: 0.6 })
+    const car = (x, z, rotY) => { const g = new THREE.Group(); const col = carCols[Math.floor(rnd() * carCols.length)], bm = new THREE.MeshStandardMaterial({ color: col, roughness: 0.4, metalness: 0.5 })
+      g.add(mesh(carBody, bm, 0, 0.62, 0)); g.add(mesh(carCab, glassM, -0.1, 1.28, 0)); g.add(mesh(box(2.0, 0.06, 1.5), bm, -0.1, 1.62, 0, false))
+      ;[[-1.35, -0.9], [-1.35, 0.9], [1.35, -0.9], [1.35, 0.9]].forEach(([wx, wz]) => { const w = mesh(wheelG, wheelM, wx, 0.34, wz, false); w.rotation.x = Math.PI / 2; g.add(w) })
+      g.add(mesh(box(0.06, 0.18, 1.2), new THREE.MeshBasicMaterial({ color: 0xffe9b0 }), 2.17, 0.7, 0, false)); g.add(mesh(box(0.06, 0.16, 1.3), new THREE.MeshBasicMaterial({ color: 0xc0261f }), -2.17, 0.75, 0, false))
+      g.position.set(x, 0, z); g.rotation.y = rotY; env.add(g) }
+    const lot = (cx, z0, n, filled) => { for (let i = 0; i < n; i++) { const z = z0 + i * 3.2; const ln = new THREE.Mesh(new THREE.PlaneGeometry(5.2, 0.12), lineMat); ln.rotation.x = -Math.PI / 2; ln.position.set(cx, 0.012, z - 1.6); env.add(ln); if (i === n - 1) { const l2 = ln.clone(); l2.position.z = z + 1.6; env.add(l2) }
+      if (rnd() < filled) car(cx + (rnd() - 0.5) * 0.3, z, Math.PI / 2 * 0 + (rnd() < 0.5 ? 0 : 0)) } }
+    lot(-54, -18, 9, 0.6); lot(54, -18, 9, 0.6)
+    // 가로등 (발광 헤드 + 빛 번짐)
+    const glowT = cvs(64, 64, (g, w, h) => { const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,230,170,0.9)'); gr.addColorStop(0.35, 'rgba(255,200,120,0.28)'); gr.addColorStop(1, 'rgba(255,200,120,0)'); g.fillStyle = gr; g.fillRect(0, 0, w, h) })
+    const glows = []
+    const poleMat = new THREE.MeshStandardMaterial({ color: 0x2b323c, metalness: 0.5, roughness: 0.5 }), lampMat = new THREE.MeshStandardMaterial({ color: 0xfff1d0, emissive: 0xffd89a, emissiveIntensity: 2.2 })
+    const pole = (x, z, face) => { env.add(mesh(box(0.2, 9, 0.2), poleMat, x, 4.5, z)); const arm = mesh(box(2.2, 0.14, 0.14), poleMat, x + face * 1.0, 9, z, false); env.add(arm)
+      env.add(mesh(box(0.9, 0.16, 0.5), lampMat, x + face * 2.0, 8.9, z, false))
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowT, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, fog: false })); sp.scale.set(9, 9, 1); sp.position.set(x + face * 2.0, 8.7, z); env.add(sp); glows.push(sp.material)
+      const pool = new THREE.Mesh(new THREE.CircleGeometry(7, 24), new THREE.MeshBasicMaterial({ map: glowT, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, opacity: 0.55 })); pool.rotation.x = -Math.PI / 2; pool.position.set(x + face * 2.0, 0.02, z); env.add(pool); glows.push(pool.material); pool.material.userData.base = 0.55 }
+    ;[-52, -30, 30, 52].forEach((x) => { pole(x, -27, 1); pole(x, 25, -1) })
+    // 나무 · 관목 (울타리 바깥)
+    const trunkM = new THREE.MeshStandardMaterial({ color: 0x4a3828, roughness: 1 }), leafM = [0x1f4a31, 0x28603d, 0x1a3d2a].map((c) => new THREE.MeshStandardMaterial({ color: c, roughness: 1, flatShading: true }))
+    const tree = (x, z, s) => { env.add(mesh(new THREE.CylinderGeometry(0.2 * s, 0.3 * s, 2.4 * s, 6), trunkM, x, 1.2 * s, z, false)); for (let k = 0; k < 3; k++) env.add(mesh(new THREE.IcosahedronGeometry((1.9 - k * 0.35) * s, 0), leafM[k % 3], x, (3 + k * 1.4) * s, z, true)) }
+    for (let i = 0; i < 26; i++) { const x = -90 + i * 7 + (rnd() - 0.5) * 3; tree(x, -40 - rnd() * 8, 0.9 + rnd() * 0.7); if (Math.abs(x) > 14) tree(x + 2, 52 + rnd() * 8, 0.9 + rnd() * 0.6) }
+    for (let i = 0; i < 8; i++) { tree(-74 - rnd() * 8, -28 + i * 8, 0.9 + rnd() * 0.6); tree(74 + rnd() * 8, -28 + i * 8, 0.9 + rnd() * 0.6) }
+    // 먼 풍경: 산 능선 + 멀리 떨어진 낮은 창고·공장 (허브 주변에 주거 건물 없음)
+    const ridge = (zc, hmax, col, seed) => { let r2 = seed; const rr = () => { r2 = (r2 * 16807) % 2147483647; return r2 / 2147483647 }
+      const sh = new THREE.Shape(); sh.moveTo(-260, 0); let y0 = hmax * 0.4; for (let x = -260; x <= 260; x += 16) { y0 = Math.max(hmax * 0.15, Math.min(hmax, y0 + (rr() - 0.5) * hmax * 0.55)); sh.lineTo(x, y0) } sh.lineTo(260, 0)
+      const m = new THREE.Mesh(new THREE.ShapeGeometry(sh), new THREE.MeshBasicMaterial({ color: col, fog: false })); m.position.set(0, -0.5, zc); env.add(m); disposables.push(m.geometry, m.material); return m }
+    const ridges = [ridge(-150, 38, 0x0f1a2a, 3), ridge(-125, 22, 0x0b1420, 9)]
+    const flatT = cvs(64, 32, (g, w, h) => { g.fillStyle = '#1a222d'; g.fillRect(0, 0, w, h); g.fillStyle = 'rgba(255,214,140,0.8)'; for (let x = 6; x < w - 4; x += 14) if (rnd() < 0.5) g.fillRect(x, 20, 6, 3) })
+    const farB = []
+    for (let i = 0; i < 9; i++) { const w = 18 + rnd() * 20, h = 5 + rnd() * 4, x = -120 + i * 30 + (rnd() - 0.5) * 10
+      const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, 12), new THREE.MeshBasicMaterial({ map: flatT, color: 0x6b7a92, fog: false })); b.position.set(x, h / 2, -110 - rnd() * 8); env.add(b); farB.push(b.material); disposables.push(b.geometry, b.material)
+      const st = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), new THREE.MeshBasicMaterial({ color: 0xff3b30, fog: false })); st.position.set(x + w / 4, h + 5, -110); env.add(st); disposables.push(st.geometry, st.material) }
+    /* ── 소방 안전 설비: 스프링클러 · 소화기/소화전 · 비상구 · 소방차 전용 구역 · 옥외 소화전 ── */
+    const FW = WALL_R - WALL_L; const fire = new THREE.Group(); fire.name = 'fire'; world.add(fire); fx.fire = fire
+    const redM = new THREE.MeshStandardMaterial({ color: 0xc8261e, roughness: 0.45, metalness: 0.3 }), brassM = new THREE.MeshStandardMaterial({ color: 0xc9a14a, roughness: 0.35, metalness: 0.8 })
+    const sign = (txt, sub, w, h, bg, fg, emissive) => { const t = cvs(256, Math.round(256 * h / w), (g, cw, ch) => { g.fillStyle = bg; g.fillRect(0, 0, cw, ch); g.strokeStyle = fg; g.lineWidth = 6; g.strokeRect(5, 5, cw - 10, ch - 10); g.fillStyle = fg; g.textAlign = 'center'; g.textBaseline = 'middle'
+      g.font = '700 ' + Math.round(ch * (sub ? 0.38 : 0.5)) + 'px "Malgun Gothic",sans-serif'; g.fillText(txt, cw / 2, sub ? ch * 0.37 : ch / 2); if (sub) { g.font = '600 ' + Math.round(ch * 0.2) + 'px "Malgun Gothic",sans-serif'; g.fillText(sub, cw / 2, ch * 0.74) } })
+      const m = new THREE.MeshStandardMaterial({ map: t, roughness: 0.5, emissive: emissive ? 0xffffff : 0x000000, emissiveMap: emissive ? t : null, emissiveIntensity: emissive ? 0.9 : 0 }); return new THREE.Mesh(new THREE.PlaneGeometry(w, h), m) }
+    // 1) 스프링클러 배관: 천장 아래 적색 주배관 3줄 + 가지관 + 헤드 (헤드는 약 3 m 간격)
+    const pipeY = WALL_H - 0.55, xm = (WALL_L + WALL_R) / 2, pipeMain = box(FW, 0.16, 0.16)
+    ;[-7, 1, 9].forEach((z) => { fire.add(mesh(pipeMain, redM, xm, pipeY, z, false)); for (let x = WALL_L + 2; x < WALL_R - 1; x += 3) {
+      fire.add(mesh(box(0.06, 0.28, 0.06), brassM, x, pipeY - 0.2, z, false)); const dfl = mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.025, 14), brassM, x, pipeY - 0.36, z, false); fire.add(dfl) } })
+    fire.add(mesh(box(0.16, 0.16, 30), redM, WALL_L + 0.6, pipeY + 0.15, 1, false)); fire.add(mesh(box(0.18, 0.18, 30), redM, WALL_R - 0.6, pipeY + 0.15, 1, false))
+    ;[WALL_L + 0.6, WALL_R - 0.6].forEach((x) => { fire.add(mesh(box(0.22, pipeY + 0.15, 0.22), redM, x, (pipeY + 0.15) / 2, WALL_N + 0.5, false)); const v = mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.1, 16), brassM, x, 1.4, WALL_N + 0.5, false); v.rotation.x = Math.PI / 2; fire.add(v) })
+    // 2) 소화기 + 소화전함 (북쪽 벽 기둥마다) + 위치 표지
+    for (let x = WALL_L + FW / 6; x < WALL_R - 0.5; x += FW / 6) {
+      const ext = mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.55, 14), redM, x + 0.4, 0.28, WALL_N + 0.55, false); fire.add(ext)
+      fire.add(mesh(box(0.08, 0.1, 0.08), MAT.steel, x + 0.4, 0.6, WALL_N + 0.55, false))
+      const sg = sign('소화기', '', 0.7, 0.35, '#c8261e', '#ffffff', false); sg.position.set(x + 0.4, 2.1, WALL_N + 0.18); fire.add(sg)
+      if (Math.round((x - WALL_L) / (FW / 6)) % 2 === 0) { fire.add(mesh(box(0.9, 1.1, 0.25), redM, x - 0.5, 1.0, WALL_N + 0.2, false)); const hs = sign('소화전', '', 0.7, 0.3, '#ffffff', '#c8261e', false); hs.position.set(x - 0.5, 1.0, WALL_N + 0.34); fire.add(hs) }
+    }
+    // 3) 비상구 유도등 (북쪽 벽 양끝 + 기둥 사이) — 초록 발광
+    ;[WALL_L + 2.2, (WALL_L + WALL_R) / 2, WALL_R - 2.2].forEach((x) => { const ex = sign('비상구', 'EXIT', 1.3, 0.5, '#0f9a4a', '#ffffff', true); ex.position.set(x, 3.4, WALL_N + 0.18); fire.add(ex) })
+    // 4) 소방차 전용 구역 (건물 남쪽 외부): 붉은 테두리 + 흰 사선 + 안내 문구
+    const flT = cvs(1024, 256, (g, w, h) => { g.fillStyle = '#3a3f46'; g.fillRect(0, 0, w, h); g.fillStyle = '#c8261e'; g.fillRect(0, 0, w, 18); g.fillRect(0, h - 18, w, 18)
+      g.save(); g.beginPath(); g.rect(0, 18, w, h - 36); g.clip(); g.strokeStyle = 'rgba(255,255,255,0.55)'; g.lineWidth = 16; for (let x = -h; x < w + h; x += 64) { g.beginPath(); g.moveTo(x, h); g.lineTo(x + h, 0); g.stroke() } g.restore()
+      g.fillStyle = 'rgba(30,34,40,0.88)'; g.fillRect(w * 0.2, 70, w * 0.6, 116); g.fillStyle = '#ffe14d'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = '800 64px "Malgun Gothic",sans-serif'; g.fillText('소방차 전용', w / 2, 112); g.fillStyle = '#ffffff'; g.font = '600 34px "Malgun Gothic",sans-serif'; g.fillText('주정차 금지 · FIRE LANE', w / 2, 160) })
+    flT.anisotropy = 8
+    const fl = new THREE.Mesh(new THREE.PlaneGeometry(28, 5.2), new THREE.MeshStandardMaterial({ map: flT, roughness: 0.8 })); fl.rotation.x = -Math.PI / 2; fl.position.set(xm, 0.025, FLOOR_S + 4.6); fl.receiveShadow = true; fire.add(fl)
+    // 5) 옥외 소화전 + 표지 기둥, 송수구(건물 외벽)
+    const hyd = (x, z) => { fire.add(mesh(new THREE.CylinderGeometry(0.17, 0.2, 0.75, 14), redM, x, 0.38, z)); fire.add(mesh(new THREE.SphereGeometry(0.2, 12, 8), redM, x, 0.8, z)); fire.add(mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.5, 10), redM, x + 0.2, 0.55, z).rotateZ(Math.PI / 2))
+      fire.add(mesh(box(0.06, 1.8, 0.06), MAT.steel, x - 0.5, 0.9, z, false)); const sg = sign('소화전', '', 0.7, 0.3, '#ffffff', '#c8261e', false); sg.position.set(x - 0.5, 1.7, z + 0.05); fire.add(sg) }
+    hyd(WALL_R + 3, FLOOR_S + 1.8); hyd(WALL_L - 3, FLOOR_S + 1.8); hyd(xm - 6, FLOOR_S + 1.8)
+    const sc2 = sign('송수구', '소방차 연결', 1.0, 0.6, '#c8261e', '#ffffff', false); sc2.position.set(xm + 5, 1.5, FLOOR_S + 0.3); fire.add(sc2); fire.add(mesh(box(1.0, 0.8, 0.2), redM, xm + 5, 0.7, FLOOR_S + 0.25, false))
+    /* ── 화재 경보 연출: 구역 붉은 점멸 · 불꽃 · 연기 · 스프링클러 살수 · 경광등 + 화면 테두리/배너 + 시험 버튼 ── */
+    const alarm = new THREE.Group(); alarm.name = 'alarm'; alarm.visible = false; world.add(alarm); fx.alarm = alarm
+    const flameT = cvs(64, 64, (g) => { const gr = g.createRadialGradient(32, 38, 2, 32, 34, 30); gr.addColorStop(0, 'rgba(255,245,190,1)'); gr.addColorStop(0.3, 'rgba(255,150,40,0.85)'); gr.addColorStop(0.7, 'rgba(220,50,10,0.3)'); gr.addColorStop(1, 'rgba(200,30,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64) })
+    const softT = cvs(32, 32, (g) => { const gr = g.createRadialGradient(16, 16, 0, 16, 16, 16); gr.addColorStop(0, 'rgba(255,255,255,0.9)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 32, 32) })
+    const zoneGlow = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: 0xff2a1a, transparent: true, opacity: 0.25, depthWrite: false, blending: THREE.AdditiveBlending })); zoneGlow.rotation.x = -Math.PI / 2; zoneGlow.position.y = 0.06; alarm.add(zoneGlow)
+    const flames = []; for (let i = 0; i < 14; i++) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: flameT, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, fog: false })); sp.userData = { ph: rnd() * 6, ox: rnd() - 0.5, oz: rnd() - 0.5, sz: 1.6 + rnd() * 1.8 }; alarm.add(sp); flames.push(sp) }
+    const NS_P = 240, smokePos = new Float32Array(NS_P * 3), smokeSeed = Array.from({ length: NS_P }, () => ({ u: rnd(), v: rnd(), a: rnd() * 6.28, sp: 0.5 + rnd() * 0.9 }))
+    const smokeGeo = new THREE.BufferGeometry(); smokeGeo.setAttribute('position', new THREE.BufferAttribute(smokePos, 3)); disposables.push(smokeGeo)
+    const smoke = new THREE.Points(smokeGeo, new THREE.PointsMaterial({ map: softT, color: 0x5a5f66, size: 7, transparent: true, opacity: 0.4, depthWrite: false, sizeAttenuation: true })); smoke.frustumCulled = false; alarm.add(smoke)
+    const NW = 280, wPos = new Float32Array(NW * 3), wSeed = Array.from({ length: NW }, () => ({ u: rnd(), v: rnd(), t: rnd() }))
+    const wGeo = new THREE.BufferGeometry(); wGeo.setAttribute('position', new THREE.BufferAttribute(wPos, 3)); disposables.push(wGeo)
+    const water = new THREE.Points(wGeo, new THREE.PointsMaterial({ map: softT, color: 0xcfeaff, size: 0.5, transparent: true, opacity: 0.95, depthWrite: false })); water.frustumCulled = false; alarm.add(water)
+    const beacons = [[WALL_L + 1.5, WALL_N + 1], [WALL_R - 1.5, WALL_N + 1], [WALL_L + 1.5, FLOOR_S - 1], [WALL_R - 1.5, FLOOR_S - 1]].map(([x, z]) => { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowT, color: 0xff2a1a, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, fog: false })); sp.scale.set(7, 7, 1); sp.position.set(x, WALL_H - 0.8, z); alarm.add(sp); return sp })
+    // 대피 구역 바닥 표시 (평상시에도 보임)
+    const refT = cvs(512, 128, (g, w, h) => { g.fillStyle = 'rgba(20,90,50,0.55)'; g.fillRect(0, 0, w, h); g.strokeStyle = '#4fdc8a'; g.lineWidth = 8; g.setLineDash([36, 20]); g.strokeRect(8, 8, w - 16, h - 16); g.setLineDash([]); g.fillStyle = '#e8ffef'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = '700 40px "Malgun Gothic",sans-serif'; g.fillText('AMR 화재 대피 구역', w / 2, h / 2) })
+    const refZ = new THREE.Mesh(new THREE.PlaneGeometry(X(850) - X(705), Z(640) - Z(575)), new THREE.MeshBasicMaterial({ map: refT, transparent: true, opacity: 0.9, depthWrite: false })); refZ.rotation.x = -Math.PI / 2; refZ.position.set((X(705) + X(850)) / 2, 0.02, (Z(575) + Z(640)) / 2); fire.add(refZ)
+    // 화면 효과 + 시험 버튼
+    const ov = document.createElement('div'); ov.className = 'twin-fire-ov'; ov.style.cssText = 'position:absolute;inset:0;z-index:5;pointer-events:none;opacity:0;box-shadow:inset 0 0 90px 24px rgba(255,40,30,.75);transition:opacity .2s'
+    const bn = document.createElement('div'); bn.className = 'twin-fire-bn'; bn.style.cssText = 'position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:7;pointer-events:none;display:none;font:700 14px "Malgun Gothic",sans-serif;color:#fff;background:rgba(190,24,18,.92);border:1px solid #ff9a90;border-radius:10px;padding:8px 18px;white-space:nowrap;box-shadow:0 4px 18px rgba(0,0,0,.5)'
+    const ctl = document.createElement('div'); ctl.className = 'twin-fire-ctl'; ctl.style.cssText = 'position:absolute;left:12px;top:66px;z-index:7;display:flex;gap:6px;align-items:center;font:600 12px "Malgun Gothic",sans-serif'
+    const sel = document.createElement('select'); sel.style.cssText = 'font:inherit;padding:5px 6px;border-radius:7px;background:rgba(10,16,24,.7);color:#e8eef6;border:1px solid rgba(255,255,255,.18)'
+    ;['A 인천 랙', 'B 서울 랙', 'C 경기 랙', 'D 냉장 창고', '충전소'].forEach((n, i) => { const o = document.createElement('option'); o.value = i === 0 ? 1 : i === 1 ? 2 : i === 2 ? 3 : i === 3 ? 0 : 4; o.textContent = n; sel.appendChild(o) })
+    const fb = document.createElement('button'); fb.style.cssText = 'font:inherit;padding:6px 10px;border-radius:7px;cursor:pointer;color:#fff;background:rgba(170,30,24,.88);border:1px solid #ff8a80'
+    ctl.appendChild(fb); ctl.appendChild(sel)
+    container.appendChild(ov); container.appendChild(bn); container.appendChild(ctl)
+    { const tb = container.parentElement && container.parentElement.querySelector('.twin-bar'); if (tb) { tb.appendChild(ctl); tb.appendChild(clockEl) } } // 26.10.29 훈련 버튼 · 시계도 위쪽 띠로
+    const fireBtn = () => { const F = sim.S.fire; fb.textContent = F && F.on ? '✅ 화재 종료 (관리자)' : '🔥 화재 경보 훈련'; fb.style.background = F && F.on ? 'rgba(30,110,60,.9)' : 'rgba(170,30,24,.88)'; fb.style.borderColor = F && F.on ? '#7be0a4' : '#ff8a80' }
+    // 안내방송(음성) + 사이렌: 브라우저 정책상 버튼을 누른 순간 소리가 켜진다. 🔊/🔇 로 끌 수 있다
+    let actx = null, sirenOsc = null, sirenGain = null, voiceOn = true, last = { on: false, stage: 0, evacAll: false }
+    const mb = document.createElement('button'); mb.style.cssText = 'font:inherit;padding:6px 8px;border-radius:7px;cursor:pointer;color:#fff;background:rgba(10,16,24,.7);border:1px solid rgba(255,255,255,.22)'; mb.textContent = '🔊'; mb.title = '안내방송 소리 켜기/끄기'
+    mb.onclick = () => { voiceOn = !voiceOn; mb.textContent = voiceOn ? '🔊' : '🔇'; if (!voiceOn) { try { speechSynthesis.cancel() } catch (e) { /* 무시 */ } sirenSet(false) } }
+    ctl.appendChild(mb)
+    const ensureAudio = () => { try { if (!actx) { actx = new (window.AudioContext || window.webkitAudioContext)(); sirenGain = actx.createGain(); sirenGain.gain.value = 0; sirenGain.connect(actx.destination); sirenOsc = actx.createOscillator(); sirenOsc.type = 'triangle'; sirenOsc.connect(sirenGain); sirenOsc.start() } if (actx.state === 'suspended') actx.resume() } catch (e) { actx = null } }
+    const sirenSet = (on) => { if (!actx || !sirenGain) return; sirenGain.gain.setTargetAtTime(on && voiceOn ? 0.03 : 0, actx.currentTime, 0.08) }
+    const speak = (text) => { if (!voiceOn) return; try { const u = new SpeechSynthesisUtterance(text); u.lang = 'ko-KR'; u.rate = 0.95; u.pitch = 0.9; const v = (speechSynthesis.getVoices() || []).find((x) => /ko/i.test(x.lang)); if (v) u.voice = v; speechSynthesis.speak(u) } catch (e) { /* 음성 미지원 */ } }
+    const sirenTick = (t, on) => { if (!actx || !sirenOsc) return; if (on) sirenOsc.frequency.setValueAtTime(Math.floor(t * 1.6) % 2 ? 960 : 700, actx.currentTime) }
+    fb.onclick = () => { if (!sim.setFire) return; ensureAudio(); const F = sim.S.fire; sim.setFire(!(F && F.on), +sel.value); fireBtn() }
+    fireBtn()
+    fx.fireEls = [ov, bn, ctl]
+    fx.fireFx = (now, dt) => {
+      const F = sim.S.fire, on = !!(F && F.on); alarm.visible = on && !is2D
+      // 안내방송: 상태가 바뀌는 순간 한 번씩
+      if (on && !last.on) { speak('화재가 발생했습니다. ' + F.label + ' 구역에서 연기가 감지되었습니다. 직원 여러분은 비상구를 통해 안전하게 대피해 주시기 바랍니다. 무인 장비는 대피 구역으로 이동합니다.'); sirenSet(true) }
+      if (on && F.stage >= 2 && last.stage < 2) speak('스프링클러가 작동하였습니다. 소방 설비가 연동되었습니다. 신규 입차를 중단합니다.')
+      if (on && F.total && F.evac >= F.total && !last.evacAll) { speak('모든 무인 장비가 대피 구역에 도착했습니다.'); sirenSet(false) }
+      if (!on && last.on) { speak('화재 경보가 해제되었습니다. 장비가 작업에 복귀합니다.'); sirenSet(false) }
+      if (on && !(F.total && F.evac >= F.total)) sirenTick(now / 1000, true)
+      last = { on, stage: on ? F.stage : 0, evacAll: !!(on && F.total && F.evac >= F.total) }; ctl.style.display = is2D ? 'none' : 'flex'
+      const t = now / 1000; ov.style.opacity = on ? String(0.35 + 0.35 * Math.abs(Math.sin(t * 3))) : '0'
+      bn.style.display = on ? 'block' : 'none'
+      if (!on) { fireBtn(); return }
+      bn.textContent = '🔥 화재 경보 · ' + F.label + ' · AMR 대피 ' + F.evac + '/' + F.total + (F.stage >= 2 ? ' · 스프링클러 작동 중' : ' · 연기 감지') + ' · 입차 게이트 차단'
+      fireBtn()
+      const r = FIRE_ZONE_RECT(F.zone), x0 = X(r.x0), x1 = X(r.x1), z0 = Z(r.y0), z1 = Z(r.y1), cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, W = x1 - x0, D = z1 - z0
+      zoneGlow.position.x = cx; zoneGlow.position.z = cz; zoneGlow.scale.set(W, D, 1); zoneGlow.material.opacity = 0.12 + 0.2 * Math.abs(Math.sin(t * 3.2))
+      // 불꽃: 구역 한가운데 한 지점에서 시작해 시간이 갈수록 퍼짐
+      const spread = Math.min(1, F.t / 25), fxp = cx + (F.zone === 4 ? -W * 0.15 : 0), fzp = cz
+      flames.forEach((f, i) => { const u = f.userData, k = i / flames.length; const vis = k < 0.25 + spread * 0.75
+        f.visible = vis; f.position.set(fxp + u.ox * (3 + spread * W * 0.55), 2.0 + Math.abs(Math.sin(t * 7 + u.ph)) * 0.8, fzp + u.oz * D * 0.5)
+        const s2 = u.sz * 3.6 * (0.7 + 0.35 * Math.sin(t * 9 + u.ph * 2)) * (F.stage >= 2 ? 0.85 : 1); f.scale.set(s2, s2 * 1.5, 1); f.material.opacity = 0.75 + 0.25 * Math.sin(t * 11 + u.ph) })
+      // 연기: 구역 위로 올라가 천장 아래에 퍼진다
+      const sp2 = smokeGeo.attributes.position; smokeSeed.forEach((q, i) => { const age = ((t * 0.12 * q.sp + q.u) % 1); sp2.setXYZ(i, fxp + Math.cos(q.a + t * 0.2) * (2 + age * W * 0.5), 1 + age * (WALL_H - 1.4), fzp + Math.sin(q.a * 1.3) * (1.5 + age * D * 0.7)) }); sp2.needsUpdate = true
+      smoke.material.opacity = Math.min(0.62, 0.2 + spread * 0.45)
+      // 스프링클러 살수
+      water.visible = F.stage >= 2; if (water.visible) { const wp = wGeo.attributes.position; wSeed.forEach((q, i) => { const k = (t * 1.4 + q.t) % 1; wp.setXYZ(i, x0 + 1 + q.u * (W - 2), pipeY - 0.4 - k * (pipeY - 0.4), z0 + 0.5 + q.v * (D - 1)) }); wp.needsUpdate = true }
+      beacons.forEach((b, i) => { b.material.opacity = Math.max(0, Math.sin(t * 5 + i * 1.6)) })
+    }
+    /* ── 소방차: 화재 훈련 시작 약 6초 뒤 도로에서 출동 → 정문 → '소방차 전용' 구역에 정차(경광등 점멸), 화재 종료 시 입구로 후진해 나간 뒤 도로로 직진 퇴장 ── */
+    {
+      const T = new THREE.Group(); T.name = 'fireTruck'; T.visible = false; world.add(T)
+      const M = (c, o) => { const m = new THREE.MeshStandardMaterial(Object.assign({ color: c, roughness: 0.5, metalness: 0.2 }, o || {})); disposables.push(m); return m }
+      const tRed = M(0xc8261e, { roughness: 0.32, metalness: 0.45 }), tWhite = M(0xf1f3f5, { roughness: 0.45 }), tDark = M(0x23272d, { roughness: 0.7 }), tGlass = M(0x16283a, { roughness: 0.12, metalness: 0.7 })
+      const tGrey = M(0xaab2bb, { roughness: 0.4, metalness: 0.7 }), tTire = M(0x15171a, { roughness: 0.95, metalness: 0 }), tYel = M(0xe6c200, { roughness: 0.5 })
+      const tHead = M(0xffffff, { emissive: 0xfff2c0, emissiveIntensity: 1.1 })
+      const add = (g, m, x, y, z) => { const o = mesh(g, m, x, y, z); T.add(o); return o }
+      add(box(9.0, 0.45, 2.2), tDark, 0, 0.85, 0)                         // 차대
+      add(box(5.6, 2.0, 2.55), tRed, -1.7, 2.05, 0)                       // 적재함(장비함)
+      add(box(2.9, 2.1, 2.55), tRed, 2.6, 1.95, 0)                        // 운전실
+      add(box(0.5, 1.0, 2.4), tRed, 4.3, 1.3, 0)                          // 보닛
+      add(box(0.35, 0.35, 2.7), tGrey, 4.45, 0.7, 0)                      // 앞 범퍼
+      add(box(0.3, 0.3, 2.6), tGrey, -4.6, 0.7, 0)                        // 뒤 범퍼
+      add(box(0.06, 0.95, 2.25), tGlass, 4.07, 2.45, 0)                   // 앞 유리
+      ;[1, -1].forEach((s) => {
+        add(box(1.5, 0.8, 0.04), tGlass, 2.7, 2.5, s * 1.29)               // 옆 유리
+        add(box(0.3, 0.12, 0.1), tGrey, 3.55, 2.0, s * 1.35)               // 손잡이
+        ;[-3.55, -1.95, -0.35].forEach((x) => { add(box(1.5, 1.15, 0.05), tGrey, x, 2.35, s * 1.29); add(box(1.5, 0.05, 0.07), tDark, x, 1.77, s * 1.29) })   // 장비함 셔터
+        add(box(5.62, 0.28, 0.06), tWhite, -1.7, 1.5, s * 1.29); add(box(2.92, 0.28, 0.06), tWhite, 2.6, 1.5, s * 1.29)   // 흰 띠
+        add(box(0.32, 0.5, 0.06), tDark, 4.25, 1.2, s * 1.2)               // 앞 휀더 그늘
+        add(box(0.12, 0.22, 0.3), tHead, 4.57, 1.28, s * 0.85)             // 전조등
+        add(box(0.05, 0.5, 0.6), M(0xff3b2b, { emissive: 0xff1a0a, emissiveIntensity: 0.8 }), -4.6, 1.55, s * 0.9)   // 후미등
+      })
+      add(box(0.06, 0.9, 2.4), tYel, -4.56, 1.9, 0)                       // 뒤 반사 띠
+      const txt = cvs(256, 80, (g, w, h) => { g.fillStyle = '#ffffff'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = '800 44px "Malgun Gothic",sans-serif'; g.fillText('119 소방', w / 2, h * 0.38); g.font = '700 22px sans-serif'; g.fillText('FIRE RESCUE', w / 2, h * 0.82) })
+      ;[1, -1].forEach((s) => { const p = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.5), new THREE.MeshBasicMaterial({ map: txt, transparent: true })); disposables.push(p.geometry, p.material); p.position.set(2.2, 1.88, s * 1.325); if (s < 0) p.rotation.y = Math.PI; T.add(p) })
+      // 지붕 사다리 + 받침
+      ;[0.45, -0.45].forEach((z) => add(box(6.2, 0.09, 0.09), tGrey, -1.5, 3.42, z))
+      for (let i = 0; i < 13; i++) add(box(0.06, 0.06, 1.0), tGrey, -4.3 + i * 0.5, 3.42, 0)
+      ;[-4, -1.5, 0.8].forEach((x) => { add(box(0.12, 0.3, 0.12), tDark, x, 3.22, 0.45); add(box(0.12, 0.3, 0.12), tDark, x, 3.22, -0.45) })
+      add(box(1.4, 0.45, 1.0), tGrey, -3.4, 3.4, -0.95)                   // 지붕 장비(흡관)
+      // 경광등 바(운전실 지붕): 적색 + 청색
+      add(box(0.55, 0.14, 2.1), tDark, 2.7, 3.07, 0)
+      const lampR = M(0xff2a1a, { emissive: 0xff1a0a, emissiveIntensity: 1 }), lampB = M(0x2a6bff, { emissive: 0x1a4cff, emissiveIntensity: 1 })
+      add(box(0.45, 0.2, 0.95), lampR, 2.7, 3.22, 0.5); add(box(0.45, 0.2, 0.95), lampB, 2.7, 3.22, -0.5)
+      const gl = (c) => { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: softT, color: c, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, fog: false })); s.scale.set(5, 5, 1); disposables.push(s.material); T.add(s); return s }
+      const glR = gl(0xff2a1a), glB = gl(0x2a6bff); glR.position.set(2.7, 3.5, 0.5); glB.position.set(2.7, 3.5, -0.5)
+      // 바퀴(굴러감)
+      const wheels = []; ;[3.2, -1.2, -3.0].forEach((x) => [1.1, -1.1].forEach((z) => {
+        const pv = new THREE.Group(); pv.position.set(x, 0.6, z); const tire = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 0.45, 22), tTire), rim = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.47, 12), tGrey)
+        const hub = new THREE.Mesh(box(0.1, 0.9, 0.05), tDark); disposables.push(tire.geometry, rim.geometry); tire.rotation.x = rim.rotation.x = Math.PI / 2; tire.castShadow = true; hub.position.z = 0.24 * Math.sign(z); pv.add(tire, rim, hub); T.add(pv); wheels.push(pv) }))
+      // 경로: 도로(동→서) → 정문 틈(x≈3) → 소방차 전용 구역(동쪽으로 정차)
+      const gx = 3, px = Math.max(xm + 9, gx + 7), pz = FLOOR_S + 4.6
+      const curve = new THREE.CatmullRomCurve3([new THREE.Vector3(90, 0, 38), new THREE.Vector3(34, 0, 38), new THREE.Vector3(12, 0, 37.5), new THREE.Vector3(gx + 1.5, 0, 33), new THREE.Vector3(gx, 0, 28.5), new THREE.Vector3(gx, 0, pz + 3.2), new THREE.Vector3(gx + 2.2, 0, pz + 0.6), new THREE.Vector3(px - 2, 0, pz), new THREE.Vector3(px, 0, pz)], false, 'centripetal')
+      const len = curve.getLength(); let u0 = 0, tPrev = 0, spin = 0, state = 0, exitPh = 0, eu = 0
+      // 26.10.29 퇴장: 정차 자리에서 입구(정문) 밖 도로까지 후진으로 빠져나온 뒤, 그 방향 그대로 도로를 따라 직진해서 떠남 (울타리를 뚫지 않게)
+      const uR = (() => { const q = new THREE.Vector3(); let b = 0.3, bd = 1e9; for (let i = 0; i <= 400; i++) { curve.getPointAt(i / 400, q); const dd = Math.hypot(q.x - 12, q.z - 37.5); if (dd < bd) { bd = dd; b = i / 400 } } return b })()
+      const pR = curve.getPointAt(uR), tR = curve.getTangentAt(uR)
+      const curveFwd = new THREE.CatmullRomCurve3([pR.clone(), new THREE.Vector3(pR.x + tR.x * 8, 0, pR.z + tR.z * 8), new THREE.Vector3(-12, 0, 37.5), new THREE.Vector3(-45, 0, 38.5), new THREE.Vector3(-90, 0, 39)], false, 'centripetal')
+      const lenFwd = curveFwd.getLength()
+      const pt = new THREE.Vector3(), tg = new THREE.Vector3()
+      const prevT = fx.fireFx
+      fx.fireFx = (now, dt) => {
+        prevT(now, dt)
+        const F = sim.S.fire, on = !!(F && F.on), t = now / 1000, dts = Math.min(0.1, Math.max(0, t - tPrev)); tPrev = t
+        let u = u0, moved = 0
+        if (on) { exitPh = 0; eu = 0; const s = Math.min(1, Math.max(0, (F.t - 6) / 9)); u = 1 - (1 - s) * (1 - s); moved = (u - u0) * len }
+        else if (u0 > 0) {
+          if (exitPh < 2) { // 1단계: 입구 밖 도로 지점까지 (정차 자리에서는 후진, 아직 오는 중이면 앞으로)
+            exitPh = 1
+            u = u0 < uR ? Math.min(uR, u0 + dts / 6) : Math.max(uR, u0 - dts * (1 - uR) / 5)
+            moved = (u - u0) * len
+            if (Math.abs(u - uR) < 1e-4) { exitPh = 2; eu = 0 }
+          } else { // 2단계: 도로를 따라 직진
+            const e2 = Math.min(1, eu + dts / 9); moved = (e2 - eu) * lenFwd; eu = e2
+            if (eu >= 1) { u = 0; eu = 0; exitPh = 0 }
+          }
+        }
+        u0 = u; state = on ? (u >= 0.999 ? 2 : u > 0 ? 1 : 0) : (u > 0 ? 3 : 0)
+        T.visible = u > 0.002 && !is2D
+        if (!T.visible) return
+        if (!on && exitPh === 2) { curveFwd.getPointAt(Math.min(1, eu), pt); curveFwd.getTangentAt(Math.min(1, eu), tg) } else { curve.getPointAt(Math.min(1, u), pt); curve.getTangentAt(Math.min(1, u), tg) }
+        T.position.set(pt.x, 0, pt.z); T.rotation.y = Math.atan2(-tg.z, tg.x)
+        spin += moved / 0.6; wheels.forEach((w) => { w.rotation.z = -spin })
+        const fl = Math.floor(t * 6) % 2; lampR.emissiveIntensity = fl ? 1.4 : 0.15; lampB.emissiveIntensity = fl ? 0.15 : 1.4
+        glR.material.opacity = fl ? 0.95 : 0.1; glB.material.opacity = fl ? 0.1 : 0.95
+        if (on) bn.textContent += state === 2 ? ' · 🚒 소방차 도착' : ' · 🚒 소방차 출동 중'
+      }
+    }
+    /* ── AMR 배터리 화재: 격리 구역(방화벽) + 단계별 연출 (이상 징후 → 격리 이동 → 열폭주 → 진압 후 접근 금지) ── */
+    {
+      const qx0 = X(858), qx1 = WALL_R - 0.15, qzN = Z(575), qzS = FLOOR_S - 0.1, qH = 3.2
+      const wallM = new THREE.MeshStandardMaterial({ color: 0x8e949c, roughness: 0.8 })
+      const hazT = cvs(256, 32, (g, w, h) => { g.fillStyle = '#ffd21f'; g.fillRect(0, 0, w, h); g.fillStyle = '#141414'; for (let x = -h; x < w + h; x += 32) { g.beginPath(); g.moveTo(x, h); g.lineTo(x + 16, h); g.lineTo(x + 16 + h, 0); g.lineTo(x + h, 0); g.fill() } }); hazT.wrapS = hazT.wrapT = THREE.RepeatWrapping
+      const hazM = new THREE.MeshStandardMaterial({ map: hazT, roughness: 0.6 })
+      const wall = (x0, z0, x1, z1) => { const L = Math.hypot(x1 - x0, z1 - z0), ang = Math.atan2(z1 - z0, x1 - x0); const m = mesh(box(L, qH, 0.28), wallM, (x0 + x1) / 2, qH / 2, (z0 + z1) / 2); m.rotation.y = -ang; fire.add(m)
+        const hz = mesh(box(L, 0.28, 0.3), hazM, (x0 + x1) / 2, qH + 0.14, (z0 + z1) / 2, false); hz.rotation.y = -ang; fire.add(hz) }
+      wall(qx0, qzN, qx0, qzS)                 // 서쪽 벽
+      wall(qx0, qzN, X(895) - 0.5, qzN)        // 북쪽 벽 (출입 틈 1.7 m: AMR 전용 통로)
+      const pad = new THREE.Mesh(new THREE.PlaneGeometry(qx1 - qx0, qzS - qzN), new THREE.MeshStandardMaterial({ color: 0x3a2a2a, roughness: 0.9 })); pad.rotation.x = -Math.PI / 2; pad.position.set((qx0 + qx1) / 2, 0.025, (qzN + qzS) / 2); fire.add(pad)
+      const qs = sign('배터리 격리 구역', '방화벽 · 접근 금지', 3.0, 1.0, '#8a1510', '#ffffff', false); qs.rotation.y = -Math.PI / 2; qs.position.set(qx0 - 0.17, 2.0, (qzN + qzS) / 2); fire.add(qs)
+      const bf = new THREE.Group(); bf.visible = false; world.add(bf)
+      const bfFlames = [], bfSmoke = [], bfSparks = []
+      for (let i = 0; i < 7; i++) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: flameT, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, fog: false })); sp.userData = { ph: rnd() * 6, ox: rnd() - 0.5, oz: rnd() - 0.5 }; bf.add(sp); bfFlames.push(sp) }
+      for (let i = 0; i < 46; i++) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: softT, color: 0x2e3238, transparent: true, depthWrite: false, opacity: 0.5 })); sp.userData = { a: rnd(), sp: 0.35 + rnd() * 0.7, dx: rnd() - 0.5, dz: rnd() - 0.5 }; bf.add(sp); bfSmoke.push(sp) }
+      const NSP = 80, spPos = new Float32Array(NSP * 3), spG = new THREE.BufferGeometry(); spG.setAttribute('position', new THREE.BufferAttribute(spPos, 3)); disposables.push(spG)
+      const sparks = new THREE.Points(spG, new THREE.PointsMaterial({ map: softT, color: 0xffb040, size: 0.35, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })); sparks.frustumCulled = false; bf.add(sparks)
+      const beacon = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowT, color: 0xffa020, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, fog: false })); beacon.scale.set(5, 5, 1); bf.add(beacon)
+      const qWater = new THREE.Points(wGeo, new THREE.PointsMaterial({ map: softT, color: 0xcfeaff, size: 0.45, transparent: true, depthWrite: false })); qWater.frustumCulled = false; qWater.visible = false; world.add(qWater)
+      const qwG = new THREE.BufferGeometry(); const qwPos = new Float32Array(120 * 3); qwG.setAttribute('position', new THREE.BufferAttribute(qwPos, 3)); disposables.push(qwG); qWater.geometry = qwG
+      const qwSeed = Array.from({ length: 120 }, () => ({ u: rnd(), v: rnd(), t: rnd() }))
+      // 화면 문구 · 버튼
+      const bb = document.createElement('button'); bb.style.cssText = 'font:inherit;padding:6px 10px;border-radius:7px;cursor:pointer;color:#fff;background:rgba(190,110,10,.9);border:1px solid #ffc070'
+      ctl.appendChild(bb)
+      const bfSt = () => sim.S.bfire
+      const bfBtn = () => { const B = bfSt(); bb.textContent = !B ? '🔋 배터리 화재 훈련' : B.stage >= 4 ? '관리자 확인 (장비 복귀)' : '훈련 중단'; bb.style.background = !B ? 'rgba(190,110,10,.9)' : B.stage >= 4 ? 'rgba(30,110,60,.9)' : 'rgba(80,80,90,.9)' }
+      bb.onclick = () => { ensureAudio(); const B = bfSt(); if (!B) sim.setBatteryFire(1); else sim.clearBatteryFire(); bfBtn() }
+      bfBtn()
+      // 26.10.29 비상 정지: 대상(전체 / 장비 하나)을 고르고 누르면 멈추고, 다시 누르면 재개
+      const eSel = document.createElement('select'); eSel.style.cssText = 'font:inherit;padding:5px 6px;border-radius:7px;background:rgba(10,16,24,.7);color:#e8eef6;border:1px solid rgba(255,255,255,.18)'
+      ;[['all', '전체'], ...sim.S.amrs.map((r, i) => [String(i), r.name])].forEach(([v, n]) => { const o = document.createElement('option'); o.value = v; o.textContent = n; eSel.appendChild(o) })
+      const eb = document.createElement('button'); eb.style.cssText = 'font:inherit;padding:6px 10px;border-radius:7px;cursor:pointer;color:#fff;border:1px solid #ff8a80'
+      ctl.style.flexWrap = 'wrap'; ctl.appendChild(eSel); ctl.appendChild(eb)
+      const eOn = () => (eSel.value === 'all' ? sim.S.amrs.some((r) => r.estop) : !!(sim.S.amrs[+eSel.value] && sim.S.amrs[+eSel.value].estop))
+      const eBtn = () => { const on = eOn(); eb.textContent = on ? '▶ 정지 해제' : '🛑 비상 정지'; eb.style.background = on ? 'rgba(30,110,60,.9)' : 'rgba(120,20,20,.92)' }
+      eb.onclick = () => { const on = eOn(); sim.setEstop(eSel.value === 'all' ? null : +eSel.value, !on); eBtn() }
+      eSel.onchange = eBtn; eBtn()
+      const prevFx0 = fx.fireFx; fx.fireFx = (now, dt) => { prevFx0(now, dt); eBtn() }
+      fx.fireEls.push(bf, qWater)
+      let lastB = 0
+      const prevFx = fx.fireFx
+      fx.fireFx = (now, dt) => {
+        prevFx(now, dt)
+        const B = bfSt(), st = B ? B.stage : 0; bfBtn(); bf.visible = !!B && !is2D; qWater.visible = !!B && st >= 3 && !is2D
+        if (st !== lastB) {
+          const n = B ? B.a.name.replace('AMR-0', 'AMR ') + '번' : ''
+          if (st === 1) speak(n + ' 배터리 온도 이상이 감지되었습니다. 작업을 중단하고 격리 구역으로 이동합니다.')
+          if (st === 2) speak(n + ' 위험 단계입니다. 충전을 차단하고 배터리 격리 구역으로 이동합니다. 주변 장비는 접근하지 마십시오.')
+          if (st === 3) { speak('격리 구역에서 배터리 화재가 발생했습니다. 방화벽 안에서 소방 설비가 작동합니다. 허브 운영에는 영향이 없습니다.'); sirenSet(true) }
+          if (st === 4) { speak('화재가 진압되었습니다. 해당 장비는 관리자 확인 전까지 접근과 재가동이 금지됩니다.'); sirenSet(false) }
+          if (st === 0 && lastB > 0) { speak('관리자 확인이 완료되었습니다. 장비가 점검을 마치고 복귀합니다.'); sirenSet(false) }
+          lastB = st
+        }
+        if (st === 3) sirenTick(now / 1000, true)
+        if (!B || is2D) { if (!sim.S.fire || !sim.S.fire.on) { /* 화재 모드 아닐 때 화면 효과 끄기는 prevFx 가 처리 */ } return }
+        const F = sim.S.fire, hubFire = !!(F && F.on), t = now / 1000, a = B.a, g = amrs3[B.i] && amrs3[B.i].g
+        const px = g ? g.position.x : X(a.x), pz = g ? g.position.z : Z(a.y)
+        bf.position.set(px, 0, pz)
+        const hot = st >= 3, warm = st >= 1
+        beacon.position.set(0, 2.4, 0); beacon.material.color.set(st >= 3 ? 0xff2a1a : 0xffa020); beacon.material.opacity = Math.max(0, Math.sin(t * (st >= 2 ? 8 : 4))); beacon.scale.setScalar(st >= 3 ? 8 : 5)
+        const k = Math.min(1, B.t3 != null ? (B.t - B.t3) / 6 : 0)
+        bfFlames.forEach((f, i) => { const u = f.userData; f.visible = st === 3 || (st === 4 && i < 2); const sc = (st === 4 ? 0.9 : 1.8 + k * 1.6) * (0.75 + 0.3 * Math.sin(t * 9 + u.ph)); f.scale.set(sc, sc * 1.6, 1); f.position.set(u.ox * 1.1, 0.9 + Math.abs(Math.sin(t * 8 + u.ph)) * 0.5, u.oz * 0.8); f.material.opacity = 0.8 })
+        bfSmoke.forEach((sp, i) => { const u = sp.userData, ag = ((t * 0.18 * u.sp + u.a) % 1); const dens = st === 1 ? 0.12 : st === 2 ? 0.3 : st === 3 ? 0.95 : 0.4; sp.visible = i / bfSmoke.length < dens
+          sp.position.set(u.dx * (1 + ag * 4), 0.8 + ag * (WALL_H - 1), u.dz * (1 + ag * 3)); const s2 = 1.2 + ag * 4.5; sp.scale.set(s2, s2, 1); sp.material.opacity = (st === 4 ? 0.22 : 0.5) * (1 - ag * 0.7); sp.material.color.set(st === 4 ? 0x9aa0a6 : 0x2e3238) })
+        sparks.visible = st === 3; if (sparks.visible) { const pa = spG.attributes.position; for (let i = 0; i < NSP; i++) { const q = ((t * 1.2 + i * 0.137) % 1), ang = i * 2.399; pa.setXYZ(i, Math.cos(ang) * q * 2.2, 0.8 + Math.sin(q * Math.PI) * 2.6, Math.sin(ang) * q * 2.2) } pa.needsUpdate = true }
+        // 격리 구역 소방: 천장에서 살수 (열폭주 단계)
+        if (qWater.visible) { const wp = qwG.attributes.position; qwSeed.forEach((q, i) => { const kk = (t * 1.5 + q.t) % 1; wp.setXYZ(i, qx0 + 0.3 + q.u * (qx1 - qx0 - 0.6), pipeY - kk * pipeY, qzN + 0.3 + q.v * (qzS - qzN - 0.6)) }); wp.needsUpdate = true }
+        if (!hubFire) {
+          ov.style.boxShadow = st >= 3 ? 'inset 0 0 70px 14px rgba(255,40,30,.65)' : 'inset 0 0 70px 14px rgba(255,160,30,.55)'
+          ov.style.opacity = String(st >= 4 ? 0.18 : 0.25 + 0.3 * Math.abs(Math.sin(t * (st >= 3 ? 3.2 : 2))))
+          bn.style.display = 'block'; bn.style.background = st >= 4 ? 'rgba(20,100,60,.92)' : st >= 3 ? 'rgba(190,24,18,.92)' : 'rgba(180,100,10,.92)'
+          bn.textContent = st === 1 ? '⚠ ' + a.name + ' 배터리 온도 이상 · ' + Math.round(a.temp) + '℃ · 작업 중단' : st === 2 ? '⚠ ' + a.name + ' 위험 단계 · ' + Math.round(a.temp) + '℃ · 격리 구역 이동 중' : st === 3 ? '🔥 ' + a.name + ' 배터리 열폭주 · 격리 구역 내 화재 · ' + Math.round(a.temp) + '℃ · 허브 운영 정상' : '✔ ' + a.name + ' 진압 완료 · 접근·재가동 금지 · 관리자 확인 대기'
+        } else { ov.style.boxShadow = 'inset 0 0 90px 24px rgba(255,40,30,.75)' }
+      }
+    }
+    const stM = env.children.filter((o) => o.isMesh && o.geometry && o.geometry.type === 'BoxGeometry' && o.material.color && o.material.color.getHex() === 0xff3b30)
+    fx.env = env
+    fx.envSet = (t) => {
+      const day = t === 'light'
+      sky.material.map = day ? skyDay : skyTex; sky.material.needsUpdate = true
+      if (env.userData.stars) env.userData.stars.visible = !day
+      glows.forEach((m) => { m.opacity = day ? 0 : (m.userData.base != null ? m.userData.base : 1) })
+      lampMat.emissiveIntensity = day ? 0.15 : 2.2
+      ridges[0].material.color.set(day ? 0x6f8aa4 : 0x0f1a2a); ridges[1].material.color.set(day ? 0x587792 : 0x0b1420)
+      farB.forEach((m) => { if (!m.userData.map) m.userData.map = m.map; m.map = day ? null : m.userData.map; m.color.set(day ? 0xaab6c4 : 0x6b7a92); m.needsUpdate = true })
+      stM.forEach((m) => { m.visible = !day })
+    }
+    fx.envSet('dark')
+  }
   const floorW = WALL_R - WALL_L, floorD = FLOOR_S - WALL_N
   const floor = mesh(new THREE.PlaneGeometry(floorW, floorD), MAT.floor, (WALL_L + WALL_R) / 2, 0, (WALL_N + FLOOR_S) / 2, false)
   floor.rotation.x = -Math.PI / 2; world.add(floor)
+  // 26.10.28 바닥 마모: 바퀴 자국(통로를 따라 두 줄) · 코너 쓸림 · 기름 얼룩 · 먼지 — 새것 같은 매끈한 바닥을 실제 창고처럼
+  {
+    let sd = 7; const rd = () => { sd = (sd * 16807) % 2147483647; return sd / 2147483647 }
+    const W = 2048, H = 1024, wt = canvasTex(W, H, (cg) => {
+      const cx = (px) => ((px - 80) / 840) * W, cy = (py) => (py / 640) * H
+      cg.lineCap = 'round'
+      const track = (x0, y0, x1, y1, a) => { for (const o of [-9, 9]) { cg.strokeStyle = `rgba(10,12,14,${a * (0.6 + rd() * 0.4)})`; cg.lineWidth = 5 + rd() * 5
+        const horiz = Math.abs(x1 - x0) > Math.abs(y1 - y0); let t = 0; while (t < 1) { const n = Math.min(1, t + 0.02 + rd() * 0.08)
+          if (rd() > 0.18) { cg.beginPath(); cg.moveTo(cx(x0 + (x1 - x0) * t) + (horiz ? 0 : o), cy(y0 + (y1 - y0) * t) + (horiz ? o : 0)); cg.lineTo(cx(x0 + (x1 - x0) * n) + (horiz ? 0 : o), cy(y0 + (y1 - y0) * n) + (horiz ? o : 0)); cg.stroke() } t = n } } }
+      AISLES.forEach((y) => track(120, y, 880, y, 0.16)); ;[HXL, HXR].forEach((x) => track(x, 20, x, 600, 0.17))
+      for (let i = 0; i < 38; i++) { const x = cx(110 + rd() * 780), y = cy(20 + rd() * 590), r = 18 + rd() * 70, gr = cg.createRadialGradient(x, y, 0, x, y, r)
+        gr.addColorStop(0, `rgba(8,10,12,${0.10 + rd() * 0.16})`); gr.addColorStop(1, 'rgba(8,10,12,0)'); cg.fillStyle = gr; cg.beginPath(); cg.ellipse(x, y, r, r * (0.5 + rd() * 0.5), rd() * 3, 0, 7); cg.fill() }
+      INTER_NODES.forEach((n) => { for (let k = 0; k < 3; k++) { const x = cx(n.x) + (rd() - 0.5) * 40, y = cy(n.y) + (rd() - 0.5) * 40, r = 26 + rd() * 30, gr = cg.createRadialGradient(x, y, 0, x, y, r)
+        gr.addColorStop(0, 'rgba(8,10,12,0.20)'); gr.addColorStop(1, 'rgba(8,10,12,0)'); cg.fillStyle = gr; cg.beginPath(); cg.arc(x, y, r, 0, 7); cg.fill() } })
+    })
+    disposables.push(wt)
+    const wm = new THREE.Mesh(new THREE.PlaneGeometry(floorW, floorD), new THREE.MeshBasicMaterial({ map: wt, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }))
+    disposables.push(wm.geometry); wm.rotation.x = -Math.PI / 2; wm.position.set((WALL_L + WALL_R) / 2, 0.006, (WALL_N + FLOOR_S) / 2); wm.renderOrder = 0; world.add(wm)
+  }
   // 슬래브 단면 (남쪽 컷어웨이)
   world.add(mesh(box(floorW, 0.4, 0.3), MAT.steel, (WALL_L + WALL_R) / 2, -0.2, FLOOR_S + 0.15, false))
 
@@ -761,6 +1156,29 @@ export function createAmrScene(container, sim, opts = {}) {
   function wheel(group, x, z, r) {
     const geo = new THREE.CylinderGeometry(r, r, 0.32, 18); disposables.push(geo)
     const w = mesh(geo, MAT.tire, x, r, z); w.rotation.x = Math.PI / 2; group.add(w)
+    // 26.10.28 휠: 림 · 허브캡 · 볼트 (바깥쪽으로 살짝 튀어나오게)
+    const rimGeo = new THREE.CylinderGeometry(r * 0.6, r * 0.6, 0.345, 20), capGeo = new THREE.CylinderGeometry(r * 0.22, r * 0.22, 0.36, 12); disposables.push(rimGeo, capGeo)
+    const rim = mesh(rimGeo, MAT.deck, x, r, z, false); rim.rotation.x = Math.PI / 2; group.add(rim)
+    const cap = mesh(capGeo, MAT.steel, x, r, z, false); cap.rotation.x = Math.PI / 2; group.add(cap)
+    for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2, bx = Math.cos(a) * r * 0.4, by = Math.sin(a) * r * 0.4
+      const bolt = mesh(lugGeo, MAT.rubber, x + bx, r + by, z, false); bolt.rotation.x = Math.PI / 2; bolt.scale.y = 1; group.add(bolt) }
+  }
+  const lugGeo = new THREE.CylinderGeometry(0.028, 0.028, 0.37, 6); disposables.push(lugGeo)
+  const ttHead = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff4d6, emissiveIntensity: 1.8 })
+  const ttMark = new THREE.MeshStandardMaterial({ color: 0xff9a1f, emissive: 0xff8a00, emissiveIntensity: 1.4 })
+  const ttRib = new THREE.MeshStandardMaterial({ color: 0xcfd6dc, roughness: 0.5, metalness: 0.5 })
+  const ttGrille = new THREE.MeshStandardMaterial({ color: 0x15181c, roughness: 0.4, metalness: 0.7 })
+  // 26.10.28 트럭 공통 디테일: 전조등 · 그릴 · 범퍼 · 측면 창 · 사이드미러 (dir: 앞이 향하는 X 방향)
+  function cabDetail(g, cabX, dir, cw, cd, yMid, yTop, lightY) {
+    const fx = cabX + dir * (cw / 2 + 0.01)
+    g.add(mesh(box(0.05, 0.55, cd * 0.62), ttGrille, fx, lightY + 0.0, 0, false))
+    for (let i = -2; i <= 2; i++) g.add(mesh(box(0.06, 0.025, cd * 0.62), MAT.deck, fx + dir * 0.012, lightY + i * 0.1, 0, false))
+    ;[-1, 1].forEach((sd) => {
+      g.add(mesh(box(0.06, 0.16, 0.34), ttHead, fx, lightY, sd * (cd / 2 - 0.3), false))
+      g.add(mesh(box(0.5, 0.62, 0.02), MAT.glass, cabX - dir * 0.15, yMid, sd * (cd / 2 + 0.012), false))            // 측면 창
+      g.add(mesh(box(0.05, 0.3, 0.12), MAT.rubber, cabX + dir * (cw / 2 - 0.2), yTop - 0.45, sd * (cd / 2 + 0.18), false)) // 사이드미러
+    })
+    g.add(mesh(box(0.22, 0.28, cd + 0.05), MAT.steel, fx + dir * 0.08, lightY - 0.55, 0))                              // 앞 범퍼
   }
   // 화물차 번호판 (영업용 노란 번호판) · 후미등 · 후부 안전판
   let plateSeq = 0
@@ -796,7 +1214,20 @@ export function createAmrScene(container, sim, opts = {}) {
     ;[-1, 1].forEach((s) => { const tl = new THREE.Mesh(tailGeo, tailMat); tl.position.set(x + dir * 0.04, y + 0.1, s * (Wd / 2 - 0.25)); g.add(tl) })
     const bar = new THREE.Mesh(box(0.06, 0.14, Wd - 0.3), chevMat); bar.position.set(x + dir * 0.1, y - 0.22, 0); g.add(bar)
   }
+  // 26.10.28 입고 화물차 소속: 이름은 DB에서 온다 (번호판 → trucks.company → companies.company_name, 없으면 hub_vehicles.carrier).
+  //  입구 OCR이 번호판을 읽고 서버가 소속을 돌려주면 트레일러 옆면 · 캡 문에 업체명을 칠하고, 업체마다 고유 색을 쓴다.
+  const carrierColor = (name) => { let h = 0; for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) % 360; return { col: `hsl(${h},62%,38%)`, cab: `hsl(${h},55%,26%)` } }
+  function drawDecal(cg, w, h, name, big) {
+    cg.clearRect(0, 0, w, h); if (!name) return
+    const c = carrierColor(name).col
+    cg.fillStyle = c; cg.beginPath(); cg.moveTo(0, h * 0.18); cg.lineTo(h * 0.5, h * 0.18); cg.lineTo(h * 0.3, h * 0.82); cg.lineTo(0, h * 0.82); cg.closePath(); cg.fill()
+    let fs = Math.round(h * (big ? 0.5 : 0.46)); cg.textBaseline = 'middle'; cg.font = `900 ${fs}px ${FONT}`
+    while (cg.measureText(name).width > w - h * 0.75 && fs > 12) { fs -= 2; cg.font = `900 ${fs}px ${FONT}` }
+    cg.fillStyle = c; cg.fillText(name, h * 0.62, h * 0.5)
+  }
+  const carrierDecal = (wpx, hpx, big) => { const t = canvasTex(wpx, hpx, () => {}); t.userData.big = big; return t }
   function makeTrailerTruck() {
+    const liv = { name: '', texs: [], stripeMat: null, cabMat: null }
     // 입고: 세미 트레일러 (뒷문이 건물 쪽 +X)
     const g = new THREE.Group()
     const L = 8.2, Wd = 2.5, Hh = 2.8
@@ -806,17 +1237,45 @@ export function createAmrScene(container, sim, opts = {}) {
     ;[-1, 1].forEach((s) => g.add(mesh(box(L, Hh, 0.06), bodyMat, -L / 2, 1.3 + Hh / 2, s * (Wd / 2))))
     g.add(mesh(box(0.06, Hh, Wd), bodyMat, -L, 1.3 + Hh / 2, 0))
     g.add(mesh(box(L, 0.05, Wd), roofMat, -L / 2, 1.3 + Hh, 0, false))
-    const stripeMat = new THREE.MeshStandardMaterial({ color: 0x24456b, roughness: 0.4 })
+    const stripeMat = new THREE.MeshStandardMaterial({ color: 0x24456b, roughness: 0.4 }); liv.stripeMat = stripeMat
     ;[-1, 1].forEach((s) => g.add(mesh(box(L * 0.92, 0.35, 0.02), stripeMat, -L / 2, 1.9, s * (Wd / 2 + 0.03), false)))
+    // 소속 표기: 옆면 큰 로고 · 캡 문 작은 로고
+    { const dt = carrierDecal(1024, 256, true); disposables.push(dt); liv.texs.push(dt)
+      const dm = new THREE.MeshStandardMaterial({ map: dt, transparent: true, roughness: 0.5, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 })
+      const dg = new THREE.PlaneGeometry(4.8, 1.2); disposables.push(dg)
+      ;[-1, 1].forEach((s) => { const d = new THREE.Mesh(dg, dm); d.position.set(-L / 2 - 0.2, 3.05, s * (Wd / 2 + 0.075)); if (s < 0) d.rotation.y = Math.PI; g.add(d) }) }
     // 트랙터 (캡)
     const cabX = -L - 2.1
-    g.add(mesh(new RoundedBoxGeometry(2.4, 2.6, 2.45, 3, 0.18), MAT.truckCab, cabX, 1.75, 0))
+    liv.cabMat = new THREE.MeshStandardMaterial({ color: 0x24456b, roughness: 0.3, metalness: 0.6 })
+    g.add(mesh(new RoundedBoxGeometry(2.4, 2.6, 2.45, 3, 0.18), liv.cabMat, cabX, 1.75, 0))
+    { const dt = carrierDecal(512, 128, false); disposables.push(dt); liv.texs.push(dt)
+      const dm = new THREE.MeshStandardMaterial({ map: dt, transparent: true, roughness: 0.5, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 })
+      const dg = new THREE.PlaneGeometry(1.3, 0.32); disposables.push(dg)
+      ;[-1, 1].forEach((s) => { const d = new THREE.Mesh(dg, dm); d.position.set(cabX + 0.05, 1.35, s * (1.225 + 0.22)); if (s < 0) d.rotation.y = Math.PI; g.add(d) }) }
+    liv.set = (name) => {
+      name = name || ''; if (liv.name === name) return; liv.name = name
+      const cc = name ? carrierColor(name) : null
+      liv.stripeMat.color.set(cc ? cc.col : '#24456b'); liv.cabMat.color.set(cc ? cc.cab : '#24456b')
+      liv.texs.forEach((t) => { const cv = t.image; drawDecal(cv.getContext('2d'), cv.width, cv.height, name, t.userData.big); t.needsUpdate = true })
+    }
+    g.userData.livery = liv
     g.add(mesh(box(0.05, 1.0, 2.1), MAT.glass, cabX - 1.21, 2.4, 0, false))
     g.add(mesh(box(2.6, 0.5, 2.3), MAT.steel, cabX + 0.5, 0.75, 0))
     ;[[-1.2, 0.5], [-L + 1.3, 0.5], [-L + 2.5, 0.5], [cabX - 0.6, 0.5], [cabX + 1.0, 0.5]].forEach(([wx, r]) => { wheel(g, wx, Wd / 2 - 0.1, r); wheel(g, wx, -Wd / 2 + 0.1, r) })
     truckRear(g, 0.02, 1, 0.75, Wd, plateText('in'))
     plateMesh(g, cabX - 1.24, -1, 0.85, g.userData.plateTex) // 캡 앞 번호판 (입구 카메라가 읽는 쪽)
     ;[-1, 1].forEach((s) => g.add(mesh(box(0.08, 0.32, 0.05), MAT.steel, cabX - 0.9, 2.5, s * 1.38, false)))
+    // 26.10.28 디테일: 트레일러 보강 리브 · 하부 스커트 · 흙받이 · 측면 표시등 · 후문 이음선
+    ;[-1, 1].forEach((s) => {
+      for (let i = 1; i < 9; i++) g.add(mesh(box(0.07, Hh - 0.1, 0.035), ttRib, -i * (L / 9), 1.3 + Hh / 2, s * (Wd / 2 + 0.03), false))
+      g.add(mesh(box(L * 0.72, 0.3, 0.04), MAT.rubber, -L / 2 - 0.4, 0.98, s * (Wd / 2 - 0.1), false))
+      for (let i = 0; i < 7; i++) g.add(mesh(box(0.1, 0.06, 0.03), ttMark, -0.5 - i * (L / 7.5), 1.3 + Hh - 0.05, s * (Wd / 2 + 0.05), false))
+      g.add(mesh(box(0.04, 0.46, 0.5), MAT.rubber, -1.75, 0.5, s * (Wd / 2 - 0.28), false))
+    })
+    g.add(mesh(box(0.03, Hh - 0.1, 0.02), MAT.rubber, -0.04, 1.3 + Hh / 2, 0, false))
+    cabDetail(g, cabX, -1, 2.4, 2.45, 2.45, 3.0, 1.15)
+    g.add(mesh(new THREE.CylinderGeometry(0.07, 0.07, 2.3, 10), MAT.deck, cabX + 1.35, 2.95, 1.05)); disposables.push(g.children[g.children.length - 1].geometry)
+    const tank = mesh(new THREE.CylinderGeometry(0.26, 0.26, 1.3, 16), MAT.deck, cabX + 0.55, 0.62, 1.12); tank.rotation.z = Math.PI / 2; g.add(tank); disposables.push(tank.geometry)
     return g
   }
   function makeCourierTruck(hub) {
@@ -844,6 +1303,14 @@ export function createAmrScene(container, sim, opts = {}) {
     truckRear(g, -0.02, -1, 0.62, Wd, plateText('out'))
     plateMesh(g, cabX + 1.02, 1, 0.62, g.userData.plateTex) // 캡 앞 번호판
     ;[-1, 1].forEach((s) => g.add(mesh(box(0.08, 0.3, 0.05), MAT.steel, cabX + 0.7, 2.0, s * 1.25, false)))
+    // 26.10.28 디테일: 적재함 리브 · 표시등 · 후문 이음선 · 캡 전조등/그릴/창
+    ;[-1, 1].forEach((s) => {
+      for (let i = 1; i < 6; i++) g.add(mesh(box(0.06, Hh - 0.1, 0.03), ttRib, i * (L / 6), 1.06 + Hh / 2, s * (Wd / 2 + 0.03), false))
+      for (let i = 0; i < 5; i++) g.add(mesh(box(0.1, 0.06, 0.03), ttMark, 0.5 + i * (L / 5.3), 1.06 + Hh - 0.05, s * (Wd / 2 + 0.05), false))
+      g.add(mesh(box(0.04, 0.4, 0.45), MAT.rubber, 1.6, 0.45, s * (Wd / 2 - 0.25), false))
+    })
+    g.add(mesh(box(0.03, Hh - 0.1, 0.02), MAT.rubber, 0.04, 1.06 + Hh / 2, 0, false))
+    cabDetail(g, cabX, 1, 2.0, 2.2, 1.95, 2.5, 0.95)
     return g
   }
   const inTrucks = DOCK_Y.map((y) => { const t = makeTrailerTruck(); t.position.set(WALL_L - 0.6, 0, Z(y)); world.add(t); return t })
@@ -879,6 +1346,34 @@ export function createAmrScene(container, sim, opts = {}) {
     const o = tag('', 'twin-tag twin-tag-plate'); o.position.set(side ? 3 : -6, side ? 4.2 : 5.0, 0); o.visible = false; t.add(o)
     return { o, key: '', plate: '', dockedAt: -1 }
   }))
+  // 26.10.29 번호판 말풍선이 화면 위 · 옆으로 잘리거나 위쪽 버튼 줄과 겹치지 않게, 그려진 직후 화면 안쪽(버튼 줄 아래 ~ 하단 설명 위)으로 밀어 넣는다
+  let tagTop = 0, tagBot = 0, tagAt = 0
+  function clampPlateTags() {
+    try {
+      const vp = container.getBoundingClientRect(); if (vp.width < 50) return
+      const nowT = performance.now()
+      if (nowT - tagAt > 500) {
+        tagAt = nowT; let top = 0
+        container.querySelectorAll('button, select').forEach((b) => {
+          if (labelRenderer.domElement.contains(b)) return
+          const r = b.getBoundingClientRect(); if (r.height < 4 || r.bottom - vp.top > vp.height * 0.4) return
+          top = Math.max(top, r.bottom - vp.top)
+        })
+        tagTop = top + 8
+        const cb = container.querySelector('.capbar'); tagBot = cb ? Math.max(0, vp.bottom - cb.getBoundingClientRect().top) + 8 : 8
+      }
+      plateTags.forEach((arr) => arr.forEach((pt) => {
+        const el = pt.o.element; if (!pt.o.visible || el.style.display === 'none') return
+        const r = el.getBoundingClientRect(); if (r.width < 4) return
+        const mx = parseFloat(el.style.marginLeft) || 0, my = parseFloat(el.style.marginTop) || 0
+        const nl = r.left - mx - vp.left, nt = r.top - my - vp.top // 밀기 전 자연 위치
+        const lo = Math.max(8, Math.min(nl, vp.width - r.width - 8))
+        const hi = Math.max(tagTop, Math.min(nt, vp.height - tagBot - r.height))
+        el.style.marginLeft = Math.round(lo - nl) + 'px'; el.style.marginTop = Math.round(hi - nt) + 'px'
+      }))
+    } catch (e) { /* 무시 */ }
+  }
+  { const lr0 = labelRenderer.render.bind(labelRenderer); labelRenderer.render = (sc, cm) => { lr0(sc, cm); clampPlateTags() } }
   function plateTagUpdate(d, i, side, tr, t) {
     const pt = plateTags[side][i], oc = d.ocr
     const gb = gateBeams[side][i]
@@ -892,6 +1387,7 @@ export function createAmrScene(container, sim, opts = {}) {
     // 번호판 텍스처를 인식 결과로 바꾼다
     const want = oc.plate ? fmtPlate(oc.plate) : ''
     if (want && want !== pt.plate) { pt.plate = want; tr.userData.plateTex.userData.draw(want) }
+    if (tr.userData.livery) tr.userData.livery.set(oc.st === 'ok' ? oc.company : '') // 소속(DB) 도색
     if (!showing) return
     const where = side ? '출고 D' + (i + 4) : '입고 D' + (i + 1)
     let cls = '', head = '', body = '', foot = ''
@@ -903,7 +1399,7 @@ export function createAmrScene(container, sim, opts = {}) {
     } else if (oc.st === 'scan') { cls = ' is-scan'; head = '입차 OCR · 번호판 인식 중…'; body = '· · · · ·' }
     else if (oc.st === 'block') { cls = ' is-block'; head = '미등록 차량 · 진입 차단' + conf(oc.conf); body = fmtPlate(oc.plate) || '판독 불가'; foot = 'DB 등록 차량 아님 → 회차' }
     else if (oc.st === 'off') { cls = ' is-off'; head = 'OCR 서버 응답 없음'; body = fmtPlate(oc.plate); foot = '예시 번호 · gate_api.py 확인' }
-    else { head = '입차 OCR ✓' + conf(oc.conf); body = fmtPlate(oc.plate); foot = (KIND_KO[oc.kind] || '') + ' · 등록 차량 → ' + where }
+    else { head = '입차 OCR ✓' + conf(oc.conf); body = fmtPlate(oc.plate); foot = (oc.company ? oc.company + ' · ' : '') + (KIND_KO[oc.kind] || '') + ' · 등록 차량 → ' + where }
     const key = cls + head + body + foot
     if (key === pt.key) return
     pt.key = key
@@ -1207,9 +1703,14 @@ export function createAmrScene(container, sim, opts = {}) {
     const mRing = new THREE.Mesh(new THREE.RingGeometry(1.15, 1.32, 8), mMat); mRing.visible = false; g.add(mRing)
     const label = tag(a.name, 'twin-tag twin-tag-amr twin-tag-fl'); label.position.set(0, 2.5, 0); g.add(label)
     g.userData.amrIndex = idx; body.traverse((o) => { o.userData.amrIndex = idx })
-    world.add(g)
+    addContactShadow(g, 3.0, 1.9); world.add(g)
     return { g, body, ledMat, fanMat, ring, ringMat, sel, selMat, mRing, mMat, label, lidarRing, inner, carriage, beaconMat, spotMat, fl: true, liftK: 0 }
   }
+  // 26.10.28 접지 그림자: 바닥과 닿는 부분을 살짝 어둡게 해서 로봇이 바닥에 '붙어' 보이게 한다
+  const shadowTex = canvasTex(128, 128, (cg, w, h) => { const gr = cg.createRadialGradient(w / 2, h / 2, 4, w / 2, h / 2, w / 2); gr.addColorStop(0, 'rgba(0,0,0,0.9)'); gr.addColorStop(0.55, 'rgba(0,0,0,0.45)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); cg.fillStyle = gr; cg.fillRect(0, 0, w, h) })
+  disposables.push(shadowTex)
+  const shadowMat = new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, opacity: 0.5, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 })
+  const addContactShadow = (g, w, d) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), shadowMat); disposables.push(m.geometry); m.rotation.x = -Math.PI / 2; m.position.y = 0.012; m.renderOrder = 1; g.add(m) }
   const amrs3 = S.amrs.map((a, idx) => {
     if (a.kind === 'fl') return makeForklift(a, idx)
     const g = new THREE.Group()
@@ -1228,6 +1729,10 @@ export function createAmrScene(container, sim, opts = {}) {
     ;[-1, 1].forEach((s) => { const wl = mesh(amrGeo.wheel, MAT.tire, 0, 0.09, s * 0.44, false); wl.rotation.x = Math.PI / 2; body.add(wl) })
     body.add(mesh(amrGeo.estopBase, MAT.yellow, -0.48, 0.395, 0.34, false))
     body.add(mesh(amrGeo.estop, MAT.cabinet, -0.48, 0.43, 0.34, false))
+    // 26.10.29 경광등: 상단 기둥 + 돔. 정상 = 낮은 밝기, 이상·정지·화재 = 상태색으로 깜빡임
+    const abMat = new THREE.MeshStandardMaterial({ color: 0x101418, emissive: new THREE.Color(0xffb84d), emissiveIntensity: 0.3, toneMapped: false })
+    body.add(mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.22, 6), MAT.steel, -0.55, 0.5, -0.3, false))
+    const abDome = new THREE.Mesh(new THREE.SphereGeometry(0.045, 10, 8), abMat); abDome.position.set(-0.55, 0.63, -0.3); body.add(abDome)
     ;[-1, 1].forEach((s) => {
       const hl = new THREE.Mesh(amrGeo.lamp, headMat); hl.position.set(0.63, 0.24, s * 0.3); body.add(hl)
       const rl = new THREE.Mesh(amrGeo.lamp, rearMat); rl.position.set(-0.63, 0.24, s * 0.3); body.add(rl)
@@ -1244,8 +1749,9 @@ export function createAmrScene(container, sim, opts = {}) {
     const label = tag('0' + a.id, 'twin-tag twin-tag-amr'); label.position.set(0, 1.55, 0); g.add(label)
     g.userData.amrIndex = idx
     body.traverse((o) => { o.userData.amrIndex = idx })
+    addContactShadow(g, 1.9, 1.5)
     world.add(g)
-    return { g, body, ledMat, fanMat, ring, ringMat, sel, selMat, mRing, mMat, label, lidarRing, lift, liftK: 0 }
+    return { g, body, ledMat, fanMat, ring, ringMat, sel, selMat, mRing, mMat, label, lidarRing, lift, liftK: 0, abMat }
   })
 
   /* ── 교차로 예약 표시: 바닥 칸(예약 = 청록) · 대기선(대기 = 주황) · 대기 말풍선 ── */
@@ -1326,6 +1832,9 @@ export function createAmrScene(container, sim, opts = {}) {
   }
   const palletGeoM = mergeGeos([new THREE.BoxGeometry(1.1, 0.05, 0.92).translate(0, 0.115, 0)].concat([-0.38, 0, 0.38].map((dz) => new THREE.BoxGeometry(1.1, 0.09, 0.12).translate(0, 0.045, dz))))
   disposables.push(palletGeoM)
+  // 랙 선반용 파렛트: 앞·뒤 빔 사이 간격(약 1.25 m)보다 깊게 만들어 빔 위에 실제로 걸쳐 놓인다 (공중에 뜨지 않게)
+  const palletGeoRack = mergeGeos([new THREE.BoxGeometry(1.1, 0.05, 1.46).translate(0, 0.115, 0)].concat([-0.62, 0, 0.62].map((dz) => new THREE.BoxGeometry(1.1, 0.09, 0.13).translate(0, 0.045, dz))))
+  disposables.push(palletGeoRack)
   function cargoMesh(c) {
     let m = cargoMeshes.get(c.id)
     if (m) return m
@@ -1348,7 +1857,7 @@ export function createAmrScene(container, sim, opts = {}) {
   /* ── 위 단 보충 재고: 크기 · 취급표시별 InstancedMesh (팔레트 포함) ── */
   const UP_CAP = ROWS.length * 2 * NS * 3
   const upperSets = new Map()
-  const upPallet = new THREE.InstancedMesh(palletGeoM, MAT.wood, UP_CAP); upPallet.castShadow = true; upPallet.receiveShadow = true; upPallet.count = 0
+  const upPallet = new THREE.InstancedMesh(palletGeoRack, MAT.wood, UP_CAP); upPallet.castShadow = true; upPallet.receiveShadow = true; upPallet.count = 0
   upPallet.userData.boxes = []; world.add(upPallet)
   let upperDrawn = -1
   function drawUpper() {
@@ -1454,7 +1963,16 @@ export function createAmrScene(container, sim, opts = {}) {
 
   /* ── 매 프레임 갱신 ── */
   const tmpV = new THREE.Vector3(), tmpC = new THREE.Color()
+  // 자동 화질: 3초 평균이 약 20fps 아래면 한 번만 저사양으로 내린다 (사용자가 화질을 직접 고르면 자동 조절 끔)
+  let autoQ = true, qAcc = 0, qN = 0, qT = 0
+  function autoQuality(dtReal) {
+    if (!autoQ || quality === 'low' || !(dtReal > 0) || dtReal > 1) return
+    qAcc += dtReal; qN++; qT += dtReal
+    if (qT >= 3) { if (qN / qAcc < 20) { setQuality('low'); autoQ = false } qAcc = 0; qN = 0; qT = 0 }
+  }
   function update(now, dtSim, dtReal, ui) {
+    autoQuality(dtReal)
+    if (fx.fireFx) fx.fireFx(now, dtReal)
     const t = now / 1000
 
     // 도크 · 트럭
@@ -1526,6 +2044,7 @@ export function createAmrScene(container, sim, opts = {}) {
       tmpC.set(col)
       o.ledMat.emissive.copy(tmpC)
       o.ledMat.emissiveIntensity = lv === 'spare' ? 0.35 : lv === 'ok' ? 1.8 : 2.6 + Math.sin(t * 8) * 0.8
+      if (o.abMat) { const hot = lv === 'crit' || lv === 'warn'; o.abMat.emissive.set(hot ? col : 0xffb84d); o.abMat.emissiveIntensity = hot ? (Math.sin(t * 10) > 0 ? 3 : 0.2) : a.v > 3 ? 0.9 : 0.3 }
       o.fanMat.opacity = a.v > 5 ? 0.06 + 0.03 * Math.sin(t * 6 + i) : 0
       o.lidarRing.rotation.z = t * 6
       const warn = lv === 'warn' || lv === 'crit'
@@ -1713,6 +2232,8 @@ export function createAmrScene(container, sim, opts = {}) {
   }
   function set2D(on) {
     is2D = !!on
+    if (fx.env) fx.env.visible = !is2D
+    if (fx.fire) fx.fire.visible = !is2D
     controls.enabled = !is2D; controls2.enabled = is2D
     if (is2D) { controls2.target.set(-2, 0, 0); cam2.position.set(-2, 90, 0); cam2.zoom = 0.7 }
     resize()
@@ -1722,10 +2243,13 @@ export function createAmrScene(container, sim, opts = {}) {
   function setTheme(t) {
     theme = t === 'light' ? 'light' : 'dark'
     scene.background.set(THEME_BG[theme]); scene.fog.color.set(THEME_BG[theme])
+    if (fx.envSet) fx.envSet(theme)
+    clockEl.dataset.theme = theme; clockTick()
   }
   function render() {
     if (is2D) { renderer.render(scene, cam2); labelRenderer.render(scene, cam2); return }
     if (quality === 'low') { renderer.render(scene, camera); labelRenderer.render(scene, camera); return }
+    grade.uniforms.uTime.value = (performance.now() % 100000) / 1000
     composer.render()
     labelRenderer.render(scene, camera)
   }
@@ -1767,6 +2291,9 @@ export function createAmrScene(container, sim, opts = {}) {
 
   function dispose() {
     ro.disconnect()
+    clearInterval(clockTimer); clockEl.remove()
+    if (fx.fireEls) fx.fireEls.forEach((e) => e.remove())
+    try { speechSynthesis.cancel() } catch (e) { /* 무시 */ }
     renderer.domElement.removeEventListener('pointerdown', onDown)
     renderer.domElement.removeEventListener('pointerup', onUp)
     controls.dispose(); controls2.dispose()
@@ -1785,5 +2312,5 @@ export function createAmrScene(container, sim, opts = {}) {
     labelRenderer.domElement.remove()
   }
 
-  return { update, render, setView, setPreset, setAutoGate, get autoGate() { return autoGate }, get autoGateSide() { return gateSide }, focusGate, resize, dispose, setQuality, set2D, setTheme, get is2D() { return is2D }, get theme() { return theme }, get quality() { return quality }, camera, controls, renderer, world, toWorld: (x, y) => [X(x), Z(y)], get viewMode() { return viewMode } }
+  return { update, render, setView, setPreset, setAutoGate, get autoGate() { return autoGate }, get autoGateSide() { return gateSide }, focusGate, resize, dispose, setQuality: (q) => { autoQ = false; setQuality(q) }, set2D, setTheme, get is2D() { return is2D }, get theme() { return theme }, get quality() { return quality }, camera, controls, renderer, world, toWorld: (x, y) => [X(x), Z(y)], get viewMode() { return viewMode } }
 }

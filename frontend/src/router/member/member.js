@@ -10,6 +10,7 @@ import SbotInspections from "@/views/SbotInspections.vue"; // 26.10.23 추가: �
 import SbotAmrAudit from "@/views/SbotAmrAudit.vue"; // 26.10.23 추가: AMR 앱 출입증 감사
 import login from "@/components/member/login.vue";
 import regi from "../../components/member/regi.vue";
+import NotificationHistory from "@/components/common/NotificationHistory.vue"; // 26.10.28 알림 내역 (관리자 외 계정)
 // 26.09.16: driver.vue(대시보드)는 MY/차량 화면(driver/screens/MyPage.vue)으로 기능 통합 후 제거.
 // 실제 라우트 정의는 router/driver/driverApp.js 에 있고, 여기서는 기존 /driver 경로 호환을 위해 리다이렉트만 유지한다.
 
@@ -52,6 +53,13 @@ export default [
     {
         path:'/driver',
         redirect:'/driver/app/my-page'
+    },
+    {
+        path:'/notifications', // 26.10.28 알림 내역: 관리자는 /admin/notifications 로
+        name:'notifications',
+        component:NotificationHistory,
+        props:{ standalone:true },
+        meta:{ requiresAuth:true },
     },
 
 

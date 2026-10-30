@@ -22,7 +22,13 @@
 
     <p v-if="error" class="crud-empty" style="color:#c81e2c;">{{ error }}</p>
 
-    <section class="crud-table-wrap">
+    <!-- 26.10.28 당일 내역 / 과거 내역을 탭으로 전환 (과거 내역이 있는 관리자 화면). 업체 화면은 하루치만 있어 탭 없음 -->
+    <div :class="{ 'tab-box': !singleDay }">
+    <div v-if="!singleDay" class="cl-tabs tabs-sticky" role="tablist">
+      <button type="button" :class="{ on: clTab === 'today' }" @click="clTab = 'today'">당일 내역<span class="n">{{ todayRows.length }}</span></button>
+      <button type="button" :class="{ on: clTab === 'past' }" @click="clTab = 'past'">과거 내역<span class="n">{{ pastRows.length }}</span></button>
+    </div>
+    <section v-show="singleDay || clTab === 'today'" class="crud-table-wrap">
       <div class="crud-toolbar">
         <div class="crud-toolbar-left">
           <h2 class="crud-title">{{ dayTitle }}</h2>
@@ -58,7 +64,7 @@
       <AdminPager v-if="todayPageCount > 1" v-model="todayPage" :page-count="todayPageCount" />
     </section>
 
-    <section v-if="!singleDay" class="crud-table-wrap">
+    <section v-if="!singleDay" v-show="clTab === 'past'" class="crud-table-wrap">
       <div class="crud-toolbar">
         <div class="crud-toolbar-left">
           <h2 class="crud-title">과거 내역</h2>
@@ -93,6 +99,7 @@
       </div>
       <AdminPager v-if="pastPageCount > 1" v-model="pastPage" :page-count="pastPageCount" />
     </section>
+    </div>
   </div>
 </template>
 
@@ -135,7 +142,8 @@ const allRows = ref([])
 const draft = ref('')
 const applied = ref('')
 
-const PAGE_SIZE = 5
+const PAGE_SIZE = 10 // 26.10.28 5건 → 10건
+const clTab = ref('today') // 26.10.28 탭: today = 당일 내역, past = 과거 내역
 const todayPage = ref(1)
 const pastPage = ref(1)
 
@@ -199,6 +207,13 @@ onMounted(load)
 </script>
 
 <style scoped>
+/* 26.10.28 탭 모양: 다른 메뉴와 같은 모양 */
+.cl-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+.cl-tabs button { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #cfd6df; background: #f8fafc; color: #1f2937; border-radius: 8px; padding: 7px 14px; font-size: 13.5px; font-weight: 600; cursor: pointer; }
+.cl-tabs button:hover:not(.on) { border-color: #1d4ed8; color: #1d4ed8; }
+.cl-tabs button.on { background: #1d4ed8; border-color: #1d4ed8; color: #fff; font-weight: 700; }
+.cl-tabs .n { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; background: #eef1f6; color: #0b1d36; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+.cl-tabs button.on .n { background: rgba(255, 255, 255, .55); }
 .loc-lookup-search {
   display: flex;
   flex-wrap: wrap;

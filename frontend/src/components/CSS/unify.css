@@ -100,3 +100,44 @@ table th.is-right { text-align: right !important; }
   input[type="date"], input[type="datetime-local"], select { max-width: 100%; }
 }
 table th, table td { word-break: keep-all; }
+
+/* ---- 26.10.28 수정 · 삭제 · 승인 · 거절 버튼 통일 (메뉴 정리 시안 HTML 기준) ----
+   수정 · 승인 = 금색 채움 / 삭제 · 거절 · 반려 = 빨간 테두리. 모든 화면에서 같은 모양 */
+.btn-act, .sc2 .btn-act { /* .sc2 안(통합 관제 화면)은 sc2.css 의 초기화 규칙이 이겨서 모양이 달라지던 문제 → 같은 우선순위로 */
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+  border: 1px solid #c9d3e0; background: #fff; color: #112847;
+  border-radius: 7px; padding: 6px 12px; font-size: 13px; font-weight: 700; line-height: 1.2;
+  cursor: pointer; white-space: nowrap; font-family: inherit;
+}
+.btn-act.edit, .sc2 .btn-act.edit { background: #c9972f; border-color: #c9972f; color: #fff; }
+.btn-act.edit:hover:not(:disabled), .sc2 .btn-act.edit:hover:not(:disabled) { background: #dcb466; border-color: #dcb466; color: #fff; } /* 26.10.28 오버 시 연하게 */
+.btn-act.del, .sc2 .btn-act.del { background: #fff; border-color: #dc3b3b; color: #dc3b3b; }
+.btn-act.del:hover:not(:disabled), .sc2 .btn-act.del:hover:not(:disabled) { background: #fdecec; color: #c62f2f; }
+.btn-act:disabled, .sc2 .btn-act:disabled { opacity: .5; cursor: not-allowed; }
+
+/* ---- 26.10.28 탭 + 내용을 하나의 흰 상자 안에 (지역센터 인수 현황 화면과 같은 모양) ----
+   탭이 있는 화면: 운영 센터 · 가입 승인 · 컨테이너 관리 · 도착 · 점검 · 허브 관제 · 지역센터 관제 · 알림 내역 */
+.tab-box, .sc2 .tab-box { display: block; background: #fff; border: 1px solid #e3e8ef; border-radius: 12px; padding: 14px 16px; box-shadow: 0 1px 3px rgba(17, 40, 71, .06); color: #1f2937; }
+/* 상자 안에 들어간 내용의 카드 테두리 · 그림자는 빼서 상자가 두 겹으로 보이지 않게 */
+.tab-box .crud-table-wrap { background: transparent; border: 0; box-shadow: none; padding: 0; border-radius: 0; }
+.tab-box .admin-page-header { border-bottom: 0; padding-bottom: 0; margin-bottom: 10px; }
+.tab-box section.sbi-card { background: transparent; border: 0; box-shadow: none; padding: 0; }
+.sc2 .tab-box > .card, .sc2 .tab-box > .card.hb { background: transparent; border: 0; box-shadow: none; padding: 0; border-radius: 0; }
+
+/* ---- 26.10.28 버튼에 마우스를 올리면 색이 바뀌게 (화면마다 따로 만든 버튼들 공통) ----
+   작성 시작(점검 기록) · 하역 완료(현황판) · 빈 컨테이너 반납 준비 · 기준정보 저장 등 */
+.ob-btn, .ip2-btn, .gr-btn, .drp-btn, .crp-btn, .cip-btn, .kp-btn, .cs-btn, .gs-btn, .ord-btn, .wb-btn, .ci-btn, .aud-btn, .edit-btn, .pend-btn, .mapping-mini-btn, .sc2 .btn { transition: box-shadow .15s, background-color .15s; }
+.ob-btn:hover:not(:disabled), .ip2-btn:hover:not(:disabled), .gr-btn:hover:not(:disabled), .drp-btn:hover:not(:disabled), .crp-btn:hover:not(:disabled),
+.cip-btn:hover:not(:disabled), .kp-btn:hover:not(:disabled), .cs-btn:hover:not(:disabled), .gs-btn:hover:not(:disabled), .ord-btn:hover:not(:disabled),
+.wb-btn:hover:not(:disabled), .ci-btn:hover:not(:disabled), .aud-btn:hover:not(:disabled), .edit-btn:hover:not(:disabled), .pend-btn:hover:not(:disabled),
+.mapping-mini-btn:hover:not(:disabled), .sc2 .btn:hover:not(:disabled), .sc2 label.btn:hover {
+  /* 26.10.28 진해지는 대신 연해지게: 버튼 배경 위에 흰색을 살짝 덮는다 (글자색은 그대로) */
+  box-shadow: inset 0 0 0 100px rgba(255, 255, 255, .22), 0 1px 4px rgba(17, 40, 71, .16);
+}
+/* 파란 버튼은 차이가 잘 안 보여서 더 연하게 */
+.cip-btn.primary:hover:not(:disabled), .ob-btn.primary:hover:not(:disabled), .unload:hover:not(:disabled), .sc2 .btn.b:hover:not(:disabled), .sc2 .btn.blue:hover:not(:disabled) {
+  box-shadow: inset 0 0 0 100px rgba(255, 255, 255, .36), 0 1px 4px rgba(17, 40, 71, .16);
+}
+
+/* 26.10.28 흰 버튼(sc2 .btn.o)은 흰색을 덮어도 티가 안 나서 테두리 · 배경을 옅게 바꿈 */
+.sc2 .btn.o:hover:not(:disabled), .sc2 label.btn.o:hover { background: #f5f8fc; border-color: #8fa3bf; }

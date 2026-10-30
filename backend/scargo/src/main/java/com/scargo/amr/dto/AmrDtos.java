@@ -33,7 +33,7 @@ public class AmrDtos {
     public record SettingsView(Integer rulThresholdHours, Integer chargeAtPct, String updatedBy, OffsetDateTime updatedAt) {}
     public record VehicleView(Long id, String direction, String plate, String photoPlate, String kind, String decision,
                               String lane, Integer dock, Double confidence, String engine, String imageUrl, Integer boxCount,
-                              String destHub, OffsetDateTime createdAt, String sealStatus, String sealInput) {}
+                              String destHub, OffsetDateTime createdAt, String sealStatus, String sealInput, String company) {}
     public record HourCount(String hour, long count) {}
     public record RobotUtil(String code, int pct) {}
     public record KpiView(long today, long yesterdaySameTime, List<HourCount> hourly, Double avgTransportSec,

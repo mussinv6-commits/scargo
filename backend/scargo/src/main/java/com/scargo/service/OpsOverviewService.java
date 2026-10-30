@@ -44,7 +44,9 @@ public class OpsOverviewService {
                         + "FROM hub_docks d" + (hub == null ? "" : " WHERE d.hub_id = ?") + " ORDER BY d.hub_id, d.dock_type DESC, d.dock_code", hub);
 
         List<Map<String, Object>> failed = rows(
-                "SELECT inspection_id AS \"inspectionId\", container_no AS \"containerNo\", hub_id AS \"hubId\", finalized_at AS \"finalizedAt\" "
+                "SELECT inspection_id AS \"inspectionId\", container_no AS \"containerNo\", hub_id AS \"hubId\", finalized_at AS \"finalizedAt\", "
+                        // 26.10.29 QA: 현황판 '점검 불합격'에 사유 표시 (불합격 항목 + 메모)
+                        + "items::text AS \"items\", memo AS \"memo\" "
                         + "FROM container_inspections WHERE record_status = 'FINALIZED' AND overall_status = 'FAIL' "
                         + "AND finalized_at >= now() - interval '7 days'" + (hub == null ? "" : " AND hub_id = ?")
                         + " ORDER BY finalized_at DESC LIMIT 50", hub);

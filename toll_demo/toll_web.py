@@ -33,7 +33,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 import uvicorn
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Query
 from fastapi.responses import HTMLResponse, Response, JSONResponse, FileResponse
 
 HERE = Path(__file__).resolve().parent
@@ -48,7 +48,8 @@ DB_URL = os.environ.get('GATE_DB_URL', '')
 TOKEN = os.environ.get('GATE_WEB_TOKEN', '')
 EXTS = {'.jpg', '.jpeg', '.png', '.bmp', '.webp'}
 CROP_DIR = HERE / 'data' / 'crops'
-view_since = {'t': None}        # 화면 초기화 시각 (이 시각 이후 기록만 보여줌. DB 기록은 지우지 않음)
+import datetime as _dt
+view_since = {'t': _dt.datetime.now(_dt.timezone.utc)}   # 화면에 보여줄 기록의 시작 시각. 서버를 켠 시각부터 (이전 시연 기록은 DB 에 남지만 화면에는 안 나옴). '초기화' 버튼은 이 시각을 지금으로 바꾼다
 REGIONS = "서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주"
 
 LOOKUP_SQL = """
@@ -434,9 +435,63 @@ def sim_state():
     return dict(playing=sim['playing'], tick_ms=int(sim['tick'] * 1000), pause_on_dev=sim['pause_on_dev'], notice=sim['notice'])
 
 
+# ---- 자동 운행 (26.10.29): 시연 버튼 없이 차량이 간격을 두고 자동으로 출차 · 진행한다
+#  · 구간 관제 화면이 열려 있는 동안만(화면이 20초 안에 서버를 불렀을 때) 새 차량을 출차시킨다 → 아무도 안 볼 때 DB 기록이 쌓이지 않는다
+#  · 출차 시각은 택배 이동 · 물류센터 관제와 같은 '공용 하루 시계'. 화면(iframe)이 /api/clock 으로 알려 주고, 없으면 PC 시각
+#  · 3대 중 3번째마다 우회(이탈) 차량 1대. 이탈이 감지돼도 멈추지 않고 안내만 표시한다 (pause_on_dev 끔)
+#  · 끄려면 환경변수 TOLL_AUTO=0 (또는 POST /api/auto?on=0)
+AUTO = dict(on=os.environ.get('TOLL_AUTO', '1') != '0', target=3, gap=(6.0, 14.0), next=0.0, n=0, err=None, seen=0.0, clock=None)
+
+
+def auto_dep():
+    """출차 시각 문자열: 공용 시계가 있으면 그 시각 'HH:MM', 없으면 'now'"""
+    c = AUTO['clock']
+    if not c:
+        return 'now'
+    try:
+        tod = (float(c['tod']) + (time.time() - c['at']) * float(c['rate'])) % 24
+        return '%02d:%02d' % (int(tod), int((tod % 1) * 60))
+    except Exception:
+        return 'now'
+
+
+async def auto_loop():
+    while True:
+        await asyncio.sleep(2)
+        try:
+            if not AUTO['on'] or not DB_URL or model_state['state'] != 'ready':
+                continue
+            if time.time() - AUTO['seen'] > 20:             # 화면이 열려 있지 않으면 새 차량을 내보내지 않는다
+                continue
+            sim['playing'] = True                           # 일시정지 버튼이 없다: 항상 재생
+            sim['pause_on_dev'] = False
+            sim['notice'] = None
+            if time.time() < AUTO['next']:
+                continue
+            with trips_lock:
+                live = sum(1 for t in trips.values() if not finished(t))
+            if live >= AUTO['target']:
+                continue
+            AUTO['n'] += 1
+            detour = AUTO['n'] % 3 == 0
+            data, code = await asyncio.to_thread(start_trip, 'F' if detour else 'A', auto_dep(), 'DETOUR' if detour else 'BASIC')
+            if code == 200:
+                AUTO['err'] = None
+                AUTO['next'] = time.time() + random.uniform(*AUTO['gap'])
+            else:
+                AUTO['err'] = data.get('error') if isinstance(data, dict) else str(data)
+                AUTO['next'] = time.time() + 20             # 실패하면 잠시 쉬었다가 다시 (사진 없음 · DB 오류 등)
+                print('[자동 운행] 출차 실패:', AUTO['err'])
+        except Exception as e:
+            AUTO['err'] = f'{type(e).__name__}: {e}'
+            AUTO['next'] = time.time() + 20
+            print('[자동 운행 오류]', AUTO['err'])
+
+
 @asynccontextmanager
 async def lifespan(_app):
     asyncio.create_task(sim_loop())
+    asyncio.create_task(auto_loop())
     async def warm():                                          # 모델을 미리 불러 첫 클릭이 느리지 않게
         try:
             import toll_recognize
@@ -512,13 +567,36 @@ async def api_crop(name: str):
     return FileResponse(p, media_type='image/jpeg')
 
 
+def range_bounds(frm, to):
+    """조회 기간 -> (since, until). frm/to 는 YYYY-MM-DD (서버 시각 기준 날짜). 둘 다 없으면 오늘.
+    오늘이 시작일이면 서버를 켠 시각/초기화 시각 이후 기록만 본다."""
+    day0 = _dt.datetime.now().astimezone().replace(hour=0, minute=0, second=0, microsecond=0)
+
+    def parse(x):
+        try:
+            return _dt.datetime.strptime(x, '%Y-%m-%d').astimezone() if x else None
+        except ValueError:
+            return None
+    f, t = parse(frm), parse(to)
+    if frm == 'all':
+        f = None
+    elif f is None:
+        f = day0
+    since = f
+    until = (t + _dt.timedelta(days=1)) if t else None
+    if since is not None and since >= day0 and view_since['t']:
+        since = max(since, view_since['t'])
+    return since, until
+
+
 @app.get('/api/db/overview')
-async def api_db_overview():
+async def api_db_overview(frm: str = Query('', alias='from'), to: str = ''):
     """W-12 · W-13 · W-14 가 같이 쓰는 조회: 통행 목록(차량·위치·지점별 판정·예상 통행료·권고·조치) + 출차 확인 필요 건"""
     import toll_db
+    since, until = range_bounds(frm, to)
     try:
-        tr = await asyncio.to_thread(toll_db.trips_data, DB_URL, view_since['t'])
-        iss = await asyncio.to_thread(toll_db.departure_issues, DB_URL, view_since['t'])
+        tr = await asyncio.to_thread(toll_db.trips_data, DB_URL, since, until)
+        iss = await asyncio.to_thread(toll_db.departure_issues, DB_URL, since, until)
     except Exception as e:
         return JSONResponse(dict(error=f'{type(e).__name__}: {e}'), status_code=500)
     live = {k for k, t in trips.items() if not finished(t)}
@@ -588,8 +666,44 @@ async def api_map_data():
     return d
 
 
+@app.post('/api/clock')
+async def api_clock(request: Request):
+    """구간 관제 화면이 공용 하루 시계(택배 이동 · 물류센터 관제와 같은 시각)를 알려 준다: {tod: 시(0~24 소수), rate: 초당 시간}"""
+    AUTO['seen'] = time.time()
+    try:
+        b = await request.json()
+        AUTO['clock'] = dict(tod=float(b['tod']), rate=float(b.get('rate', 1 / 3600)), at=time.time())
+    except Exception:
+        pass
+    if not AUTO['on']:
+        st = 'off'
+    elif not DB_URL:
+        st = 'no_db'
+    elif model_state['state'] == 'error':
+        st = 'model_error'
+    elif model_state['state'] != 'ready':
+        st = 'model_loading'
+    else:
+        st = 'ok'
+    with trips_lock:
+        live = sum(1 for t in trips.values() if not finished(t))
+    return dict(ok=True, on=AUTO['on'], state=st, live=live, dep=auto_dep(), err=AUTO['err'] or (model_state.get('error') if st == 'model_error' else None))
+
+
+@app.get('/api/auto')
+async def api_auto_get():
+    return dict(on=AUTO['on'], target=AUTO['target'], err=AUTO['err'], dep=auto_dep())
+
+
+@app.post('/api/auto')
+async def api_auto_set(on: int = 1):
+    AUTO['on'] = bool(on)
+    return dict(on=AUTO['on'])
+
+
 @app.get('/api/sim')
 async def api_sim():
+    AUTO['seen'] = time.time()
     return sim_state()
 
 
@@ -621,6 +735,7 @@ async def api_sim_speed(ms: int = 450):
 @app.get('/api/watch/all')
 async def api_watch_all():
     """지도용: 운행 중(시뮬레이션 서버가 아는) 모든 차량의 위치·상태·알림·이벤트"""
+    AUTO['seen'] = time.time()                       # 화면이 열려 있다는 신호 (자동 운행은 화면이 열려 있을 때만 새 차량 출차)
     with trips_lock:
         return dict(vehicles=[watch_view(t) for t in trips.values()], sim=sim_state())
 

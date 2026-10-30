@@ -22,7 +22,7 @@
       <tbody v-for="(bbs, index) in bbslist" v-bind:key="index">
         <tr>
           <td>{{ index + 1 }}</td>
-          <td @click="bbsdetail(bbs.seq)" align="left" class="text-underline-hover">
+          <td @click="bbsdetail(bbs.seq)" align="left" class="text-underline-hover is-left">
             {{ dot3(bbs.title) }}
           </td>
           <td>{{ bbs.readcount }}</td>

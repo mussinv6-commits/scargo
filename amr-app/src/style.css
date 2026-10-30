@@ -279,3 +279,69 @@ canvas.chart{display:block;width:100%;height:150px;margin-top:6px}
 .nt-list i{width:8px;height:8px;border-radius:50%}
 .nt-list i.r{background:var(--red)}.nt-list i.a{background:var(--amber)}.nt-list i.g{background:var(--dim)}
 .nt-list b{color:var(--ink)}.nt-list span{color:var(--muted)}
+
+/* 26.10.29 3D 화면에 추가된 시계 · 화재 훈련 버튼은 작은 미리보기(홈)에서는 숨기고, 3D 탭에서만 보인다 */
+#mini-slot .twin-clock, #mini-slot .twin-fire-ctl { display: none !important; }
+#mini-slot .twin-fire-bn { font-size: 10px !important; padding: 4px 8px !important; bottom: 6px !important; max-width: 94%; white-space: normal !important; text-align: center; }
+.slot3d .twin-fire-ctl { flex-wrap: wrap; max-width: calc(100vw - 24px); }
+.slot3d .twin-fire-bn { font-size: 12px !important; max-width: 92vw; white-space: normal !important; text-align: center; }
+
+/* 26.10.29 3D 탭 실전 화면: 유리 HUD(시계 · 가동 · 경보) / 시점·설정 팝업 / 큰 비상정지(꾹) / 하단 시점 세그먼트 */
+.ov-top{position:absolute;left:0;right:0;top:0;padding:calc(var(--st) + 10px) 12px 0;background:none;pointer-events:none;display:block;z-index:8}
+.ov-top>*{pointer-events:auto}
+.gl{background:rgba(var(--glass),.52);-webkit-backdrop-filter:blur(16px) saturate(1.4);backdrop-filter:blur(16px) saturate(1.4);border:1px solid rgba(255,255,255,.2);box-shadow:0 4px 18px rgba(0,0,0,.28)}
+:root[data-theme="light"] .gl{border-color:rgba(15,26,36,.12);box-shadow:0 4px 14px rgba(15,26,36,.12)}
+.hud{display:flex;align-items:center;gap:6px}
+.hud .sp{flex:1}
+.hud-clk,.hud-st,.hud-al{height:32px;border-radius:16px;display:flex;align-items:center;gap:6px;padding:0 11px;font-size:11px;color:var(--muted);white-space:nowrap}
+.hud-clk b{font:800 15px var(--mono);color:var(--ink);letter-spacing:.02em}
+.hud-clk em{font:800 9px var(--mono);font-style:normal;letter-spacing:.12em;color:var(--cyan)}
+.hud-clk .dot{width:7px;height:7px;border-radius:50%;background:var(--cyan);box-shadow:0 0 8px var(--cyan);animation:blink 1.6s infinite}
+.hud-st b,.hud-al b{font:800 15px var(--mono);color:var(--ink)}
+.hud-st i{font-style:normal;font:600 11px var(--mono)}
+.hud-al b{color:var(--cyan)}
+.hud-al.on{background:rgba(200,40,34,.55);border-color:rgba(255,140,130,.8);color:#ffd7d3;animation:alpulse 1.2s infinite}
+.hud-al.on b{color:#fff}
+@keyframes alpulse{50%{box-shadow:0 0 0 4px rgba(255,90,80,.25)}}
+.rb{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;color:var(--ink);padding:0}
+.rb.on{color:var(--cyan);border-color:var(--cyan)}
+.fire-card{margin-top:8px;display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:16px;background:rgba(150,22,18,.72);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border:1px solid rgba(255,150,140,.7);color:#fff}
+.fire-card[hidden]{display:none}
+.fire-card i{flex:none;width:26px;height:26px;border-radius:50%;background:#ff5a4f;display:grid;place-items:center;font:800 15px var(--ui);font-style:normal}
+.fire-card div{flex:1;min-width:0}
+.fire-card b{display:block;font-size:15px;font-weight:800}
+.fire-card small{display:block;font-size:11px;color:#ffd7d3;margin-top:1px}
+.fire-card em{font:800 16px var(--mono);font-style:normal}
+.pop{position:absolute;right:12px;top:calc(var(--st) + 54px);width:210px;padding:10px 10px 12px;border-radius:18px;background:rgba(var(--glass),.8);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);border:1px solid rgba(255,255,255,.2);box-shadow:0 10px 30px rgba(0,0,0,.4);max-height:calc(100vh - 360px);overflow:auto}
+.pop[hidden]{display:none}
+.pop.wide{width:min(300px,calc(100vw - 24px))}
+.pop h4{font-size:11px;font-weight:800;letter-spacing:.08em;color:var(--muted);margin:2px 4px 8px}
+.pop h4:not(:first-child){margin-top:12px}
+.plist{display:flex;flex-direction:column;gap:6px}
+.plist button,.plist-b{height:38px;padding:0 12px;text-align:left;border-radius:12px;border:1px solid var(--edge2);background:rgba(var(--glass),.5);font-size:14px;font-weight:700;color:var(--ink);display:flex;align-items:center}
+.plist-b{margin-top:6px;width:100%}
+.plist button.on{border-color:var(--cyan);color:var(--cyan);background:rgba(63,224,204,.12)}
+.pop .ov-side{position:static;display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.pop .ov-side button{height:40px;min-width:0;border-radius:12px;font-size:13px;font-weight:700}
+.pop .ov-side button.on{border-color:var(--cyan);color:var(--cyan)}
+.pop .twin-fire-ctl{position:static!important;display:flex!important;flex-direction:column;align-items:stretch!important;gap:6px!important;flex-wrap:nowrap!important;max-width:none!important}
+.pop .twin-fire-ctl button{height:42px;border-radius:12px!important;font-size:14px!important;font-weight:800!important;padding:0 12px!important}
+.pop .twin-fire-ctl select{height:38px;border-radius:10px!important;font-size:13px!important}
+.dock{position:absolute;left:10px;right:10px;bottom:10px;display:flex;flex-direction:column;gap:10px;z-index:6}
+.dock .sheet{position:static;background:rgba(var(--glass),.58);-webkit-backdrop-filter:blur(18px) saturate(1.3);backdrop-filter:blur(18px) saturate(1.3);border-color:rgba(255,255,255,.18)}
+.dock .sheet .met,.dock .sheet .pick button{background:rgba(var(--glass),.35)}
+.seg3{align-self:center;display:flex;padding:4px;border-radius:999px;background:rgba(var(--glass),.55);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.2);box-shadow:0 4px 18px rgba(0,0,0,.3)}
+.seg3 button{height:38px;padding:0 15px;border-radius:999px;font-size:13.5px;font-weight:800;color:var(--ink);white-space:nowrap;transition:background .2s,color .2s}
+.seg3 button[hidden]{display:none}
+.seg3 button.on{background:var(--cyan);color:#06221e}
+.estop{position:absolute;right:4px;bottom:calc(100% + 12px);width:68px;height:68px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#ff5a50,#b3140f);border:1px solid rgba(255,170,160,.9);box-shadow:0 6px 20px rgba(160,10,6,.55);color:#fff;display:grid;place-items:center;touch-action:none;user-select:none;-webkit-user-select:none}
+.estop span{font:800 13px/1.1 var(--ui);text-align:center;margin-top:-6px}
+.estop small{position:absolute;bottom:-17px;left:50%;transform:translateX(-50%);font-size:9.5px;font-weight:700;color:var(--ink);white-space:nowrap;text-shadow:0 1px 4px #000}
+.estop .ring{position:absolute;inset:-5px;width:calc(100% + 10px);height:calc(100% + 10px);transform:rotate(-90deg);pointer-events:none}
+.estop .ring circle{fill:none;stroke:#fff;stroke-width:5;stroke-linecap:round;stroke-dasharray:289;stroke-dashoffset:289}
+.estop.holding .ring circle{animation:esfill .7s linear forwards}
+@keyframes esfill{to{stroke-dashoffset:0}}
+.estop.rel{background:radial-gradient(circle at 35% 30%,#3fcf84,#157a47);border-color:rgba(170,255,210,.9);box-shadow:0 6px 20px rgba(10,120,60,.5)}
+.full3d.alarm .estop{animation:espulse 1.1s infinite}
+@keyframes espulse{50%{box-shadow:0 0 0 9px rgba(255,80,70,.28),0 6px 20px rgba(160,10,6,.55)}}
+.slot3d .twin-clock,.slot3d .twin-fire-bn{display:none!important}

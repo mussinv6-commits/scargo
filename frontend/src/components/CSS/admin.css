@@ -235,10 +235,10 @@
 .admin-shell .admin-me-text small { font-size: 11.5px; color: rgba(255, 255, 255, 0.6); }
 
 .admin-shell .admin-nav-group-label {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.4px;
-  color: rgba(255, 255, 255, 0.45);
+  font-size: 13.5px; /* 26.10.28 QA C-2 대분류 글자 확대 (11px → 13.5px) */
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  color: rgba(255, 255, 255, 0.62);
   padding: 8px 12px 2px;
 }
 
@@ -250,7 +250,7 @@
   border-radius: 8px;
   text-decoration: none;
   color: rgba(255, 255, 255, 0.78);
-  font-size: 13.5px;
+  font-size: 13px; /* 26.10.28 하위 메뉴 글자 작게 (대분류 13.5px 보다 작게) */
   font-weight: 600;
 }
 .admin-shell .admin-nav-item i {
@@ -275,7 +275,7 @@
 .admin-shell .admin-nav-home { margin-bottom: 6px; }
 
 .admin-shell .admin-side-foot {
-  margin-top: 0;
+  margin-top: auto; /* 26.10.28 문구는 사이드바 맨 아래 (메뉴를 많이 펼치면 메뉴 바로 아래로 따라감) */
   padding: 10px 12px 4px;
   display: flex;
   align-items: flex-end;
@@ -451,6 +451,31 @@
   margin: 0;
 }
 .admin-shell .admin-page-actions { display: flex; gap: 8px; flex-shrink: 0; }
+/* 26.10.28 QA C-5 · #20: 메뉴명은 상단 고정 바(admin-topbar)에 한 번만, 모든 메뉴 같은 글씨체·크기 */
+.admin-shell .admin-page-title {
+  font-family: 'Barlow Condensed', 'Inter', sans-serif;
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.2;
+  margin: 0;
+  color: var(--a-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.admin-shell .admin-main.has-title .admin-page-header h1,
+.admin-shell .admin-main.has-title .an-head h1.an-title,
+.admin-shell .admin-main.has-title .gs-head > h2,
+.admin-shell .admin-main.has-title .sbi-head > h2,
+.admin-shell .admin-main.has-title .mg > h2 { display: none; }
+.admin-shell .admin-main.has-title .admin-page-heading { padding-left: 0; }
+/* 26.10.28 QA C-3: 스크롤바는 내용이 넘칠 때만, 평소에는 보이지 않게 */
+.admin-shell .admin-main { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+.admin-shell .admin-main:hover { scrollbar-color: rgba(17, 40, 71, .25) transparent; }
+.admin-shell .admin-main::-webkit-scrollbar { width: 8px; }
+.admin-shell .admin-main::-webkit-scrollbar-thumb { background: transparent; border-radius: 4px; }
+.admin-shell .admin-main:hover::-webkit-scrollbar-thumb { background: rgba(17, 40, 71, .25); }
 
 /* ---- KPI 카드 (대시보드) ---- */
 /* 26.09.30 수정: 카드 개수(6개)가 3열 × 2줄로 딱 맞게 떨어지도록 고정 그리드 + 카드 내부 정렬 통일 */
@@ -649,7 +674,7 @@ a.kpi-card:hover { border-color: var(--a-primary); }
 }
 .btn-admin:disabled { opacity: .5; cursor: not-allowed; }
 .btn-admin-primary { background: var(--a-primary, #112847); color: #fff; }
-.btn-admin-primary:hover:not(:disabled) { background: var(--a-primary-hover, #1d4070); color: #fff; }
+.btn-admin-primary:hover:not(:disabled) { background: #3a5680; color: #fff; } /* 26.10.28 오버 시 연하게 */
 .btn-admin-ghost, .btn-admin-secondary { background: #fff; color: var(--a-primary, #112847); border-color: var(--a-border, #e3e8ef); }
 .btn-admin-ghost:hover, .btn-admin-secondary:hover { background: var(--a-surface-alt, #eef1f6); color: var(--a-primary, #112847); }
 .btn-admin-danger { background: var(--a-red-soft, rgba(239,68,68,.1)); color: var(--a-red, #dc3b3b); }
@@ -1178,3 +1203,9 @@ a.kpi-card:hover { border-color: var(--a-primary); }
 @media (max-width: 560px) {
   .admin-shell .kpi-grid { grid-template-columns: 1fr; }
 }
+
+/* 26.10.30 보고 구분(일간 · 주간 · 월간 · 연간) */
+.ops-period { display: inline-flex; height: 36px; border: 1px solid var(--a-border); border-radius: 10px; background: #fff; overflow: hidden; }
+.ops-period button { border: 0; background: transparent; padding: 0 12px; font-size: 13px; font-weight: 700; color: var(--a-text-muted); cursor: pointer; }
+.ops-period button + button { border-left: 1px solid var(--a-border); }
+.ops-period button.on { background: #112847; color: #fff; }

@@ -2,14 +2,21 @@
   <div>
     <AdminPageHeader title="차량 관리" description="전체 화물차 정보를 조회·등록·수정·삭제하고, 신규 차량의 진입 허가를 심사합니다." />
 
+    <!-- 26.10.28 차량 목록 / 진입 허가 심사를 탭으로 전환 (흰 상자 안에 탭 + 내용) -->
+    <div class="tab-box">
+    <div class="tk-tabs tabs-sticky" role="tablist">
+      <button type="button" :class="{ on: tkTab === 'list' }" @click="tkTab = 'list'"><i class="bi bi-truck"></i> 차량 목록</button>
+      <button type="button" :class="{ on: tkTab === 'appr' }" @click="tkTab = 'appr'"><i class="bi bi-patch-check"></i> 진입 허가 심사<span v-if="pendingCount" class="n">{{ pendingCount }}</span></button>
+    </div>
     <CrudTable
+      v-show="tkTab === 'list'"
       title="차량"
       id-key="vehicleNo"
       :columns="columns"
       :rows="visibleRows"
       :loading="loading"
       :form-fields="formFields"
-      :page-size="5"
+      :page-size="10"
       show-index
       index-label="번호"
       :on-create="handleCreate"
@@ -18,7 +25,7 @@
     />
 
     <!-- 관리자는 진입 허가 심사 담당 (기사 배정은 사업자 화면) -->
-    <div class="crud-table-wrap">
+    <div v-show="tkTab === 'appr'" class="crud-table-wrap">
       <div class="crud-toolbar">
         <div class="crud-toolbar-left">
           <h2 class="crud-title">진입 허가 심사</h2>
@@ -84,10 +91,12 @@
       </div>
       <AdminPager v-model="approvalPage" :page-count="approvalPageCount" />
     </div>
+    </div>
   </div>
 </template>
 
 <script setup>
+import { useRoute } from 'vue-router'
 import { computed, onMounted, ref, watch } from 'vue'
 import CrudTable from '@/components/admin/CrudTable.vue'
 import AdminPageHeader from '@/components/admin/AdminPageHeader.vue'
@@ -198,7 +207,8 @@ ${deleteError(err, '차량')}`)
 const approvingVehicleNo = ref(null)
 const APPROVAL_LABEL = { PENDING: '심사대기', APPROVED: '허가', REJECTED: '불허' }
 
-const APPROVAL_PAGE_SIZE = 5
+const APPROVAL_PAGE_SIZE = 10 // 26.10.28 5건 → 10건
+const tkTab = ref(useRoute().query.tab === 'appr' ? 'appr' : 'list') // 26.10.28 탭: list = 차량 목록, appr = 진입 허가 심사 (?tab=appr 로 바로 열기 · 알림에서 이동)
 const approvalPage = ref(1)
 const pendingCount = computed(() => visibleRows.value.filter((t) => !t.entryApproval || t.entryApproval === 'PENDING').length)
 const approvalRows = computed(() => {
@@ -258,3 +268,13 @@ onMounted(async () => {
   await loadRows()
 })
 </script>
+
+<style scoped>
+/* 26.10.28 탭 모양: 다른 메뉴와 같은 모양 */
+.tk-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+.tk-tabs button { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #cfd6df; background: #f8fafc; color: #1f2937; border-radius: 8px; padding: 7px 14px; font-size: 13.5px; font-weight: 600; cursor: pointer; }
+.tk-tabs button:hover:not(.on) { border-color: #1d4ed8; color: #1d4ed8; }
+.tk-tabs button.on { background: #1d4ed8; border-color: #1d4ed8; color: #fff; font-weight: 700; }
+.tk-tabs .n { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; background: #eef1f6; color: #0b1d36; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+.tk-tabs button.on .n { background: rgba(255, 255, 255, .55); }
+</style>

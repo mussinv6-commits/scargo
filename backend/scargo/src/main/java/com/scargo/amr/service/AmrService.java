@@ -54,6 +54,7 @@ public class AmrService {
     private final HubRepository hubRepo;
     private final HubVehicleLogRepository vehicleLogRepo;
     private final AmrAccessPolicy access;
+    private final org.springframework.jdbc.core.JdbcTemplate jdbc; // 26.10.29 차량 소속 업체 조회용 (HubVehicleService 와 순환 참조가 생겨 여기서 직접 조회)
 
     // 시뮬레이터가 마지막으로 보낸 값 (진동 · 온도는 amr_robots 에 컬럼이 없어 메모리에 둔다)
     private final Map<String, TelemetryItem> latest = new ConcurrentHashMap<>();
@@ -197,7 +198,13 @@ public class AmrService {
         if (m.getApprovedAt() == null) {
             m.setApprovedAt(OffsetDateTime.now());
             m.setApprovedBy(actor(by, "관리자"));
-            spare(hub).ifPresent(sp -> { m.setSpareRobotId(sp.getRobotId()); sp.setRobotRole("ACTIVE"); });
+            spare(hub).ifPresent(sp -> {
+                // 26.10.30 예비기가 이전 시연에서 ACTIVE 로 남아 있으면 먼저 SPARE 로 되돌림 (DB 트리거가 SPARE 만 허용)
+                if (!"SPARE".equals(sp.getRobotRole())) { sp.setRobotRole("SPARE"); robotRepo.saveAndFlush(sp); }
+                m.setSpareRobotId(sp.getRobotId());
+                maintRepo.saveAndFlush(m);          // 예비기가 SPARE 인 상태에서 먼저 저장 → 그 다음 투입(ACTIVE)
+                sp.setRobotRole("ACTIVE");
+            });
             event(hub, m.getRobotId(), "WARN", "정비 승인 (" + m.getApprovedBy() + ") · 예비기 AMR-05 투입");
         }
         return view(m);
@@ -267,7 +274,7 @@ public class AmrService {
         OffsetDateTime at = producerAt.get(hub);
         boolean live = at != null && at.isAfter(OffsetDateTime.now().minusSeconds(10));
         List<VehicleView> vehicles = vehicleLogRepo.findByHubIdOrderByLogIdDesc(hub, PageRequest.of(0, 8)).stream()
-                .map(HubVehicleService::view).toList();
+                .map(this::vehicleView).toList();
         return new StateView(live, at, phaseOf(hub), robots, pending, active, events, settingsView(hub), vehicles);
     }
 
@@ -341,5 +348,28 @@ public class AmrService {
         if (t != null) vib = t.vibration();
         return new MaintView(m.getMaintId(), code, codeOf(m.getSpareRobotId()), m.getStatus(), m.getPartName(), m.getMemo(),
                 rul, vib, m.getScheduledAt(), m.getApprovedAt(), m.getApprovedBy(), m.getStartedAt(), m.getCompletedAt());
+    }
+
+    // 26.10.29 최근 입출차 한 건 → 화면용. 소속 업체는 등록 화물차(trucks) → 기업(companies), 없으면 허브 등록 차량(hub_vehicles.carrier)
+    private VehicleView vehicleView(HubVehicleLog l) {
+        String plate = l.getRecognizedPlate() != null ? l.getRecognizedPlate() : l.getPhotoPlate();
+        String p = plate == null ? null : plate.replace(" ", "").trim();
+        String company = null;
+        if (p != null && !p.isEmpty()) {
+            try {
+                List<String> r = jdbc.queryForList("SELECT c.company_name FROM trucks t JOIN companies c ON c.company_id = t.company_id "
+                        + "WHERE REPLACE(t.vehicle_no,' ','') = ? LIMIT 1", String.class, p);
+                if (!r.isEmpty() && r.get(0) != null && !r.get(0).isBlank()) company = r.get(0);
+            } catch (Exception ignore) { /* 테이블이 다르면 다음 경로 */ }
+            if (company == null) {
+                try {
+                    List<String> r = jdbc.queryForList("SELECT carrier FROM hub_vehicles WHERE plate_no = ? LIMIT 1", String.class, p);
+                    if (!r.isEmpty() && r.get(0) != null && !r.get(0).isBlank()) company = r.get(0);
+                } catch (Exception ignore) { }
+            }
+        }
+        return new VehicleView(l.getLogId(), l.getDirection(), l.getRecognizedPlate(), l.getPhotoPlate(), l.getVehicleKind(),
+                l.getDecision(), l.getLane(), l.getDockNo(), l.getOcrConfidence(), l.getOcrEngine(), l.getImageUrl(), l.getBoxCount(),
+                l.getDestHub(), l.getCreatedAt(), l.getSealStatus(), l.getSealInput(), company);
     }
 }

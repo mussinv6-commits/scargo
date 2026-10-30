@@ -39,7 +39,7 @@ function fmtNum(v) {
 }
 
 const columns = [
-  { key: 'checkId', label: 'ID', width: '60px', align: 'center', type: 'seq' },
+  { key: 'checkId', label: '번호', width: '60px', align: 'center', type: 'seq' },
   { key: 'vehicleNo', label: '차량번호' },
   { key: 'containerNo', label: '컨테이너번호' },
   { key: 'totalWeight', label: '총중량(kg)', align: 'center', format: fmtNum },

@@ -187,7 +187,7 @@ function go(p) {
   if (p === "/sbot") {
     const u = authState.user;
     if (!u) {
-      msg.value = "S-Bot 은 로그인 후 이용할 수 있습니다. 위에서 S-Bot 관리자 계정으로 로그인해 주세요.";
+      msg.value = "S-Bot 은 로그인 후 이용할 수 있습니다.";
       return;
     }
     if (u.userType !== "ADMIN") { // 26.10.24: 마스터 관리자도 S-Bot 허용
@@ -196,14 +196,14 @@ function go(p) {
         router.push("/sbot/hub");
         return;
       }
-      msg.value = "S-Bot 은 S-Bot 관리자 계정(sbot)으로 로그인해야 합니다. 오른쪽 위 '로그아웃' 후 다시 로그인해 주세요.";
+      msg.value = "S-Bot 이용 권한이 없는 계정입니다.";
       return;
     }
   }
   if (p === "/scargo") {
     const u = authState.user;
-    if (u && u.userType === "ADMIN" && u.adminScope === "SBOT") {
-      msg.value = "S Cargo 는 S Cargo 관리자 계정(admin)으로 로그인해야 합니다. 오른쪽 위 '로그아웃' 후 다시 로그인해 주세요.";
+    if (u && u.userType === "ADMIN" && u.adminScope === "SBOT" && !isMaster(u)) { // 마스터(admin01)는 S Cargo 도 입장 가능
+      msg.value = "S Cargo 이용 권한이 없는 계정입니다.";
       return;
     }
     if (u) return router.push(u.userType === "ADMIN" ? "/scargo" : homeOf(u)); // 26.10.26 총관리자는 S Cargo 메인(/scargo)으로. 나머지는 아래 권한별 첫 화면 // // v13 (scargo_1): 로그인 계정은 권한별 첫 화면으로 (관제사 → 관제, 기사 → 기사 화면, 승인대기 → 안내)

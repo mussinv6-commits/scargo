@@ -1,6 +1,6 @@
 import { createWebHistory, createRouter } from 'vue-router'; // npm i vue-router@next
 import { authState } from '@/auth/authState.js';
-import { hubAccess } from '@/components/amr/amrAccess.js'; // 26.10.22 (share): 허브 관제 화면 권한
+import { hubAccess, isMaster } from '@/components/amr/amrAccess.js'; // 26.10.22 (share): 허브 관제 화면 권한
 
 // vite.config.js 에 @를 설정해야 @/ 경로를 사용할 수 있다
 import member from '@/router/member/member.js';
@@ -44,7 +44,7 @@ router.beforeEach((to, from, next) => {
     const user = authState.user; // reactive 객체에서 바로 꺼내 씀
 
     // 26.10.20: S-Bot 관리자는 S그룹 메인(/) · S-Bot(/sbot) · 로그인 화면만 사용 (S Cargo 쪽은 전부 차단, 알림창 없이 S-Bot 으로 이동)
-    if (user?.userType === 'ADMIN' && user?.adminScope === 'SBOT') {
+    if (user?.userType === 'ADMIN' && user?.adminScope === 'SBOT' && !isMaster(user)) { // 26.10.29 마스터(admin01)는 모든 화면 입장 가능
         const p = to.path;
         if (p !== '/' && p !== '/login' && p !== '/w/W-01' && !p.startsWith('/sbot')) return next({ name: 'sbot' });
     }
@@ -57,6 +57,8 @@ router.beforeEach((to, from, next) => {
     if (user?.userType === 'CORPORATE_PENDING' && (to.meta.wScreen || to.path.startsWith('/driver') || to.path.startsWith('/company') || to.path.startsWith('/admin'))) return next('/pending');
     // v13: 기사 화면은 기사 계정만 (관제사·운송사·관리자가 기사 화면으로 가던 문제)
     if (to.path.startsWith('/driver') && user && !DRIVER_TYPES.includes(user.userType)) return next(homeOf(user));
+    // 26.10.29 지선 운송기사: 웹 기사 화면은 컨테이너 기사용이라 데이터가 없음(서버 403) → 앱 안내 화면
+    if (to.path.startsWith('/driver') && user?.userType === 'BRANCH_DRIVER') return next('/app-only');
 
     // 26.10.21 v9: W 화면은 로그인 계정 권한으로만 (비로그인 시연 모드·권한 전환 삭제). 비로그인은 로그인 화면으로
     if (to.meta.wScreen && !user && to.meta.sid !== 'W-01') { sessionStorage.setItem('location', to.fullPath); return next('/w/W-01'); }
@@ -71,6 +73,7 @@ router.beforeEach((to, from, next) => {
 
     if (user?.userType === 'ADMIN') {
         if (to.name === 'notice') return next({ name: 'admin-notices' });
+        if (to.name === 'notifications') return next({ name: 'admin-notifications' }); // 26.10.28 알림 내역은 관리자 화면 안에서
         if (to.name === 'noticeWrite') return next({ name: 'admin-notice-write' });
         if (to.name === 'noticeUpdate') return next({ name: 'admin-notice-update', params: to.params });
         if (to.name === 'noticeDetail') return next({ name: 'admin-notice-detail', params: to.params });

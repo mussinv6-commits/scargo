@@ -82,22 +82,29 @@ public class V9AppController {
         if (!List.of("CONTAINER_DRIVER", "BRANCH_DRIVER").contains(kind)) throw new IllegalArgumentException("운송 종류를 선택하세요.");
         String name = s(b.get("userName")), phone = s(b.get("phoneNum")), uid = s(b.get("userId")), pw = s(b.get("password")), vehicle = s(b.get("vehicleNo"));
         if (name == null || name.isEmpty() || uid == null || uid.length() < 4 || pw == null || pw.length() < 8) throw new IllegalArgumentException("이름·아이디(4자 이상)·비밀번호(8자 이상)를 입력하세요.");
-        if (phone == null || !phone.matches("01\\d-?\\d{3,4}-?\\d{4}")) throw new IllegalArgumentException("휴대폰 번호 형식이 올바르지 않습니다.");
+        if (phone == null || !phone.replace("-", "").matches("01\\d{9}")) throw new IllegalArgumentException("휴대폰 번호는 010 포함 숫자 11자리로 입력하세요.");
+        phone = phone.replace("-", "");
         if (vehicle == null || vehicle.isEmpty()) throw new IllegalArgumentException("차량번호를 입력하세요.");
+        if (vehicle.length() > 10) throw new IllegalArgumentException("차량번호는 지역번호 포함 10자까지입니다.");
+        String license = s(b.get("licenseNo"));
+        if (license == null || !license.matches("\\d{2}-\\d{2}-\\d{6}")) throw new IllegalArgumentException("자격증 번호는 00-00-000000 형식으로 입력하세요.");
         if (!Boolean.TRUE.equals(b.get("agreeService")) || !Boolean.TRUE.equals(b.get("agreePrivacy")) || !Boolean.TRUE.equals(b.get("agreeLocation"))) throw new IllegalArgumentException("필수 약관에 동의하세요.");
         Long company = b.get("companyId") == null ? null : Long.valueOf(String.valueOf(b.get("companyId")));
         Integer okC = jdbc.queryForObject("SELECT count(*) FROM companies WHERE company_id = ? AND is_carrier AND approval_status = 'APPROVED'", Integer.class, company);
         if (okC == 0) throw new IllegalArgumentException("등록된 운송사를 선택하세요.");
         if (jdbc.queryForObject("SELECT count(*) FROM accounts WHERE user_id = ?", Integer.class, uid) > 0) throw new IllegalArgumentException("이미 사용 중인 아이디입니다.");
         List<Map<String, Object>> truck = jdbc.queryForList("SELECT company_id, assigned_account_id FROM trucks WHERE vehicle_no = ?", vehicle);
-        if (!truck.isEmpty() && (!Objects.equals(((Number) truck.get(0).get("company_id")).longValue(), company) || truck.get(0).get("assigned_account_id") != null))
+        // fix_1027: 반려된 기사에게 배정돼 있던 차량은 다시 가입 신청할 수 있게 허용
+        boolean prevRejected = !truck.isEmpty() && truck.get(0).get("assigned_account_id") != null
+                && jdbc.queryForObject("SELECT count(*) FROM accounts WHERE account_id = ? AND approval_status = 'REJECTED'", Integer.class, truck.get(0).get("assigned_account_id")) > 0;
+        if (!truck.isEmpty() && (!Objects.equals(((Number) truck.get(0).get("company_id")).longValue(), company) || (truck.get(0).get("assigned_account_id") != null && !prevRejected)))
             throw new IllegalArgumentException("이미 다른 기사·운송사에 등록된 차량입니다.");
         Long id = jdbc.queryForObject("INSERT INTO accounts(user_name, user_id, user_pw, user_type, company_id, phone_num, approval_status, license_no) VALUES (?,?,?,?,?,?, 'PENDING', ?) RETURNING account_id",
-                Long.class, name, uid, encoder.encode(pw), kind, company, phone, s(b.get("licenseNo")));
+                Long.class, name, uid, encoder.encode(pw), kind, company, phone, license);
         Integer axles = b.get("axleCount") == null ? null : Integer.valueOf(String.valueOf(b.get("axleCount")).replaceAll("\\D.*", ""));
         if (truck.isEmpty())
             jdbc.update("INSERT INTO trucks(vehicle_no, company_id, truck_type, status, assigned_account_id, entry_approval, vehicle_category, is_semi_trailer, trailer_no) VALUES (?,?,?, 'OUTSIDE', ?, 'PENDING', ?, ?, ?)", vehicle, company, s(b.get("truckType")), id, "BRANCH_DRIVER".equals(kind) ? "GENERAL_TRUCK" : (trailer == null ? null : "CONTAINER_TRUCK"), trailer != null, trailer);
-        else jdbc.update("UPDATE trucks SET assigned_account_id = ? WHERE vehicle_no = ?", id, vehicle);
+        else jdbc.update("UPDATE trucks SET assigned_account_id = ?, entry_approval = CASE WHEN entry_approval = 'REJECTED' THEN 'PENDING' ELSE entry_approval END WHERE vehicle_no = ?", id, vehicle);
         // v10: 축 수는 차량 제원(vehicle_specs.axle_count, trucks 1:1) — trucks 에 중복 컬럼 없음
         if (axles != null) {
             VehicleSpec spec = specs.findById(vehicle).orElseGet(() -> { VehicleSpec v = new VehicleSpec(); v.setVehicleNo(vehicle); return v; });
@@ -105,6 +112,14 @@ public class V9AppController {
         }
         jdbc.update("INSERT INTO notifications(company_id, title, message, notification_type, reference_id) VALUES (?,?,?, 'DRIVER_APPROVAL_REQUEST', ?)",
                 company, "기사 가입 승인 요청", name + " (" + (kind.equals("CONTAINER_DRIVER") ? "컨테이너 운송기사" : "지선 운송기사") + ", " + vehicle + ")", id);
+        // fix_1027: 총관리자에게도 알림 (운송사 승인 담당자가 없으면 총관리자가 직접 승인, 있으면 대리 승인 가능)
+        Integer contacts = jdbc.queryForObject("SELECT count(*) FROM v_carrier_contacts WHERE company_id = ? AND can_use_carrier_screens", Integer.class, company);
+        String coName = jdbc.queryForObject("SELECT company_name FROM companies WHERE company_id = ?", String.class, company);
+        String adminMsg = name + " (" + (kind.equals("CONTAINER_DRIVER") ? "컨테이너 운송기사" : "지선 운송기사") + ", " + vehicle + ", " + coName + ")"
+                + (contacts != null && contacts > 0 ? " · 운송사 승인 대기" : " · 운송사 승인 담당자가 없어 총관리자 승인 필요");
+        jdbc.update("""
+            INSERT INTO notifications(account_id, title, message, notification_type, reference_id)
+            SELECT account_id, '기사 가입 승인 요청', ?, 'DRIVER_APPROVAL_REQUEST', ? FROM accounts WHERE user_type = 'ADMIN'""", adminMsg, id);
         return Map.of("accountId", id, "approvalStatus", "PENDING");
     }
 
@@ -174,6 +189,7 @@ public class V9AppController {
         return o;
     }
 
+    // 26.10.29 QA: 운송 진행(T-03)은 진행 중인 오더 → 반납 중/지시된 오더 → 가장 최근에 인계한 오더 순 (예전: 가장 오래된 오더라 방금 인계한 컨테이너 대신 지난 오더가 보였음)
     @GetMapping("/container/trip")
     @PreAuthorize("hasRole('CONTAINER_DRIVER')")
     public Map<String, Object> trip() {
@@ -187,7 +203,8 @@ public class V9AppController {
                    (SELECT r.unloaded_at FROM hub_inbound_receipts r WHERE r.assignment_id = o.assignment_id AND r.status = 'COMPLETED') AS "unloadedAt",
                    (SELECT i.result FROM empty_container_inspections i WHERE i.order_id = o.order_id) AS "inspection",
                    (SELECT i.damage_note FROM empty_container_inspections i WHERE i.order_id = o.order_id) AS "damageNote"
-              FROM transport_orders o LEFT JOIN return_cys cy ON cy.cy_id = o.return_cy_id WHERE o.driver_account_id = ? AND o.status <> 'CANCELED' AND o.empty_returned_at IS NULL ORDER BY o.order_id LIMIT 1""", CurrentAccount.id());
+              FROM transport_orders o LEFT JOIN return_cys cy ON cy.cy_id = o.return_cy_id WHERE o.driver_account_id = ? AND o.status <> 'CANCELED' AND o.empty_returned_at IS NULL
+             ORDER BY (o.status <> 'HANDED_OVER') DESC, (o.return_status IS NOT NULL) DESC, COALESCE(o.handed_over_at, o.arrived_at, o.created_at) DESC NULLS LAST, o.order_id DESC LIMIT 1""", CurrentAccount.id());
         if (l.isEmpty()) return Map.of();
         Map<String, Object> m = new LinkedHashMap<>(l.get(0));
         m.put("tolls", jdbc.queryForList("SELECT g.tollgate_name AS \"name\", tp.fare_won AS \"fare\", tp.passed_at AS \"at\" FROM toll_passages tp JOIN tollgates g ON g.tollgate_id = tp.tollgate_id JOIN transport_orders o ON o.assignment_id = tp.assignment_id WHERE o.order_id = ? ORDER BY tp.detected_at", m.get("orderId")));

@@ -1,25 +1,29 @@
 <template>
 <section class="scr w07" id="W-07"><div class="grid g2" v-if="role === 'carrier'"><div class="card"><h3>운송오더 등록 <span class="meta">· 운송사 담당자 (등록 주체)</span></h3><table class="form">
-<tr><td>컨테이너 · 씰</td><td><select v-model="sealPick" @change="pickSeal"><option :value="null">등록된 씰 선택</option><option v-for="x in sealOpts" :key="x.sealId" :value="x">{{ x.containerNo }} · {{ x.sealNo }}</option></select><div v-if="!sealOpts.length" class="meta" style="color:#B45309">⚠ 선택할 수 있는 등록 씰이 없습니다</div></td></tr>
+<tbody><tr><td>운송 컨테이너</td><td><select v-model="sealPick" @change="pickSeal"><option :value="null">컨테이너 선택</option><option v-for="x in sealOpts" :key="x.sealId" :value="x">{{ x.containerNo }}</option></select><div v-if="!sealOpts.length" class="meta" style="color:#B45309">⚠ 선택할 수 있는 컨테이너가 없습니다.<br>(등록 씰이 있는 컨테이너만)</div></td></tr>
+<tr><td>씰 번호</td><td><input v-model="f.sealNo" placeholder="컨테이너에 붙은 씰 번호 입력" autocomplete="off" style="text-transform:uppercase"><div class="meta">등록된 씰과 다르면 저장되지 않습니다</div></td></tr>
 <tr><td>화주</td><td><input v-model="f.shipper" placeholder="화주명"></td></tr>
-<tr><td>출발 터미널</td><td><select v-model="f.terminalId"><option v-for="t in opt.terminals" :key="t.id" :value="t.id">{{ t.name }}</option></select></td></tr>
+<tr><td>출발지</td><td><select v-model="f.terminalId"><option v-for="t in opt.terminals" :key="t.id" :value="t.id">{{ t.name }}</option></select></td></tr>
 <tr><td>목적지</td><td><select v-model="f.hubId"><option v-for="h in opt.hubs" :key="h.id" :value="h.id">{{ h.name }}</option></select></td></tr>
 <tr><td>반납 CY (D/O)</td><td><select v-model="f.returnCyId"><option :value="null">선택</option><option v-for="c in cys" :key="c.id" :value="c.id">{{ c.name }}{{ c.isDemo ? ' (데모)' : '' }}</option></select></td></tr>
-<tr><td>반납 기한 (선사별)</td><td><input type="datetime-local" v-model="f.returnDueAt"><div v-if="!f.returnDueAt" class="meta" style="color:#B45309">⚠ 비워 두면 {{ dueDays }}일 후 18:00 으로 자동 지정됩니다 (기준정보)</div></td></tr>
-<tr><td>배차 기사</td><td><select v-model="drv"><option :value="null">나중에 배차</option><option v-for="d in cDrivers" :key="d.accountId + d.vehicleNo" :value="d">{{ d.userName }} · {{ d.vehicleNo }}</option></select></td></tr></table>
+<tr><td>반납 기한 (선사별)</td><td><input type="datetime-local" v-model="f.returnDueAt"><div v-if="!f.returnDueAt" class="meta" style="color:#B45309">⚠ 비워 두면 {{ dueDays }}일 후 18:00 으로 자동 지정됩니다 (운영 기준 설정)</div></td></tr>
+<tr><td>배차 기사</td><td><select v-model="drv"><option :value="null">나중에 배차</option><option v-for="d in cDrivers" :key="d.accountId + d.vehicleNo" :value="d">{{ d.userName }} · {{ d.vehicleNo }}</option></select></td></tr></tbody></table>
 <br><button class="btn" @click="save">저장</button> <span v-if="msg" :class="'b ' + (ok ? 'ok' : 'crit')">{{ msg }}</span></div>
 <div class="card"><h3>포장명세서 · 배분지시 CSV 업로드</h3>
 <div class="frow"><label>대상 오더</label><select v-model="sel"><option v-for="o in rows" :key="o.orderId" :value="o.orderId">{{ o.orderNo }} · {{ o.containerNo }}</option></select></div>
 <label class="drop" style="display:block;margin-top:10px;cursor:pointer">📄 화주 파일 <b>파일 선택</b> (CSV: box_id, item_name, quantity, weight_kg, dest_center)<input type="file" accept=".csv,text/csv" style="display:none" @change="e => (file = e.target.files[0])"><br><span class="meta">{{ file ? file.name : '선택된 파일 없음' }}</span></label>
 <div style="margin-top:10px"><button class="btn y" :disabled="!file || !sel" @click="upload">물품(items) 반영</button> <button class="btn o" @click="tpl">템플릿 다운로드</button></div>
 <div v-if="up" style="margin-top:12px" class="meta">업로드 결과: 저장 <b>{{ up.saved }}</b>개 · 오류 {{ (up.errors || []).length }}<div v-for="(e, i) in (up.errors || []).slice(0, 5)" :key="i" style="color:#c62828">{{ e }}</div></div>
-<template v-if="bx"><table style="margin-top:8px"><tr><th>박스 ID</th><th>품목</th><th>수량</th><th>목적지 센터</th></tr><tr v-for="x in bx.boxes.slice(0, 5)" :key="x.boxId"><td>{{ x.boxId }}</td><td>{{ x.itemName }}</td><td>{{ x.quantity }}</td><td>{{ x.dest }}</td></tr><tr v-if="bx.boxes.length > 5"><td colspan="4" class="meta">… {{ bx.boxes.length - 5 }}개 더</td></tr><tr><td colspan="4" class="meta">센터별 합계 <span v-for="c in bx.byCenter" :key="c.dest">{{ c.dest }} {{ c.boxes }} · </span></td></tr></table></template></div></div>
-<div class="card" :style="role === 'carrier' ? 'margin-top:14px' : ''"><h3>운송오더 목록</h3><table :style="pg.reset"><tr><th>오더</th><th>컨테이너</th><th>화주</th><th>기사·차량</th><th>박스</th><th>상태</th><th>반납 CY</th><th>반납 상태</th><th>반납 기한</th><th>반납 기사</th></tr><tr v-for="r in pg.rows" :key="r.orderId" @click="sel = r.orderId" style="cursor:pointer"><td>{{ r.orderNo }}</td><td>{{ r.containerNo }}</td><td>{{ r.shipper || '—' }}</td><td>{{ r.driverName || '미배차' }} · {{ r.vehicleNo || '—' }}</td><td>{{ r.boxes }}</td><td><span class="b gray">{{ stl(r.status) }}</span></td><td>{{ r.returnCy || '—' }}</td><td><span v-if="r.returnStatus" class="b gray">{{ stl(r.returnStatus) }}</span><template v-else>—</template></td><td><template v-if="r.returnDueAt">{{ md(r.returnDueAt) }}</template><span v-else class="b warn">기한 없음</span> <span v-if="r.dueSoon" class="b warn">임박</span></td><td><template v-if="r.returnDriverName">{{ r.returnDriverName }}</template><span v-else-if="r.returnReadyAt" class="b ok">반납 가능</span><template v-else>—</template></td></tr><tr v-if="!rows.length"><td colspan="10" class="meta">운송오더가 없습니다.</td></tr></table><Pager :p="pg"/></div>
-<div class="card" v-if="cur && role !== 'CONTROL'" style="margin-top:14px"><h3>반납 정보</h3>
+<template v-if="bx"><table style="margin-top:8px"><thead><tr><th>박스 ID</th><th>품목</th><th>수량</th><th>목적지 센터</th></tr></thead><tbody><tr v-for="x in bx.boxes.slice(0, 5)" :key="x.boxId"><td>{{ x.boxId }}</td><td>{{ x.itemName }}</td><td>{{ x.quantity }}</td><td>{{ x.dest }}</td></tr><tr v-if="bx.boxes.length > 5"><td colspan="4" class="meta">… {{ bx.boxes.length - 5 }}개 더</td></tr><tr><td colspan="4" class="meta">센터별 합계 <span v-for="c in bx.byCenter" :key="c.dest">{{ c.dest }} {{ c.boxes }} · </span></td></tr></tbody></table></template></div></div>
+<!-- 26.10.28 운송오더 목록 / 반납 정보(+ 씰 확인 이력)를 탭으로 전환 -->
+<div class="tab-box" :style="role === 'carrier' ? 'margin-top:14px' : ''"><div class="w-tabs" role="tablist"><button type="button" :class="{ on: vtab === 'list' }" @click="vtab = 'list'">운송오더 목록<span v-if="rows.length" class="n">{{ rows.length }}</span></button><button type="button" :class="{ on: vtab === 'ret' }" @click="vtab = 'ret'">{{ role === 'CONTROL' ? '씰 확인 이력' : '반납 정보' }}<span v-if="cur" class="sel">· {{ cur.orderNo }}</span></button></div>
+<div v-show="vtab === 'list'" class="card"><h3>운송오더 목록 <span class="meta">· 행을 누르면 그 오더가 선택되고, {{ role === 'CONTROL' ? '씰 확인 이력' : '반납 정보' }} 탭에서 자세히 봅니다</span></h3><table :style="pg.reset"><thead><tr><th>오더</th><th>컨테이너</th><th>화주</th><th>기사·차량</th><th>박스</th><th>상태</th><th>반납 CY</th><th>반납 상태</th><th>반납 기한</th><th>반납 기사</th></tr></thead><tbody><tr v-for="r in pg.rows" :key="r.orderId" @click="sel = r.orderId" :class="{ picked: sel === r.orderId }" style="cursor:pointer"><td>{{ r.orderNo }}</td><td>{{ r.containerNo }}</td><td>{{ r.shipper || '—' }}</td><td>{{ r.driverName || '미배차' }} · {{ r.vehicleNo || '—' }}</td><td>{{ r.boxes }}</td><td><span class="b gray">{{ stl(r.status) }}</span></td><td>{{ r.returnCy || '—' }}</td><td><span v-if="r.returnStatus" class="b gray">{{ stl(r.returnStatus) }}</span><template v-else>—</template></td><td><template v-if="r.returnDueAt">{{ md(r.returnDueAt) }}</template><span v-else class="b warn">기한 없음</span> <span v-if="r.dueSoon" class="b warn">임박</span></td><td><template v-if="r.returnDriverName">{{ r.returnDriverName }}</template><span v-else-if="r.returnReadyAt" class="b ok">반납 가능</span><template v-else>—</template></td></tr><tr v-if="!rows.length"><td colspan="10" class="meta">운송오더가 없습니다.</td></tr></tbody></table><Pager :p="pg"/></div>
+<template v-if="vtab === 'ret'"><div v-if="!cur" class="card"><div class="meta" style="padding:22px;text-align:center">운송오더 목록 탭에서 오더를 먼저 선택하세요.</div></div>
+<div class="card" v-if="cur && role !== 'CONTROL'"><h3>반납 정보 <span class="meta">· {{ cur.orderNo }} · {{ cur.containerNo }}</span></h3>
 <div class="grid g2"><div class="acts"><div class="act"><h4><i class="bi bi-pencil-square"></i> 반납 정보 변경</h4><table class="form">
-<tr><td>반납 CY</td><td><select v-model="pl.returnCyId"><option v-for="c in cys" :key="c.id" :value="c.id">{{ c.name }}{{ c.isDemo ? ' (데모)' : '' }}</option></select></td></tr>
+<tbody><tr><td>반납 CY</td><td><select v-model="pl.returnCyId"><option v-for="c in cys" :key="c.id" :value="c.id">{{ c.name }}{{ c.isDemo ? ' (데모)' : '' }}</option></select></td></tr>
 <tr><td>반납 기한</td><td><input type="datetime-local" v-model="pl.returnDueAt"></td></tr>
-<tr><td>변경 사유 (필수)</td><td><input v-model="pl.reason" placeholder="예: 선사 반납 기한 연장"></td></tr></table>
+<tr><td>변경 사유 (필수)</td><td><input v-model="pl.reason" placeholder="예: 선사 반납 기한 연장"></td></tr></tbody></table>
 <div class="ab cen"><button class="btn" :disabled="!pl.reason.trim() || cur.returnStatus === 'EMPTY_RETURNED'" @click="savePlan">반납 정보 변경</button>
 </div><div class="meta">변경하면 기사·운송사에 알림.<br>반납 운행 중 CY 를 바꾸면 기사 확인이 필요한 '반납지 변경' 예외가 생깁니다.</div></div>
 <div class="act"><h4><i class="bi bi-truck"></i> 반납 지시</h4><div class="meta">허브 하역 완료 + 빈 컨테이너 검사 OK 뒤<br>(운송사 승인 담당자)</div>
@@ -36,15 +40,16 @@
 <div v-if="role === 'carrier'"><select v-model="ak"><option value="EIR_IN">EIR IN</option><option value="DAMAGE_CONFIRM">손상 확인서</option></select>
 <label class="btn o" style="cursor:pointer">{{ af ? af.name : '파일 선택' }}<input type="file" style="display:none" @change="e => (af = e.target.files[0])"></label> <button class="btn" :disabled="!af" @click="uploadAtt">첨부 올리기</button></div></div>
 <span v-if="pmsg" :class="'b ' + (pok ? 'ok' : 'crit')" style="grid-column:1 / -1;justify-self:start">{{ pmsg }}</span></div>
-<div><h3 class="hist">변경 이력</h3><table :style="pgH.reset"><tr><th>항목</th><th>이전</th><th>변경</th><th>사유</th><th>변경자</th><th>시각</th><th>기사 확인</th></tr>
-<tr v-for="h in pgH.rows" :key="h.changeId"><td>{{ h.field === 'CY' ? '반납 CY' : '반납 기한' }}</td><td>{{ h.oldValue || '—' }}</td><td>{{ h.newValue }}</td><td>{{ h.reason }}</td><td>{{ h.changedBy || '—' }}</td><td>{{ md(h.changedAt) }}</td><td><template v-if="h.needsConfirm"><span v-if="h.driverConfirmedAt" class="b ok">확인 {{ hm(h.driverConfirmedAt) }}</span><span v-else class="b warn">대기</span></template><template v-else>—</template></td></tr>
-<tr v-if="!hist.length"><td colspan="7" class="meta">변경 이력이 없습니다.</td></tr></table><Pager :p="pgH"/></div></div></div>
+<div><h3 class="hist">변경 이력</h3><table :style="pgH.reset"><thead><tr><th>항목</th><th>이전</th><th>변경</th><th>사유</th><th>변경자</th><th>시각</th><th>기사 확인</th></tr></thead>
+<tbody><tr v-for="h in pgH.rows" :key="h.changeId"><td>{{ h.field === 'CY' ? '반납 CY' : '반납 기한' }}</td><td>{{ h.oldValue || '—' }}</td><td>{{ h.newValue }}</td><td class="l">{{ h.reason }}</td><td>{{ h.changedBy || '—' }}</td><td>{{ md(h.changedAt) }}</td><td><template v-if="h.needsConfirm"><span v-if="h.driverConfirmedAt" class="b ok">확인 {{ hm(h.driverConfirmedAt) }}</span><span v-else class="b warn">대기</span></template><template v-else>—</template></td></tr>
+<tr v-if="!hist.length"><td colspan="7" class="meta">변경 이력이 없습니다.</td></tr></tbody></table><Pager :p="pgH"/></div></div></div>
 <!-- fix_1530: 운송사·관제가 오더별 현장 씰 입력값과 판정 확인 (GET /api/web/seals, 운송사는 자기 회사 오더만) -->
-<div class="card" v-if="cur" style="margin-top:14px"><h3>씰 확인 이력 <span class="meta">· {{ cur.containerNo }}</span></h3>
+<div class="card" v-if="cur" :style="role !== 'CONTROL' ? 'margin-top:14px' : ''"><h3>씰 확인 이력 <span class="meta">· {{ cur.containerNo }}</span></h3>
 <div v-if="sealRow" class="meta" style="margin-bottom:6px">등록 씰 <b>{{ sealRow.expectedSealNo }}</b> <span v-if="sealRow.openHold" class="b warn">개봉 보류</span></div>
-<table v-if="sealEv.length"><tr><th>단계</th><th>현장 입력값</th><th>판정</th><th>입력자</th><th>시각</th></tr>
-<tr v-for="e in sealEv" :key="e.key"><td>{{ e.stage }}</td><td>{{ e.observed || '—' }}</td><td><span :class="'b ' + (e.verdict === '일치' ? 'ok' : e.verdict === '미확인' ? 'info' : 'warn')">{{ e.verdict }}</span></td><td>{{ e.actor || '—' }}</td><td>{{ md(e.at) }}</td></tr></table>
+<table v-if="sealEv.length"><thead><tr><th>단계</th><th>현장 입력값</th><th>판정</th><th>입력자</th><th>시각</th></tr></thead>
+<tbody><tr v-for="e in sealEv" :key="e.key"><td>{{ e.stage }}</td><td>{{ e.observed || '—' }}</td><td><span :class="'b ' + (e.verdict === '일치' ? 'ok' : e.verdict === '미확인' ? 'info' : 'warn')">{{ e.verdict }}</span></td><td>{{ e.actor || '—' }}</td><td>{{ md(e.at) }}</td></tr></tbody></table>
 <div v-else class="meta">아직 현장 씰 입력이 없습니다.</div></div>
+</template></div>
 <div v-if="askCancel && cur" class="mdl-bg" @click.self="askCancel = false"><div class="mdl"><div class="mh">운송오더 취소</div><div class="mb"><div><b>{{ cur.orderNo }}</b> 운송오더를 취소할까요?</div><div class="meta">기록은 지우지 않고 취소 상태로 남깁니다.</div></div>
 <div class="mf"><button class="btn o" @click="askCancel = false">닫기</button><button class="btn r" @click="askCancel = false; cancelOrder()">오더 취소</button></div></div></div></section>
 </template>
@@ -59,9 +64,9 @@ import { API_BASE } from '@/utils/apiBase.js'
 import { toDate } from '@/utils/serverTime.js'
 // 운송오더·물품: GET /api/web/orders (운송사는 자기 회사만), 등록 POST /api/web/carrier/orders, CSV POST /api/web/carrier/orders/{id}/boxes
 const rows = ref([]), opt = ref({ drivers: [], terminals: [], hubs: [] }), drv = ref(null), sel = ref(null), file = ref(null), up = ref(null), bx = ref(null), msg = ref(''), ok = ref(false)
-// fix_1330 씰 정책: 컨테이너·씰은 DB 에 등록된 정답 씰에서만 선택 (GET /api/web/carrier/seal-options). 직접 입력·새 씰 생성 없음
+// 26.10.29 QA: 컨테이너는 등록 씰이 있는 것 중에서 선택, 씰 번호는 직접 입력 → 서버가 등록 씰과 다르면 저장 거절. (이전 fix_1330: 컨테이너·씰을 정답 씰에서 선택) (GET /api/web/carrier/seal-options). 직접 입력·새 씰 생성 없음
 const sealOpts = ref([]), sealPick = ref(null)
-function pickSeal() { f.containerNo = sealPick.value?.containerNo || ''; f.sealNo = sealPick.value?.sealNo || '' }
+function pickSeal() { f.containerNo = sealPick.value?.containerNo || ''; f.sealNo = '' } // 26.10.29 QA: 씰 번호는 직접 입력 (서버가 등록 씰과 대조)
 async function loadSeals() { const l = await get('/api/web/carrier/seal-options'); sealOpts.value = Array.isArray(l) ? l : [] }
 // fix_1330: 반납 기한 기본값은 기준정보(W-11) RETURN_DUE_DEFAULT_DAYS
 const dueDays = ref(7)
@@ -84,6 +89,7 @@ const sealEv = computed(() => {
   return [...ev, ...un].sort((a, b) => (toDate(b.at) || 0) - (toDate(a.at) || 0))
 })
 const cur = computed(() => rows.value.find(r => r.orderId === sel.value))
+const vtab = ref('list') // 26.10.28 탭: list = 운송오더 목록, ret = 반납 정보 · 씰 확인 이력
 const p2 = (n) => String(n).padStart(2, '0')
 const local = (t) => { if (!t) return ''; const d = new Date(t); return d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate()) + 'T' + p2(d.getHours()) + ':' + p2(d.getMinutes()) }
 watch(cur, (c) => { if (!c) return; Object.assign(pl, { returnCyId: c.returnCyId, returnDueAt: local(c.returnDueAt), reason: '' }); rd.value = c.returnDriverId || null; pmsg.value = '' })
@@ -112,8 +118,9 @@ async function instruct() {
 }
 const cDrivers = computed(() => opt.value.drivers.filter(d => d.userType === 'CONTAINER_DRIVER' && d.vehicleNo))
 async function save() {
-  if (!f.containerNo || !f.sealNo) { ok.value = false; msg.value = '등록된 씰을 선택하세요.'; return }
-  const r = await req('POST', '/api/web/carrier/orders', { ...f, containerNo: f.containerNo.trim().toUpperCase(), driverAccountId: drv.value?.accountId, vehicleNo: drv.value?.vehicleNo })
+  if (!f.containerNo) { ok.value = false; msg.value = '운송 컨테이너를 선택하세요.'; return }
+  if (!(f.sealNo || '').trim()) { ok.value = false; msg.value = '씰 번호를 입력하세요.'; return }
+  const r = await req('POST', '/api/web/carrier/orders', { ...f, containerNo: f.containerNo.trim().toUpperCase(), sealNo: f.sealNo.trim().toUpperCase(), driverAccountId: drv.value?.accountId, vehicleNo: drv.value?.vehicleNo })
   ok.value = r.ok; msg.value = r.ok ? '등록됨 · ' + r.data.orderNo + (r.data.returnDueDefaulted ? ' · ⚠ 반납 기한 미입력 → ' + md(r.data.returnDueAt) + ' 로 자동 지정 (아래에서 수정)' : '') : r.msg
   if (r.ok) { Object.assign(f, { containerNo: '', shipper: '', sealNo: '' }); drv.value = null; sealPick.value = null; loadSeals(); await load(); sel.value = r.data.orderId }
 }
@@ -132,3 +139,9 @@ load(); watch(() => props.tick, load)
 const pg = usePage(rows, 10)
 const pgH = usePage(hist, 5)
 </script>
+<style scoped>
+/* 26.10.28 탭 · 선택한 오더 표시 */
+.w-tabs .sel { font-size: 12px; font-weight: 600; opacity: .85; }
+.sc2 tr.picked td { background: #eef4ff; }
+.sc2 .tab-box > .card + .card { border-top: 1px solid #e3e8ef !important; padding-top: 14px !important; }
+</style>

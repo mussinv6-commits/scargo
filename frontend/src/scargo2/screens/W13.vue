@@ -1,13 +1,7 @@
 <template>
-<section class="scr" id="W-13"><iframe class="toll-frame" :src="src" title="구간 차량 관제" /></section>
+<W12 tab="ck" />
 </template>
 <script setup>
-// 26.10.26: 인천항 → 곤지암 구간 관제 화면 (run_toll.bat 서버, 기본 http://localhost:8002). 주소는 .env 의 VITE_TOLL_URL 로 바꾼다
-import { computed } from 'vue'
-const base = (import.meta.env.VITE_TOLL_URL || 'http://localhost:8002').replace(/\/$/, '')
-const token = import.meta.env.VITE_TOLL_TOKEN || ''
-const src = computed(() => `${base}/checkpoint?embed=1${token ? '&token=' + encodeURIComponent(token) : ''}`)
+// 26.10.29 구간 관제 3화면을 W-12 한 화면(버튼 전환)으로 합침. 옛 주소(/w/W-13)로 들어오면 해당 탭이 열린 W-12 를 보여 준다
+import W12 from './W12.vue'
 </script>
-<style scoped>
-.toll-frame { width: 100%; height: calc(100vh - 110px); min-height: 520px; border: 0; display: block; }
-</style>

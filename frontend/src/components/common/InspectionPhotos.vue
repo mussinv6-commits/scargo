@@ -16,7 +16,7 @@
         <div v-else class="ip-ph">...</div>
         <figcaption>
           <span class="ip-name" :title="p.fileName">{{ p.fileName }}</span>
-          <button v-if="canEdit" type="button" class="ip-del" :disabled="busy" @click="remove(p)">삭제</button>
+          <button v-if="canEdit" type="button" class="btn-act del" :disabled="busy" @click="remove(p)">삭제</button>
         </figcaption>
       </figure>
     </div>

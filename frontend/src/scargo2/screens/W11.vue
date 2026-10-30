@@ -1,5 +1,5 @@
 <template>
-<section class="scr" id="W-11"><div class="card"><h3>기준정보</h3><div class="setg"><div v-for="s in rows" :key="s.key" class="setc"><div class="sl">{{ s.label }}</div><div class="sv"><input v-if="role === 'ADMIN'" type="number" min="1" v-model.number="s.value" style="width:90px"><b v-else>{{ s.value }}</b> <span class="meta">{{ s.unit }}</span></div></div></div>
+<section class="scr" id="W-11"><div class="card"><h3>운영 기준 설정</h3><div class="setg"><div v-for="s in rows" :key="s.key" class="setc"><div class="sl">{{ s.label }}</div><div class="sv"><input v-if="role === 'ADMIN'" type="number" min="1" v-model.number="s.value" style="width:90px"><b v-else>{{ s.value }}</b> <span class="meta">{{ s.unit }}</span></div></div></div>
 <div v-if="role === 'ADMIN'" class="savebar"><button class="btn y" @click="save">저장</button><span v-if="msg" :class="'b ' + (ok ? 'ok' : 'crit')">{{ msg }}</span></div></div></section>
 </template>
 <script setup>

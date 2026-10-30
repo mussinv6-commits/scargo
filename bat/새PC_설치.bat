@@ -69,25 +69,40 @@ if exist "%ROOT%frontend\node_modules" (
 )
 
 echo.
-echo [6/6] 번호판 OCR 환경  아나콘다
+echo [6/6] Python / 번호판 OCR 환경
+call :findpy
+if not defined PYX (
+  echo   Python 3.10~3.12 가 없습니다. 3.10 을 설치합니다.
+  call :install "Python 3.10" Python.Python.3.10 "/quiet InstallAllUsers=0 PrependPath=1"
+  set "PATH=%LocalAppData%\Programs\Python\Python310;%LocalAppData%\Programs\Python\Python310\Scripts;!PATH!"
+  call :findpy
+)
+if not defined PYX (
+  echo   Python 을 못 찾았습니다. python.org 에서 3.10 을 설치하고 Add to PATH 를 체크한 뒤 이 파일을 다시 실행해 주세요.
+  echo   번호판 OCR 과 구간 관제는 건너뜁니다. 나머지 기능은 정상 동작합니다.
+  goto :shortcut
+)
+for %%D in ("!PYX!") do set "PATH=%%~dpD;%%~dpDScripts;!PATH!"
+echo   Python: !PYX!
 if not exist "%ROOT%python\runs\detect\plate_detect_m_expanded-2\weights\best.pt" echo   주의 OCR 모델 파일이 없습니다. 모델1 모델2 압축을 이 폴더 안에 풀어 주세요.
-set "A=%USERPROFILE%\anaconda3"
-if exist "%A%\envs\yolo\Lib\site-packages\ultralytics" (
-  echo   OK 이미 준비되어 있습니다
+if exist "%ROOT%python\ocr_env\Lib\site-packages\easyocr" (
+  echo   OK OCR 환경이 이미 준비되어 있습니다
 ) else (
-  if not exist "%A%\Scripts\conda.exe" (
-    echo   아나콘다가 없습니다. 용량이 커서 15분 이상 걸릴 수 있습니다.
-    call :install "Anaconda" Anaconda.Anaconda3 ""
-  )
-  if exist "%A%\Scripts\conda.exe" (
-    echo   OCR 환경 만드는 중... 10~20분 걸립니다. 창을 닫지 마세요.
-    "%A%\Scripts\conda.exe" create -y -n yolo python=3.10 -c conda-forge --override-channels
-    if exist "%ROOT%python\requirements.txt" "%A%\envs\yolo\python.exe" -m pip install -r "%ROOT%python\requirements.txt"
-  ) else (
-    echo   OCR 환경은 건너뜁니다. 나머지 기능은 정상 동작하고 번호판 인식만 제한됩니다.
-  )
+  echo   OCR 환경 만드는 중... 10~20분 걸립니다. 창을 닫지 마세요.
+  "!PYX!" -m venv "%ROOT%python\ocr_env"
+  "%ROOT%python\ocr_env\Scripts\python.exe" -m pip install --upgrade pip
+  "%ROOT%python\ocr_env\Scripts\python.exe" -m pip install torch==2.14.0 torchvision==0.29.0 --index-url https://download.pytorch.org/whl/cpu
+  if errorlevel 1 "%ROOT%python\ocr_env\Scripts\python.exe" -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+  "%ROOT%python\ocr_env\Scripts\python.exe" -m pip install -r "%ROOT%python\requirements-gate-api.txt"
+)
+if not exist "%ROOT%toll_demo\models\ocr.pth" echo   주의 구간 관제 모델 zip(_toll_model)을 이 폴더에 아직 안 풀었습니다. 풀어야 구간 관제가 켜집니다.
+if exist "%ROOT%toll_demo\setup_toll.bat" (
+  echo.
+  echo   구간 관제 환경 설치 중...
+  call "%ROOT%toll_demo\setup_toll.bat"
 )
 
+:shortcut
 echo.
 echo 바탕화면 바로가기 만드는 중...
 if exist "%ROOT%bat\바로가기_만들기.ps1" powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%bat\바로가기_만들기.ps1"
@@ -130,6 +145,17 @@ if "%~3"=="" (
 ) else (
   winget install -e --id %2 --accept-package-agreements --accept-source-agreements --override "%~3"
 )
+exit /b 0
+
+:findpy
+set "PYX="
+for %%C in ("py -3.10" "py -3.11" "py -3.12" "python") do if not defined PYX call :trypy %%~C
+exit /b 0
+
+:trypy
+%* -c "import sys;sys.exit(0 if (3,10)<=sys.version_info[:2]<=(3,12) else 1)" >nul 2>&1
+if errorlevel 1 exit /b 1
+for /f "delims=" %%P in ('%* -c "import sys;print(sys.executable)"') do set "PYX=%%P"
 exit /b 0
 
 :tcp

@@ -1,17 +1,17 @@
 <template>
 <section class="scr" id="W-03">
 <div class="net">
-<div class="card full"><h3><i class="bi bi-map"></i> 네트워크 관제 <span class="meta">· 인천신항 → 곤지암 허브 → 물류센터</span></h3>
+<div class="card full"><h3><i class="bi bi-map"></i> 운송망 관제 <span class="meta">· 인천신항 → 곤지암 허브 → 물류센터</span></h3>
 <div ref="el" class="nmap"></div>
 <div class="legend" style="margin-top:10px"><span class="chip"><i style="background:#102644"></i><b>항만</b></span><span class="chip"><i style="background:#EECC83"></i><b>허브</b></span><span class="chip"><i style="background:#C9962E;height:5px"></i>지선 (허브 → 센터)</span><span class="chip"><i style="background:#2e9e5a"></i>정상</span><span class="chip"><i style="background:#f08c00"></i>주의</span><span class="chip"><i style="background:#d32f2f"></i>긴급</span><span class="chip"><i style="background:#2851c6;border-radius:50%"></i>차량 (출발 전은 출발지, 운행 중은 구간 중간)</span></div>
 </div>
 <div class="card eq"><h3><i class="bi bi-geo-alt"></i> 거점 <span class="meta">{{ d.nodes.length }}곳</span></h3>
-<table :style="pgN.reset"><tr><th>거점</th><th>구분</th><th>상태</th></tr><tr v-for="n in pgN.rows" :key="n.centerId" style="cursor:pointer" @click="focus(n)"><td>{{ n.name }}</td><td>{{ TY[n.type] || n.type }}</td><td><span :class="'b ' + (n.level || 'ok')">{{ LV[n.level] || '정상' }}</span></td></tr><tr v-if="!d.nodes.length"><td colspan="3" class="meta">거점이 없습니다.</td></tr></table><Pager :p="pgN"/>
+<table :style="pgN.reset"><thead><tr><th>거점</th><th>구분</th><th>상태</th></tr></thead><tbody><tr v-for="n in pgN.rows" :key="n.centerId" style="cursor:pointer" @click="focus(n)"><td>{{ n.name }}</td><td>{{ TY[n.type] || n.type }}</td><td><span :class="'b ' + (n.level || 'ok')">{{ LV[n.level] || '정상' }}</span></td></tr><tr v-if="!d.nodes.length"><td colspan="3" class="meta">거점이 없습니다.</td></tr></tbody></table><Pager :p="pgN"/>
 </div>
 <div class="card eq"><h3><i class="bi bi-truck"></i> 운행 차량 <span class="meta">{{ d.vehicles.length }}대</span></h3>
-<table :style="pgV.reset"><tr><th>차량</th><th>구간</th><th>상태</th><th>지연</th></tr>
-<tr v-for="(v, i) in pgV.rows" :key="i"><td>{{ v.vehicleNo }}<div class="meta">{{ v.kind }}</div></td><td style="font-size:13px">{{ v.segment }}</td><td><span class="b gray">{{ stl(v.status) }}</span><div class="meta">ETA {{ hm(v.eta) }}</div></td><td><span :class="'b ' + (v.delayMin >= 30 ? 'warn' : 'ok')">{{ v.delayMin || 0 }}분</span></td></tr>
-<tr v-if="!d.vehicles.length"><td colspan="4" class="meta">운행 중인 차량이 없습니다.</td></tr></table><Pager :p="pgV"/></div>
+<table :style="pgV.reset"><thead><tr><th>차량</th><th>구간</th><th>상태</th><th>지연</th></tr></thead>
+<tbody><tr v-for="(v, i) in pgV.rows" :key="i"><td>{{ v.vehicleNo }}<div class="meta">{{ v.kind }}</div></td><td style="font-size:13px">{{ v.segment }}</td><td><span class="b gray">{{ stl(v.status) }}</span><div class="meta">ETA {{ hm(v.eta) }}</div></td><td><span :class="'b ' + (v.delayMin >= 30 ? 'warn' : 'ok')">{{ v.delayMin || 0 }}분</span></td></tr>
+<tr v-if="!d.vehicles.length"><td colspan="4" class="meta">운행 중인 차량이 없습니다.</td></tr></tbody></table><Pager :p="pgV"/></div>
 </div></section>
 </template>
 <script setup>

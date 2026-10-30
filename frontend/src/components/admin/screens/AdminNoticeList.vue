@@ -2,7 +2,7 @@
   <div class="an-page">
     <div class="an-head">
       <div>
-        <h1>공지사항</h1>
+        <h1 class="an-title">공지사항</h1>
         <p>항만 운영과 관련된 안내를 확인하세요.</p>
       </div>
     </div>
@@ -65,7 +65,7 @@
           >
             <td>{{ displayNo(index) }}</td>
             <td><span class="an-badge" :class="'is-' + levelOf(notice).toLowerCase()">{{ levelLabel(notice) }}</span></td>
-            <td class="an-title">
+            <td class="an-title is-left">
               <i v-if="levelOf(notice) !== 'GENERAL'" class="bi bi-pin-angle-fill"></i>
               <span>{{ notice.title }}</span>
             </td>
@@ -74,11 +74,11 @@
             <td>{{ formatDate(notice.updatedAt) }}</td>
             <td>{{ notice.viewCount ?? 0 }}</td>
             <td class="an-manage" @click.stop>
-              <button type="button" aria-label="수정" @click="goEdit(notice.postId)"><i class="bi bi-pencil"></i></button>
-              <button type="button" class="is-delete" aria-label="삭제" @click="remove(notice)"><i class="bi bi-trash"></i></button>
+              <button type="button" class="btn-act edit" @click="goEdit(notice.postId)">수정</button>
+              <button type="button" class="btn-act del" @click="remove(notice)">삭제</button>
             </td>
           </tr>
-          <tr v-if="pageRows.length === 0">
+          <tr v-if="pageRows.length === 0" class="is-empty-row"><!-- 26.10.28 QA#19 목록이 없을 때는 손가락 커서·색 변화 없음 -->
             <td colspan="8" class="an-empty">등록된 공지사항이 없습니다.</td>
           </tr>
         </tbody>
@@ -302,6 +302,8 @@ export default {
   color: #334e68;
 }
 .an-table tbody tr { cursor: pointer; }
+.an-table tbody tr.is-empty-row { cursor: default; }
+.an-table tbody tr.is-empty-row:hover td { background: transparent; }
 .an-table tbody tr.is-important { background: #fff6f6; }
 .an-table tbody tr:hover td { background: #f8fbff; }
 .an-table tbody tr.is-important:hover td { background: #fff1f1; }
@@ -325,7 +327,7 @@ export default {
 .an-badge.is-important { background: #ffe4e6; color: #e11d48; }
 .an-badge.is-urgent { background: #ffe4e6; color: #be123c; }
 .an-manage { display: flex; justify-content: center; gap: 6px; }
-.an-manage button {
+.an-manage button:not(.btn-act) {
   width: 30px;
   height: 30px;
   border: 0;

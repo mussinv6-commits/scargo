@@ -45,4 +45,8 @@ public class OverloadCheckpoint {
 
     @Column(name = "alert_radius_m", nullable = false)
     private Integer alertRadiusM = 2000;
+
+    // 26.10.28: 비활성 검문소는 경로·장소 검색에서 제외 (add_8 로 인천항 1곳만 활성)
+    @Column(name = "is_active", nullable = false)
+    private Boolean isActive = true;
 }

@@ -1,6 +1,6 @@
 <template>
   <!-- 26.10.22 추가: 택배 이동 / 물류센터 3D 화면. public/sbot3d 의 HTML 을 그대로 불러온다 (Three.js 는 그 파일이 CDN 에서 읽음) -->
-  <iframe class="sb-frame" :src="url" :title="title" />
+  <iframe class="sb-frame" :src="url" :title="title" allow="fullscreen" allowfullscreen /><!-- 26.10.28 3D 안의 '전체 화면' 버튼이 동작하도록 허용 --><!-- 26.10.28 크기는 원래대로 (작게 맞추면 우측 운행 차량 패널이 잘림) -->
 </template>
 
 <script setup>

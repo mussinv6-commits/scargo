@@ -28,8 +28,12 @@ import AdminIncidents from "@/components/admin/screens/AdminIncidents.vue"; // 2
 import AdminOpsCenter from "@/components/admin/screens/AdminOpsCenter.vue"; // 26.10.24 운영 센터(탭 묶음)
 import AdminKpi from "@/components/admin/screens/AdminKpi.vue"; // 26.10.24
 import AdminGateReservations from "@/components/admin/screens/AdminGateReservations.vue"; // 26.10.24
-import AdminCenterReceipts from "@/components/admin/screens/AdminCenterReceipts.vue"; // 26.10.23 지역센터 인수 확정
-import AdminAmrTwin from "@/components/admin/screens/AdminAmrTwin.vue"; // 26.10.08 추가: 허브 AMR 3D 관제
+// 26.10.28 지역 물류센터 관제로 통합되어 사용 안 함
+// import AdminCenterReceipts from "@/components/admin/screens/AdminCenterReceipts.vue"; // 26.10.23 지역센터 인수 확정
+import AdminAmrTwin from "@/components/admin/screens/AdminAmrTwin.vue";
+import NotificationHistory from "@/components/common/NotificationHistory.vue"; // 26.10.28 알림 내역 // 26.10.08 추가: 허브 AMR 3D 관제
+import AdminSignupApprovals from "@/components/admin/screens/AdminSignupApprovals.vue"; // 26.10.28 가입 승인 (기업 / 기사 탭)
+import AdminContainerHub from "@/components/admin/screens/AdminContainerHub.vue"; // 26.10.28 컨테이너 관리 (목록 / 점검표 탭)
 
 // 관리자 전용 화면 묶음. 실제 접근 제어(로그인/ADMIN 권한 체크)는
 // router/index.js 의 beforeEach 가드에서 meta.requiresAdmin 을 보고 처리한다.
@@ -41,18 +45,21 @@ export default [
     children: [
       { path: "", name: "admin-dashboard", component: AdminDashboard },
       { path: "accounts", name: "admin-accounts", component: AdminAccounts },
+      { path: "signup-approvals", name: "admin-signup-approvals", component: AdminSignupApprovals }, // 26.10.28 기업 / 기사 탭
+      { path: "corporate-approvals", name: "admin-corporate-approvals", redirect: { path: "/admin/signup-approvals", query: { tab: "corp" } } }, // 26.10.28 가입 승인으로 통합
       { path: "companies", name: "admin-companies", component: AdminCompanies },
       { path: "trucks", name: "admin-trucks", component: AdminTrucks },
-      { path: "containers", name: "admin-containers", component: AdminContainers },
+      { path: "containers", name: "admin-containers", component: AdminContainerHub }, // 26.10.28 목록 + 점검표 탭
       { path: "container-locations", name: "admin-container-locations", component: AdminContainerLocations },
-      { path: "inspections", name: "admin-inspections", component: AdminInspections },
+      { path: "inspections", name: "admin-inspections", redirect: { path: "/admin/containers", query: { tab: "inspection" } } }, // 26.10.28 컨테이너 관리 점검표 탭으로 통합
       { path: "daily-report", name: "admin-daily-report", component: AdminDailyReport }, // 26.10.24
       { path: "ops-board", name: "admin-ops-board", component: AdminOpsBoard }, // 26.10.24
       { path: "incidents", name: "admin-incidents", component: AdminIncidents }, // 26.10.24
       { path: "ops-center", name: "admin-ops-center", component: AdminOpsCenter }, // 26.10.24
+      { path: "ops-center/alerts", name: "admin-ops-alerts", component: () => import("@/components/admin/screens/AdminOpsAlerts.vue") }, // 26.10.28 경보 상세 (긴급 / 주의)
       { path: "kpi", name: "admin-kpi", component: AdminKpi }, // 26.10.24
       { path: "gate-reservations", name: "admin-gate-reservations", component: AdminGateReservations }, // 26.10.24
-      { path: "center-receipts", name: "admin-center-receipts", component: AdminCenterReceipts },
+      { path: "center-receipts", name: "admin-center-receipts", redirect: { path: "/admin/center", query: { tab: "rcv" } } }, // 26.10.28 지역 물류센터 관제 > 인수 현황 탭으로 통합
       { path: "yards", name: "admin-yards", component: AdminYards },
       { path: "loading-locations", name: "admin-loading-locations", component: AdminLoadingLocations },
       { path: "loading-records", name: "admin-loading-records", component: AdminLoadingRecords },
@@ -65,11 +72,13 @@ export default [
       { path: "notices/:id", name: "admin-notice-detail", component: AdminNoticeDetail },
       { path: "gate-ocr", name: "admin-gate-ocr", component: GateDemo }, // 26.10.01: 기존 /gate-demo
       { path: "weighbridge", name: "admin-weighbridge", component: AdminWeighbridge }, // 26.10.01 추가: 게이트 OCR → 검사소 계량
-      { path: "menu-guide", name: "admin-menu-guide", component: AdminMenuGuide }, // 26.10.26 메뉴 안내
+      { path: "menu-guide", name: "admin-menu-guide", component: AdminMenuGuide },
+      { path: "notifications", name: "admin-notifications", component: NotificationHistory }, // 26.10.28 알림 내역 (지난 알림까지) // 26.10.26 메뉴 안내
       { path: "gate-seal", name: "admin-gate-seal", component: AdminGateSeal }, // 26.10.26 S-Bot 허브 관제에서 이동
-      { path: "arrivals", name: "admin-arrivals", component: SbotInspections }, // 26.10.26 도착 · 점검 (S-Bot 에서 이동)
-      { path: "move", name: "admin-move", component: SbotFrame, props: { page: "move", title: "택배 이동" } }, // 26.10.26 (S-Bot 에서 이동)
-      { path: "center", name: "admin-center", component: SbotFrame, props: { page: "center", title: "물류센터 관제" } }, // 26.10.26 (S-Bot 에서 이동)
+      { path: "arrivals", name: "admin-arrivals", component: SbotInspections },
+      { path: "handovers", name: "admin-handovers", component: () => import("@/components/admin/screens/AdminHandovers.vue") }, // 26.10.29 인수 내역 · 인수증 // 26.10.26 도착 · 점검 (S-Bot 에서 이동)
+      { path: "move", name: "admin-move", component: SbotFrame, props: { page: "move", title: "택배 운송 관제" } }, // 26.10.26 (S-Bot 에서 이동)
+      { path: "center", name: "admin-center", component: () => import("@/components/admin/screens/AdminRegionalCenter.vue") }, // 26.10.28 지역 물류센터 관제 (3D · 지역별 · 인수 현황 탭)
       { path: "amr-tokens", name: "admin-amr-tokens", component: AmrTokenAdmin }, // 26.10.26 앱 출입증 (S-Bot 에서 이동)
       { path: "amr-twin", name: "admin-amr-twin", redirect: "/sbot" }, // 26.10.20: S-Bot 전용 화면(/sbot)으로 이동 // 26.10.08 추가: 허브 AMR 3D 디지털 트윈
     ],

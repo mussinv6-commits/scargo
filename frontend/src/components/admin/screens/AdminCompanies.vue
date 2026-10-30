@@ -6,16 +6,16 @@
     <div v-if="pending.length" class="pend-card">
       <h3>승인 대기 업체 <span class="pend-meta">{{ pending.length }}건 · 승인해야 가입·선택 목록에서 쓸 수 있습니다</span></h3>
       <table class="pend-table">
-        <tr><th>번호</th><th>업체명</th><th>대표자</th><th>사업자번호</th><th>주소</th><th>신청일</th><th>처리</th></tr>
-        <tr v-for="(c, i) in pending" :key="c.companyId">
+        <thead><tr><th>번호</th><th>업체명</th><th>대표자</th><th>사업자번호</th><th>주소</th><th>신청일</th><th>처리</th></tr></thead>
+        <tbody><tr v-for="(c, i) in pending" :key="c.companyId">
           <td>{{ i + 1 }}</td><td>{{ c.companyName }}</td><td>{{ c.representativeName || '—' }}</td><td>{{ c.businessNo || '—' }}</td>
-          <td style="text-align:left">{{ c.address }}</td><td>{{ ymd(c.createdAt) }}</td>
+          <td class="is-left">{{ c.address }}</td><td>{{ ymd(c.createdAt) }}</td>
           <td>
-            <button class="pend-btn ok" :disabled="busy === c.companyId" @click="approveCo(c)">승인</button>
+            <button class="btn-act edit" :disabled="busy === c.companyId" @click="approveCo(c)">승인</button>
             <input v-model="reasons[c.companyId]" placeholder="반려 사유" class="pend-input" />
-            <button class="pend-btn" :disabled="busy === c.companyId || !(reasons[c.companyId] || '').trim()" @click="rejectCo(c)">반려</button>
+            <button class="btn-act del" :disabled="busy === c.companyId || !(reasons[c.companyId] || '').trim()" @click="rejectCo(c)">반려</button>
           </td>
-        </tr>
+        </tr></tbody>
       </table>
       <p v-if="pmsg" :class="pok ? 'pend-ok' : 'pend-err'">{{ pmsg }}</p>
     </div>
@@ -66,12 +66,12 @@ const loading = ref(true)
 const visibleRows = computed(() => rowsForViewDate(rows.value, 'createdAt'))
 
 const columns = [
-  { key: 'companyId', label: 'ID', width: '60px', align: 'center' },
+  { key: 'companyId', label: '번호', width: '60px', align: 'center', type: 'seq' },
   { key: 'companyName', label: '업체명' },
   { key: 'representativeName', label: '대표자' },
   { key: 'industryType', label: '업종' },
   { key: 'businessNo', label: '사업자번호' },
-  { key: 'address', label: '주소' },
+  { key: 'address', label: '주소', align: 'left' },
   { key: 'approvalLabel', label: '승인' },
   { key: 'createdAt', label: '등록일', type: 'date' },
 ]

@@ -2,7 +2,7 @@
   <div class="gate-page">
     <!-- 26.10.06: 다른 관리자 화면(검사소 계량 등)과 같은 제목 컴포넌트 사용 -->
     <AdminPageHeader
-      title="게이트 OCR 검사"
+      title="항만 게이트 OCR 검사"
       description="CargoScan AI(YOLO11 탐지 + CRNN 문자 인식)가 화물차 번호판을 OCR로 판독해서 게이트 통과 여부를 자동으로 검사합니다."
     />
     <div class="gate-header">
@@ -168,7 +168,7 @@ import { ref, computed, onBeforeUnmount, onMounted } from 'vue'
 import axios from 'axios'
 import AdminPageHeader from '@/components/admin/AdminPageHeader.vue'
 import { API_BASE } from '@/utils/apiBase.js'
-import { GATE_SCAN_API_BASE } from '@/utils/gateApiBase.js'
+import { GATE_SCAN_API_BASE, GATE_SCAN_HEADERS } from '@/utils/gateApiBase.js'
 const selected = ref(null)
 const state = ref('idle') // idle | scanning | pass | fail
 // 2026-10-02 변경: 차량 1대씩 순차 처리 → 구내 차량 목록 방식
@@ -398,7 +398,7 @@ async function runLiveScan(requestPhase = 'ENTRY', vehicleNo = '') {
   try {
     const params = { scanType: requestPhase }
     if (requestPhase === 'EXIT') params.vehicleNo = vehicleNo
-    const res = await axios.post(`${GATE_SCAN_API_BASE}/scan`, null, { params })
+    const res = await axios.post(`${GATE_SCAN_API_BASE}/scan`, null, { params, headers: GATE_SCAN_HEADERS })
     if (res.status === 204 || !res.data) {
       liveScanError.value = requestPhase === 'EXIT'
         ? 'ENTRY 때 저장한 동일 OCR 이미지를 찾을 수 없습니다.'

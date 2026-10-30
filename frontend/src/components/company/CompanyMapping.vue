@@ -71,7 +71,7 @@
                 <button type="button" class="mapping-mini-btn ghost" :disabled="busyNo === row.containerNo" @click="closeEdit">닫기</button>
               </div>
               <div v-else class="mapping-actions">
-                <button type="button" class="mapping-mini-btn" :disabled="busyNo === row.containerNo" @click="startEdit(row)">수정</button>
+                <button type="button" class="btn-act edit" :disabled="busyNo === row.containerNo" @click="startEdit(row)">수정</button>
                 <button type="button" class="mapping-mini-btn danger" :disabled="busyNo === row.containerNo" @click="cancelMapping(row)">취소</button>
               </div>
             </td>

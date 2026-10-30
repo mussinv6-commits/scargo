@@ -1,6 +1,6 @@
 <template>
   <div>
-    <AdminPageHeader title="회원 관리" description="전체 회원을 조회합니다. 관리자를 제외한 회원은 수정·삭제할 수 있고, 승인 대기 기업회원은 승인하거나 거절합니다." />
+    <AdminPageHeader :title="corpMode ? '기업회원 가입 승인' : '회원 관리'" :description="corpMode ? '회원가입으로 신청한 승인 대기 기업회원입니다. 승인 또는 거절을 누르세요.' : '전체 회원을 조회합니다. 관리자를 제외한 회원은 수정·삭제할 수 있고, 승인 대기 기업회원은 승인하거나 거절합니다.'" />
 
     <div class="crud-table-wrap">
       <div class="crud-toolbar">
@@ -29,7 +29,7 @@
         <table class="crud-table">
           <thead>
             <tr>
-              <th>ID</th>
+              <th class="is-center" style="width:64px;">번호</th>
               <th>아이디</th>
               <th>이름</th>
               <th>회원유형</th>
@@ -43,8 +43,8 @@
             <tr v-if="loading"><td colspan="8" class="crud-empty">불러오는 중...</td></tr>
             <tr v-else-if="error"><td colspan="8" class="crud-empty">{{ error }}</td></tr>
             <tr v-else-if="filteredAccounts.length === 0"><td colspan="8" class="crud-empty">해당하는 회원이 없습니다.</td></tr>
-            <tr v-for="a in pagedAccounts" :key="a.accountId">
-              <td>{{ a.accountId }}</td>
+            <tr v-for="(a, i) in pagedAccounts" :key="a.accountId">
+              <td class="is-center">{{ (page - 1) * PAGE_SIZE + i + 1 }}</td><!-- 26.10.28 QA#1 ID → 번호 (1부터 순차) -->
               <td>{{ a.userId }}</td>
               <td>{{ a.userName || '-' }}</td>
               <td><span class="pill" :class="typeTone(a.userType)">{{ typeLabel(a.userType) }}</span></td>
@@ -55,24 +55,24 @@
                 <div v-if="a.userType !== 'ADMIN'" class="crud-actions">
                   <template v-if="a.userType === 'CORPORATE_PENDING'">
                     <button
-                      class="btn-admin btn-admin-accent"
+                      class="btn-act edit"
                       :disabled="approvingId === a.accountId || rejectingId === a.accountId"
                       @click="approve(a)"
                     >
                       {{ approvingId === a.accountId ? '처리 중...' : '승인' }}
                     </button>
                     <button
-                      class="btn-admin btn-admin-danger"
+                      class="btn-act del"
                       :disabled="approvingId === a.accountId || rejectingId === a.accountId"
                       @click="reject(a)"
                     >
                       {{ rejectingId === a.accountId ? '처리 중...' : '거절' }}
                     </button>
                   </template>
-                  <button class="btn-admin btn-admin-ghost" @click="openEdit(a)">수정</button>
+                  <button class="btn-act edit" @click="openEdit(a)">수정</button>
                   <button
                     v-if="a.userType !== 'CORPORATE_PENDING'"
-                    class="btn-admin btn-admin-danger"
+                    class="btn-act del"
                     :disabled="deletingId === a.accountId"
                     @click="removeAccount(a)"
                   >
@@ -130,13 +130,19 @@ import { toDate } from '@/utils/serverTime.js' // 26.10.23 서버 시각(epoch �
 import AdminPageHeader from '@/components/admin/AdminPageHeader.vue'
 import AdminPager from '@/components/admin/AdminPager.vue'
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { rowsForViewDate, viewDate } from '@/components/admin/adminViewDate.js'
 import { adminApi, pickErrorMessage } from '@/utils/adminApi'
 
 const accounts = ref([])
 const loading = ref(true)
 const error = ref('')
-const filter = ref('ALL')
+// fix_1027: '기업회원 가입 승인' 메뉴(/admin/corporate-approvals)는 승인 대기만 보여 줌. 전체 보기에서도 승인 대기를 맨 위로
+const route = useRoute()
+// 26.10.28 '가입 승인' 탭(AdminSignupApprovals)에서 corp-only 로 불러도 같은 모드
+const props = defineProps({ corpOnly: { type: Boolean, default: false } })
+const corpMode = computed(() => props.corpOnly || !!route.meta?.corpApprovals)
+const filter = ref(corpMode.value ? 'CORPORATE_PENDING' : 'ALL')
 const approvingId = ref(null)
 const rejectingId = ref(null) // 26.09.21 추가
 const deletingId = ref(null)
@@ -154,12 +160,16 @@ function typeTone(t) {
   return { CORPORATE_PENDING: 'pill-warn', ADMIN: 'pill-muted' }[t] || 'pill-on'
 }
 
+const ROLE_RANK = { ADMIN: 0, CONTROL: 1, HUB_OP: 2, CENTER_OP: 3, CORPORATE_APPROVED: 4, CORPORATE_PENDING: 5, CONTAINER_DRIVER: 6, BRANCH_DRIVER: 7, LINEHAUL_DRIVER: 7, GENERAL: 8 }
 const PAGE_SIZE = 10
 const page = ref(1)
 
 const filteredAccounts = computed(() => {
   const byType = filter.value === 'ALL' ? accounts.value : accounts.value.filter((a) => a.userType === filter.value)
-  return rowsForViewDate(byType, 'createdAt')
+  const rows = filter.value === 'CORPORATE_PENDING' ? byType : rowsForViewDate(byType, 'createdAt') // 승인 대기는 날짜와 관계없이 모두
+  // 26.10.29 권한 높은 순 (총관리자 → 관제사 → 운송사 → 기사 → 일반), 같은 권한은 이름 가나다순
+  const rk = (t) => (ROLE_RANK[t] ?? 99)
+  return [...rows].sort((x, y) => rk(x.userType) - rk(y.userType) || String(x.userName || '').localeCompare(String(y.userName || ''), 'ko') || String(x.userId || '').localeCompare(String(y.userId || '')))
 })
 const pageCount = computed(() => Math.max(1, Math.ceil(filteredAccounts.value.length / PAGE_SIZE) || 1))
 const pagedAccounts = computed(() => {

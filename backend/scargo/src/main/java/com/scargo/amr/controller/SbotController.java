@@ -198,6 +198,61 @@ public class SbotController {
         return res;
     }
 
+    // 26.10.28 AMR 일일 보고서(엑셀)용 상세 (읽기 전용): 오늘 운반 내역(최근 300건 · 전체 건수) + 오늘 충전소 이동 기록
+    //  GET /api/amr/sbot/report-detail  → {taskTotal, tasks:[{at, code, type, waybill, hub, handle, kg, from, to, sec}], charges:[{at, code, msg}]}
+    //  테이블이 없거나 비어 있으면 빈 목록을 돌려준다 (보고서는 "기록 없음"으로 표시)
+    @GetMapping("/report-detail")
+    @Transactional(readOnly = true)
+    public Map<String, Object> reportDetail(@RequestParam(name = "date", required = false) String date,
+                                            @RequestParam(name = "to", required = false) String to) {
+        // 26.10.29 날짜 선택: ?date=2026-10-28 이면 그 날(한국 시간) 기록, 없으면 오늘. LocalDate 로 읽은 값만 쓰므로 SQL 에 이상한 글자가 들어갈 수 없다
+        java.time.LocalDate ld = null;
+        if (date != null && !date.isBlank()) {
+            try { ld = java.time.LocalDate.parse(date.trim()); }
+            catch (Exception e) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "date 형식은 yyyy-MM-dd 입니다"); }
+        }
+        // 26.10.30 기간 보고: ?date=시작&to=끝(포함) 이면 그 기간 전체 (주간 · 월간 · 연간)
+        java.time.LocalDate last = ld;
+        if (ld != null && to != null && !to.isBlank()) {
+            try { last = java.time.LocalDate.parse(to.trim()); }
+            catch (Exception e) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "to 형식은 yyyy-MM-dd 입니다"); }
+            if (last.isBefore(ld)) last = ld;
+        }
+        final String today = ld == null ? "(date_trunc('day', now() AT TIME ZONE 'Asia/Seoul') AT TIME ZONE 'Asia/Seoul')"
+                : "(timestamp '" + ld + " 00:00:00' AT TIME ZONE 'Asia/Seoul')";
+        final String dayEnd = ld == null ? "(now() + interval '1 day')" : "(timestamp '" + last.plusDays(1) + " 00:00:00' AT TIME ZONE 'Asia/Seoul')";
+        Map<String, Object> res = new LinkedHashMap<>();
+        List<Map<String, Object>> tasks = new ArrayList<>(), charges = new ArrayList<>();
+        long total = 0;
+        try {
+            total = n(em.createNativeQuery("SELECT count(*) FROM amr_task_logs t WHERE t.finished_at >= " + today + " AND t.finished_at < " + dayEnd).getSingleResult());
+            for (Object[] a : rows("SELECT t.finished_at AT TIME ZONE 'Asia/Seoul', t.robot_code, t.task_type, t.waybill_no, t.dest_hub, t.handle_type,"
+                    + " t.weight_kg, t.from_loc, t.to_loc, t.duration_sec FROM amr_task_logs t WHERE t.finished_at >= " + today + " AND t.finished_at < " + dayEnd
+                    + " ORDER BY t.finished_at DESC LIMIT 300")) {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("at", String.valueOf(a[0])); m.put("code", String.valueOf(a[1])); m.put("type", String.valueOf(a[2]));
+                m.put("waybill", a[3] == null ? "" : String.valueOf(a[3])); m.put("hub", a[4] == null ? "" : String.valueOf(a[4]));
+                m.put("handle", a[5] == null ? "" : String.valueOf(a[5])); m.put("kg", a[6] == null ? null : ((Number) a[6]).doubleValue());
+                m.put("from", a[7] == null ? "" : String.valueOf(a[7])); m.put("to", a[8] == null ? "" : String.valueOf(a[8]));
+                m.put("sec", a[9] == null ? null : ((Number) a[9]).doubleValue());
+                tasks.add(m);
+            }
+        } catch (Exception e) { /* AMR 기록 테이블이 없거나 비어 있으면 건너뜀 */ }
+        try {
+            for (Object[] a : rows("SELECT e.created_at AT TIME ZONE 'Asia/Seoul', r.robot_code, e.message FROM hub_events e"
+                    + " JOIN amr_robots r ON r.robot_id = e.robot_id WHERE e.created_at >= " + today + " AND e.created_at < " + dayEnd
+                    + " AND e.message LIKE '%충전소 이동%' ORDER BY e.created_at ASC LIMIT 200")) {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("at", String.valueOf(a[0])); m.put("code", String.valueOf(a[1])); m.put("msg", a[2] == null ? "" : String.valueOf(a[2]));
+                charges.add(m);
+            }
+        } catch (Exception e) { /* 건너뜀 */ }
+        res.put("taskTotal", total);
+        res.put("tasks", tasks);
+        res.put("charges", charges);
+        return res;
+    }
+
     // ────────────────────────────────────────────────────────────────
     // 쓰기: 택배 이동 화면이 택배차를 출발 · 도착시킬 때 호출 → DB 에 실제 기록이 남는다
     //  POST /api/amr/sbot/dispatch  {"region":"GGI","items":12}  → 허브 출고 + 허브→센터 운송 구간(운송 중) 생성

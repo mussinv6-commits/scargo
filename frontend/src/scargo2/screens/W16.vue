@@ -1,8 +1,8 @@
 <template>
-<section class="scr" id="W-16"><div class="card"><h3>직원관리 <span class="meta">· 웹 관제 계정</span></h3><table :style="pg.reset"><tr><th>이름 (아이디)</th><th class="c">권한</th><th>소속</th><th class="c">연락처</th><th class="c">관리</th></tr>
-<tr v-for="r in pg.rows" :key="r.accountId"><td>{{ r.userName }} <span class="meta">({{ r.userId }})</span></td><td class="c"><span class="b info">{{ ROLE[r.role] || r.role }}</span></td><td>{{ r.site || '—' }}</td><td class="c">{{ r.phone || '—' }}</td>
-<td class="c"><button class="btn o" @click="edit(r)"><i class="bi bi-pencil"></i> 수정</button> <button class="btn r" @click="del = r"><i class="bi bi-trash"></i> 삭제</button></td></tr>
-<tr v-if="!rows.length"><td colspan="5" class="meta">등록된 직원이 없습니다.</td></tr></table><Pager :p="pg"/></div>
+<section class="scr" id="W-16"><div class="card"><h3>직원관리 <span class="meta">· 웹 관제 계정</span></h3><table :style="pg.reset"><thead><tr><th>이름 (아이디)</th><th class="c">권한</th><th>소속</th><th class="c">연락처</th><th class="c">관리</th></tr></thead>
+<tbody><tr v-for="r in pg.rows" :key="r.accountId"><td>{{ r.userName }} <span class="meta">({{ r.userId }})</span></td><td class="c"><span class="b info">{{ ROLE[r.role] || r.role }}</span></td><td>{{ r.site || '—' }}</td><td class="c">{{ r.phone || '—' }}</td>
+<td class="c"><button class="btn-act edit" @click="edit(r)">수정</button> <button class="btn-act del" @click="del = r">삭제</button></td></tr>
+<tr v-if="!rows.length"><td colspan="5" class="meta">등록된 직원이 없습니다.</td></tr></tbody></table><Pager :p="pg"/></div>
 <div v-if="f" class="mdl-bg" @click.self="f = null"><div class="mdl"><div class="mh">직원 정보 수정 · {{ f.userId }}</div><div class="mb">
 <label class="meta">이름</label><input v-model="f.userName">
 <label class="meta">연락처</label><input v-model="f.phone" placeholder="010-0000-0000">

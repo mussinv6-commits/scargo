@@ -11,14 +11,15 @@
     </div>
     <p v-if="message" class="crp-msg" :class="{ err: isError }">{{ message }}</p>
     <div class="crp-scroll">
-      <table class="crp-table">
-        <thead>
-          <tr><th>운행</th><th>차량</th><th>출발</th><th>도착 센터</th><th>물품</th><th>상태</th><th>센터 도착</th><th>인수 확정</th><th>확정자</th><th></th></tr>
+      <table class="crp-table nonum">
+        <thead><!-- 26.10.29 nonum: 관제사 화면(.sc2)에서 자동 번호 칸이 하나 더 생기지 않게 -->
+          <tr><th>번호</th><th>운행</th><th>차량</th><th>출발</th><th>도착 센터</th><th>물품</th><th>상태</th><th>센터 도착</th><th>인수 확정</th><th>확정자</th><th></th></tr>
         </thead>
         <tbody>
-          <tr v-if="loading"><td colspan="10" class="crp-empty">불러오는 중...</td></tr>
-          <tr v-else-if="!rows.length"><td colspan="10" class="crp-empty">해당하는 지선 운행이 없습니다.</td></tr>
-          <tr v-for="r in rows" :key="r.assignmentId">
+          <tr v-if="loading"><td colspan="11" class="crp-empty">불러오는 중...</td></tr>
+          <tr v-else-if="!rows.length"><td colspan="11" class="crp-empty">해당하는 지선 운행이 없습니다.</td></tr>
+          <tr v-for="(r, i) in pg.rows" :key="r.assignmentId">
+            <td>{{ pg.no(i) }}</td><!-- 26.10.28 QA#4 번호 1부터 -->
             <td>#{{ r.assignmentId }}</td>
             <td>{{ r.vehicleNo }}</td>
             <td>{{ r.fromCenterName }}</td>
@@ -36,6 +37,7 @@
         </tbody>
       </table>
     </div>
+    <AdminPager v-model="pg.page" :page-count="pg.pageCount" /><!-- 26.10.28 QA#4 10건 페이징 -->
   </section>
 </template>
 
@@ -44,6 +46,8 @@ import { onMounted, ref } from 'vue'
 import { LEG_STATUS_LABEL, centerReceipts, confirmCenterReceipt } from '@/utils/centerReceiptApi.js'
 import { formatDateTime } from '@/utils/containerInspectionApi.js'
 import { friendlyError } from '@/utils/apiHelpers.js'
+import AdminPager from '@/components/admin/AdminPager.vue'
+import { usePaged } from '@/utils/usePaged.js'
 
 defineProps({
   canConfirm: { type: Boolean, default: true },
@@ -57,6 +61,7 @@ const TABS = [
 ]
 const status = ref('ARRIVED')
 const rows = ref([])
+const pg = usePaged(rows, 10)
 const loading = ref(false)
 const busy = ref(false)
 const message = ref('')

@@ -1,9 +1,9 @@
 <template>
 <section class="scr" id="W-10"><div class="card"><h3>기사 가입 승인 <span style="margin-left:auto;font-size:14px;font-weight:600;color:#4a5570">상태: <select v-model="st" @change="load"><option v-for="t in tabs" :key="t[0]" :value="t[0]">{{ t[1] }}</option></select></span></h3>
-<table :style="pg.reset"><tr><th>이름 (아이디)</th><th>권한</th><th>소속 운송사</th><th>차량</th><th class="c">면허번호</th><th class="c">신청</th><th class="c">처리</th></tr>
-<tr v-for="r in pg.rows" :key="r.accountId"><td>{{ r.userName }} ({{ r.userId }})</td><td>{{ r.userType === 'CONTAINER_DRIVER' ? '컨테이너 운송기사' : '지선 운송기사' }}</td><td>{{ r.companyName }}</td><td>{{ r.vehicleNo || '—' }} · {{ r.truckType || '' }}</td><td>{{ r.licenseNo || '—' }}</td><td>{{ md(r.createdAt) }}</td>
-<td><template v-if="r.status === 'PENDING'"><button class="btn y" @click="act(r, 'approve')">승인</button> <button class="btn o" @click="act(r, 'reject')">반려</button></template><span v-else :class="'b ' + (r.status === 'APPROVED' ? 'ok' : 'crit')">{{ r.status === 'APPROVED' ? '승인' : '반려' }}</span><div v-if="r.rejectReason" class="meta">{{ r.rejectReason }}</div></td></tr>
-<tr v-if="!rows.length"><td colspan="7" class="meta">해당 기사가 없습니다.</td></tr></table><Pager :p="pg"/></div>
+<table :style="pg.reset"><thead><tr><th>이름 (아이디)</th><th>권한</th><th>소속 운송사</th><th>차량</th><th class="c">면허번호</th><th class="c">신청</th><th class="c">처리</th></tr></thead>
+<tbody><tr v-for="r in pg.rows" :key="r.accountId"><td>{{ r.userName }} ({{ r.userId }})</td><td>{{ r.userType === 'CONTAINER_DRIVER' ? '컨테이너 운송기사' : '지선 운송기사' }}</td><td>{{ r.companyName }}</td><td>{{ r.vehicleNo || '—' }} · {{ r.truckType || '' }}</td><td>{{ r.licenseNo || '—' }}</td><td>{{ md(r.createdAt) }}</td>
+<td><template v-if="r.status === 'PENDING'"><button class="btn-act edit" @click="act(r, 'approve')">승인</button> <button class="btn-act del" @click="act(r, 'reject')">반려</button></template><span v-else :class="'b ' + (r.status === 'APPROVED' ? 'ok' : 'crit')">{{ r.status === 'APPROVED' ? '승인' : '반려' }}</span><div v-if="r.rejectReason" class="meta l">{{ r.rejectReason }}</div></td></tr>
+<tr v-if="!rows.length"><td colspan="7" class="meta">해당 기사가 없습니다.</td></tr></tbody></table><Pager :p="pg"/></div>
 <div v-if="dlg" class="mdl-bg" @click.self="dlg = null"><div class="mdl"><div class="mh">{{ dlg.title }}</div><div class="mb">
 <div>{{ dlg.text }}</div><template v-if="dlg.reason !== undefined"><label class="meta">반려 사유 (필수)</label><textarea v-model="dlg.reason" placeholder="예) 면허 정보 불일치"></textarea></template>
 <div v-if="dlg.err" class="err">{{ dlg.err }}</div></div><div class="mf"><button class="btn o" @click="dlg = null">취소</button><button class="btn y" @click="dlg.ok()">확인</button></div></div></div>

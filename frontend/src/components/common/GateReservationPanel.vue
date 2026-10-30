@@ -36,10 +36,10 @@
         <thead><tr><th>번호</th><th>예약 시각</th><th>구분</th><th>차량</th><th>컨테이너</th><th>업체</th><th>상태</th><th>메모</th><th></th></tr></thead>
         <tbody>
           <tr v-if="!rows.length"><td colspan="9" class="gr-empty">{{ loading ? '불러오는 중...' : '예약이 없습니다.' }}</td></tr>
-          <tr v-for="r in rows" :key="r.reservationId" :class="{ done: r.status !== 'BOOKED' }">
-            <td>#{{ r.reservationId }}</td><td>{{ formatDateTime(r.plannedAt) }}</td>
+          <tr v-for="(r, i) in pg.rows" :key="r.reservationId" :class="{ done: r.status !== 'BOOKED' }">
+            <td>{{ pg.no(i) }}</td><td>{{ formatDateTime(r.plannedAt) }}</td>
             <td>{{ RESERVATION_DIRECTION[r.direction] }}</td><td>{{ r.vehicleNo }}</td><td>{{ r.containerNo || '-' }}</td>
-            <td>{{ r.companyName || '-' }}</td><td>{{ RESERVATION_STATUS[r.status] }}</td><td class="wrap">{{ r.memo || '' }}</td>
+            <td>{{ r.companyName || '-' }}</td><td>{{ RESERVATION_STATUS[r.status] }}</td><td class="wrap is-left">{{ r.memo || '' }}</td>
             <td class="gr-actions">
               <template v-if="r.status === 'BOOKED'">
                 <button v-if="staff" class="gr-btn primary" :disabled="busy" @click="change(r, 'CHECKED_IN')">입차 확인</button>
@@ -50,6 +50,7 @@
           </tr>
         </tbody>
       </table>
+      <AdminPager v-model="pg.page" :page-count="pg.pageCount" /><!-- 26.10.28 QA#5 5건 페이징 -->
     </section>
   </div>
 </template>
@@ -61,6 +62,8 @@ import { RESERVATION_STATUS, RESERVATION_DIRECTION, listCompaniesForSelect, list
 import { formatDateTime } from '@/utils/containerInspectionApi.js'
 import { exportExcel } from '@/utils/exportExcel.js'
 import { friendlyError } from '@/utils/apiHelpers.js'
+import AdminPager from '@/components/admin/AdminPager.vue'
+import { usePaged } from '@/utils/usePaged.js'
 
 defineProps({ dark: { type: Boolean, default: false } })
 
@@ -68,6 +71,8 @@ defineProps({ dark: { type: Boolean, default: false } })
 const staff = computed(() => ['ADMIN', 'CONTROL'].includes(authState.user?.userType))
 
 const rows = ref([])
+// 26.10.28 QA#5 예약 번호 순 정렬 + 번호 1부터, 5건씩
+const pg = usePaged(() => [...rows.value].sort((a, b) => (b.reservationId || 0) - (a.reservationId || 0)), 5)
 const companies = ref([])
 const loading = ref(false)
 const busy = ref(false)
@@ -155,6 +160,7 @@ onMounted(async () => {
 .gr-card { background: #fff; border: 1px solid #d5dbe5; border-radius: 10px; padding: 12px 14px; overflow-x: auto; }
 .gr-card h3 { margin: 0 0 8px; font-size: 15px; } .gr-card h3 small { color: #6b7a90; font-weight: 400; }
 .gr-form, .gr-bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; } .gr-bar h3 { margin: 0; }
+.gr-bar { margin-bottom: 12px; } /* 26.10.28 예약 목록 줄과 표 사이 간격 */
 .gr-in { border: 1px solid #c9d3e0; border-radius: 6px; padding: 6px 8px; font-size: 13px; background: #fff; color: inherit; } .gr-in.grow { flex: 1; min-width: 160px; }
 .gr-btn { border: 1px solid #c9d3e0; background: #fff; color: inherit; border-radius: 6px; padding: 6px 12px; font-size: 13px; cursor: pointer; }
 .gr-btn.primary { background: #ff9f1c; border-color: #ff9f1c; color: #0b1d36; font-weight: 700; } .gr-btn:disabled { opacity: .5; cursor: default; }

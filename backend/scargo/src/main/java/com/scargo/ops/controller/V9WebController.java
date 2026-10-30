@@ -128,8 +128,10 @@ public class V9WebController {
         return jdbc.queryForList("""
             SELECT e.exception_id AS "exceptionId", e.exception_type AS "type", e.severity, e.status, e.message, e.source_table AS "sourceTable",
                    e.center_id AS "centerId", c.center_name AS "centerName", e.assignee_account_id AS "assigneeId", ac.user_name AS "assignee",
+                   ac.user_type AS "assigneeRole", ah.hub_name AS "assigneeHub", acn.center_name AS "assigneeCenter",
                    e.occurred_at AS "occurredAt", e.resolution_note AS "note"
-              FROM exceptions e LEFT JOIN logistics_centers c ON c.center_id = e.center_id LEFT JOIN accounts ac ON ac.account_id = e.assignee_account_id""" + where
+              FROM exceptions e LEFT JOIN logistics_centers c ON c.center_id = e.center_id LEFT JOIN accounts ac ON ac.account_id = e.assignee_account_id
+              LEFT JOIN hubs ah ON ah.hub_id = ac.hub_id LEFT JOIN logistics_centers acn ON acn.center_id = ac.center_id""" + where
                 + " ORDER BY CASE WHEN e.status = 'RESOLVED' THEN 1 ELSE 0 END, e.occurred_at DESC");
     }
 
@@ -311,7 +313,8 @@ public class V9WebController {
         //  컨테이너의 ACTIVE 씰이 없거나, 입력 씰 번호가 다르거나, 그 씰 화물이 이미 다른 진행 중 오더에 쓰이면 거절
         List<Map<String, Object>> ref = jdbc.queryForList("SELECT seal_id, shipment_id, seal_no FROM container_seals WHERE container_no = ? AND status = 'ACTIVE' ORDER BY seal_id DESC LIMIT 1", cno);
         if (ref.isEmpty()) throw new IllegalArgumentException("등록된 씰 정보가 없습니다 (" + cno + "). 씰 목록에서 선택하세요.");
-        if (!seal.trim().equalsIgnoreCase((String) ref.get(0).get("seal_no"))) throw new IllegalArgumentException("등록된 씰 번호와 다릅니다 (" + cno + ").");
+        // 26.10.29 QA: 씰은 화면에서 직접 입력 → 공백 · 하이픈 · 대소문자 차이는 같은 번호로 보고 비교. 다르면 저장 막음 (정답 씰 번호는 알려 주지 않음)
+        if (!sealKey(seal).equals(sealKey((String) ref.get(0).get("seal_no")))) throw new IllegalArgumentException("선택한 컨테이너(" + cno + ")의 등록 씰과 다릅니다. 컨테이너에 붙은 씰 번호를 다시 확인하세요.");
         Long sid = ((Number) ref.get(0).get("shipment_id")).longValue();
         if (jdbc.queryForObject("SELECT count(*) FROM transport_orders WHERE shipment_id = ? AND status <> 'CANCELED'", Integer.class, sid) > 0)
             throw new IllegalStateException("이 씰(" + ref.get(0).get("seal_no") + ")은 이미 다른 운송오더에 연결되어 있습니다.");
@@ -341,6 +344,8 @@ public class V9WebController {
         return Map.of("orderId", id, "orderNo", orderNo, "status", status, "shipmentId", sid, "returnDueAt", due.toString(), "returnDueDefaulted", dueDefaulted);
     }
 
+    private static String sealKey(String v) { return v == null ? "" : v.replaceAll("[\\s-]", "").toUpperCase(); }
+
     // ------------------------------------------------------------ v11 반납 CY 목록 · 반납 계획 수정 · 하역 완료 · 공컨 점검
     private Map<String, Object> activeCy(Long cyId) {
         if (cyId == null) return null;
@@ -349,12 +354,13 @@ public class V9WebController {
         return l.get(0);
     }
 
-    /** fix_1330: W-07 오더 등록용 선택 목록 = DB 에 등록된 ACTIVE 씰 중 진행 중 오더에 연결되지 않은 것 */
+    /** fix_1330: W-07 오더 등록용 선택 목록 = DB 에 등록된 ACTIVE 씰 중 진행 중 오더에 연결되지 않은 것
+     *  26.10.29 QA: 씰 번호는 화면에서 직접 입력하므로 목록에는 컨테이너만 내려 준다 (정답 씰 번호 노출 안 함) */
     @GetMapping("/carrier/seal-options")
     @PreAuthorize(W02)
     public List<Map<String, Object>> sealOptions() {
         return jdbc.queryForList("""
-            SELECT s.seal_id AS "sealId", s.container_no AS "containerNo", s.seal_no AS "sealNo"
+            SELECT s.seal_id AS "sealId", s.container_no AS "containerNo"
               FROM container_seals s
              WHERE s.status = 'ACTIVE'
                AND NOT EXISTS (SELECT 1 FROM transport_orders o WHERE o.shipment_id = s.shipment_id AND o.status <> 'CANCELED')
@@ -734,6 +740,10 @@ public class V9WebController {
         boolean admin = a.getUserType() == Account.UserType.ADMIN;
         boolean sameCarrier = a.getUserType() == Account.UserType.CORPORATE_APPROVED && a.getCompanyId() != null && Objects.equals(a.getCompanyId(), num(d.get("company_id")));
         if (!admin && !sameCarrier) throw new AccessDeniedException("기사 승인은 총관리자 또는 같은 운송사 담당자만 할 수 있습니다.");
+        // fix_1027: 이미 처리된 신청은 다시 처리하지 않음 (반려 → 재심사 승인만 허용)
+        String cur = String.valueOf(d.get("approval_status"));
+        if (action.equals("reject") && !"PENDING".equals(cur)) throw new IllegalStateException("승인 대기 중인 신청만 반려할 수 있습니다. (현재: " + cur + ")");
+        if (action.equals("approve") && "APPROVED".equals(cur)) throw new IllegalStateException("이미 승인된 기사입니다.");
         // v10: 반려 사유 필수 (DB chk_accounts_reject_reason)
         String reason = b == null || b.get("reason") == null ? null : b.get("reason").trim();
         if (action.equals("reject") && (reason == null || reason.isEmpty())) throw new IllegalArgumentException("반려 사유를 입력하세요.");
@@ -747,9 +757,12 @@ public class V9WebController {
         String st = action.equals("approve") ? "APPROVED" : "REJECTED";
         jdbc.update("UPDATE accounts SET approval_status = ?, approved_at = now(), approved_by_account_id = ?, reject_reason = ? WHERE account_id = ?",
                 st, a.getAccountId(), action.equals("reject") ? reason : null, id);
-        if (st.equals("APPROVED")) jdbc.update("UPDATE trucks SET entry_approval = 'APPROVED' WHERE assigned_account_id = ? AND entry_approval = 'PENDING'", id);
+        if (st.equals("APPROVED")) jdbc.update("UPDATE trucks SET entry_approval = 'APPROVED' WHERE assigned_account_id = ? AND entry_approval IN ('PENDING','REJECTED')", id);
+        else jdbc.update("UPDATE trucks SET entry_approval = 'REJECTED' WHERE assigned_account_id = ? AND entry_approval = 'PENDING'", id); // fix_1027
+        // fix_1027: 처리된 가입 요청 알림은 운송사·총관리자 모두 읽음 처리 (종 숫자에 계속 남지 않게)
+        jdbc.update("UPDATE notifications SET is_read = true, read_at = now() WHERE notification_type = 'DRIVER_APPROVAL_REQUEST' AND reference_id = ? AND NOT is_read", id);
         jdbc.update("INSERT INTO notifications(account_id, title, message, notification_type, reference_id) VALUES (?,?,?,?,?)",
-                id, st.equals("APPROVED") ? "가입 승인" : "가입 반려", st.equals("APPROVED") ? "가입이 승인되었습니다. 앱을 다시 열어 주세요." : "가입이 반려되었습니다. 사유: " + reason, "SYSTEM", id);
+                id, st.equals("APPROVED") ? "가입이 승인 되었습니다." : "가입 반려", st.equals("APPROVED") ? "가입이 승인 되었습니다." : "가입이 반려되었습니다. 사유: " + reason, "SYSTEM", id); // 26.10.28: 승인 알림은 이 문구만
         return Map.of("accountId", id, "status", st);
     }
 
@@ -880,15 +893,35 @@ public class V9WebController {
              WHERE (CAST(? AS bigint) IS NULL OR t.company_id = ?) ORDER BY v.inspection_date DESC, v.inspection_id DESC LIMIT 100""", co, co);
     }
 
-    /** fix_1543: 컨테이너 점검표 (기사 앱 출발 전 점검) — W-15 두 번째 탭 */
+    /** fix_1543: 컨테이너 점검표 (기사 앱 출발 전 점검) — W-15 두 번째 탭
+     *  26.10.26: 같은 오더에서 그 기사가 앱에 입력한 씰 번호(T-02 인수 · 허브 인계 중 가장 최근)를 컨테이너 번호 옆에 붙인다
+     *   sealNo = 기사 입력 씰, registeredSealNo = 등록된(정답) 씰, sealStage = 입력 단계, sealMatch = MATCH | MISMATCH | UNREGISTERED | NONE */
     @GetMapping("/checklists/containers")
     @PreAuthorize("hasAnyRole('ADMIN','CONTROL','CARRIER')")
     public List<Map<String, Object>> containerChecklists() {
         Long co = carrierCompany(me());
         return jdbc.queryForList("""
             SELECT ci.inspection_id AS "id", ci.created_at AS "at", ci.container_no AS "containerNo", o.order_no AS "orderNo", a.user_name AS "inspector",
-                   ci.overall_status AS "overall", ci.items::text AS "items", ci.memo
+                   ci.overall_status AS "overall", ci.items::text AS "items", ci.memo,
+                   sl.seal_no AS "sealNo", COALESCE(sl.expected, rs.seal_no) AS "registeredSealNo", sl.stage AS "sealStage", sl.at AS "sealAt",
+                   CASE WHEN sl.seal_no IS NULL THEN 'NONE' WHEN sl.expected IS NULL THEN 'UNREGISTERED'
+                        WHEN upper(sl.seal_no) = upper(sl.expected) THEN 'MATCH' ELSE 'MISMATCH' END AS "sealMatch"
               FROM container_inspections ci LEFT JOIN accounts a ON a.account_id = ci.driver_account_id LEFT JOIN transport_orders o ON o.order_id = ci.order_id
+              LEFT JOIN LATERAL (
+                    SELECT x.seal_no, x.expected, x.stage, x.at FROM (
+                        SELECT e.observed_seal_no AS seal_no, e.expected_seal_no AS expected,
+                               CASE WHEN e.memo LIKE '%인계%' THEN 'HANDOVER' ELSE 'PICKUP' END AS stage, e.occurred_at AS at
+                          FROM seal_events e
+                         WHERE e.order_id = ci.order_id AND e.event_type = 'INSPECTED' AND e.observed_seal_no IS NOT NULL
+                           AND e.actor_account_id = ci.driver_account_id
+                        UNION ALL
+                        SELECT u.observed_seal_no, NULL, u.stage, u.occurred_at
+                          FROM seal_unregistered_inputs u
+                         WHERE u.order_id = ci.order_id AND u.actor_account_id = ci.driver_account_id
+                    ) x ORDER BY x.at DESC LIMIT 1) sl ON true
+              LEFT JOIN LATERAL (
+                    SELECT s.seal_no FROM container_seals s
+                     WHERE s.container_no = ci.container_no AND s.status = 'ACTIVE' ORDER BY s.seal_id DESC LIMIT 1) rs ON true
              WHERE (CAST(? AS bigint) IS NULL OR a.company_id = ?) ORDER BY ci.created_at DESC LIMIT 100""", co, co);
     }
 

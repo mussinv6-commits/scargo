@@ -7,6 +7,7 @@
 //  - 웹 시뮬레이터는 기본 허브(simulated)에서만 돌고 DB에 기록한다. 조회 전용이거나 다른 허브를 보면
 //    시뮬레이터를 멈추고 로봇 · 이벤트 · 진동을 DB 값으로 보여 준다 (remoteView)
 // ─────────────────────────────────────────────────────────────
+import { recordFire } from '@/utils/fireLog.js'
 import { createSim, HUBS, ZONES, STATE_KO, PHASE_T, CAPTIONS, PIPE_ON, PH_COL, COLORS, status, lvCol, tons, zoneRow, captionOf, fmtPlate, ean13Bits } from './amrSim.js'
 // ZONES: 0 D 냉장 창고 · 1 A 인천 · 2 B 서울 · 3 C 경기
 import { createAmrScene } from './amrScene3d.js'
@@ -77,8 +78,46 @@ export function mountAmrTwin(root, access = { canView: true, canManage: true, al
         else { setOcr(false, res.error, res.status); simRef.vehicleResult(p.side, p.dock, null, p.dir) }
       })
   }
+  // 26.10.29 경보 종료 안전망: 화재가 끝났는데 서버 종료 요청이 실패했으면 성공할 때까지 다시 보낸다 (공지 · 앱 경보가 안 꺼지는 것 방지)
+  let alertSent = false // 26.10.30 처음 열 때 종료하지 않음: 앱에서 낸 경보가 남아 있으면 아래 syncTimer 가 이 화면에도 똑같이 띄운다
+  const alertTimer = setInterval(() => { if (alertSent && !S.fire.on && !S.bfire && !remoteView()) amrApi.safetyEnd().then((r) => { if (r) alertSent = false }) }, 3000)
+  // 26.10.30 앱 ↔ 웹 화재 연동: 앱에서 누른 화재도 서버 경보를 거쳐 이 화면의 시뮬레이터에 똑같이 켜고, 앱에서 끄면 같이 끈다 (웹 → 앱은 기존 safetyAlert)
+  let remoteBorn = false, localEndAt = 0
+  const syncTimer = setInterval(async () => {
+    if (remoteView()) return
+    const a = await amrApi.safetyNow(); if (!a) return
+    const localOn = S.fire.on || !!S.bfire
+    if (a.active) {
+      if (!localOn && Date.now() - localEndAt > 8000) {
+        remoteBorn = true
+        if (a.kind === 'hub') sim.setFire(true, a.zone == null ? undefined : +a.zone)
+        else { const bi = S.amrs.findIndex((r) => r.name === (a.code || a.label)); sim.setBatteryFire(bi >= 0 ? bi : undefined) }
+      }
+    } else if (remoteBorn && localOn) { remoteBorn = false; if (S.fire.on) sim.setFire(false); if (S.bfire) sim.clearBatteryFire() }
+    else if (!localOn) remoteBorn = false
+  }, 2000)
+// 26.10.30 비상 정지 동기화: 웹 ↔ 앱이 서버의 정지 목록을 같이 본다. 이쪽이 바뀌면 서버에 올리고, 서버가 바뀌었으면 이쪽 시뮬레이터에 반영
+let estopSynced = ''
+const estopTimer = setInterval(async () => {
+  if (remoteView()) return
+  const mine = S.amrs.filter((a) => a.estop).map((a) => a.name).sort().join(',')
+  if (mine !== estopSynced) { const r = await amrApi.estopSet(mine ? mine.split(',') : []); if (r) estopSynced = mine; return }
+  const r = await amrApi.estopNow(); if (!r || !Array.isArray(r.codes)) return
+  const srv = r.codes.slice().sort().join(',')
+  if (srv === estopSynced) return
+  S.amrs.forEach((a, i) => { const want = r.codes.includes(a.name); if (!!a.estop !== want) sim.setEstop(i, want) })
+  estopSynced = S.amrs.filter((a) => a.estop).map((a) => a.name).sort().join(',')
+}, 1500)
+
   function onSimEvent(type, p) {
     if (remoteView()) return // 26.10.22 조회 전용 · 다른 허브: 시뮬레이터 기록을 보내지 않음
+    if (type === 'fire' || type === 'bfire') { try { recordFire(type, p) } catch { /* 기록 실패는 화면에 영향 없음 */ }
+      // 26.10.29 긴급 경보를 서버에 알림 → 폰 앱 · S Cargo 화면이 붉게. 종료는 3D 화면의 "화재 종료" 버튼(= 이 이벤트의 on:false / stage 0)
+      if (type === 'fire') { if (p.on) { alertSent = true; amrApi.safetyAlert({ kind: 'hub', label: p.label, zone: p.zone, evac: 0, total: 0 }) } else { localEndAt = Date.now(); amrApi.safetyEnd() } }
+      else if (p.stage >= 2 && p.stage <= 4) { alertSent = true; amrApi.safetyAlert({ kind: 'batt', label: p.code, code: p.code, stage: p.stage, temp: p.temp || 0 }) }
+      else if (p.stage === 0) { localEndAt = Date.now(); amrApi.safetyEnd() }
+      if (type === 'bfire') { const M = { 0: ['INFO', '관리자 확인 · 배터리 교체 후 복귀'], 1: ['WARN', '배터리 온도 이상 · 작업 중단'], 2: ['CRIT', '배터리 위험 ' + (p.temp || '') + '℃ · 격리 구역 이동'], 3: ['CRIT', '배터리 화재 · 소화 설비 작동'], 4: ['WARN', '화재 진압 · 접근 금지'] }[p.stage]; if (M) amrApi.event(p.code, M[0], S.sc.phase, p.code + ' ' + M[1]) } // 서버 이력(events)에도 남김
+      return } // 26.10.29 화재 기록 → 대시보드
     if (type === 'vehicle') { onVehicle(p); return }
     if (type === 'move') { amrApi.task(p); return }
     if (type === 'charge') { amrApi.event(p.code, 'INFO', S.sc.phase, p.code + ' 배터리 ' + Math.round(p.battery) + '% · 기준 ' + S.cfg.chargeAt + '% 이하 → 충전소 이동'); return }
@@ -344,6 +383,16 @@ export function mountAmrTwin(root, access = { canView: true, canManage: true, al
     const t = toDate(k.at); $('kpiAt').textContent = String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0') + ':' + String(t.getSeconds()).padStart(2, '0') + ' 기준'
   }
   const kpiTimer = setInterval(pollKpi, 10000); setTimeout(pollKpi, 1500)
+  // 26.10.29 입차 대기열: 구간 관제 도착 순서 (3초마다). 맨 앞이 다음에 입구 OCR 로 읽힐 차
+  const Q_ST = { ENTERED: ['입차 완료', '#4fdc8a'], NEXT: ['다음 차례', '#f2b705'], WAIT: ['대기', '#8597aa'] }
+  async function pollQueue() {
+    const q = await amrApi.queue(); if (destroyed) return
+    const el = $('queue'); if (!el) return
+    el.innerHTML = Array.isArray(q) && q.length
+      ? q.map((v) => { const [t, c] = Q_ST[v.state] || Q_ST.WAIT; return `<li><span class="sid">${fmtPlate(v.plate)}</span><span class="sd">구간 관제 ${v.seq}번째 도착</span><span class="hubchip" style="background:${c}">${t}</span></li>` }).join('')
+      : '<li><span class="sd" style="grid-column:1/-1">' + (Array.isArray(q) ? '구간 관제에서 도착한 차량이 아직 없습니다' : '서버 연결 시 표시') + '</span></li>'
+  }
+  const queueTimer = setInterval(pollQueue, 3000); setTimeout(pollQueue, 1800)
   function renderScans() {
     if (S.scanVer === lastScanVer) return
     lastScanVer = S.scanVer
@@ -460,16 +509,17 @@ export function mountAmrTwin(root, access = { canView: true, canManage: true, al
     const remoteMode = remoteView(), a = remoteMode ? null : S.amrs[selected], dpr = Math.min(2, window.devicePixelRatio || 1), w = ch.width / dpr, h = 130
     if (!w) return
     cx.setTransform(dpr, 0, 0, dpr, 0, 0); cx.clearRect(0, 0, w, h)
-    const L = 24, R = w - 4, Tp = 10, B = h - 20, pw = (R - L) * 0.74, ymax = 8
+    const L = 24, R = w - 4, Tp = 10, B = h - 20, pw = (R - L) * 0.74
+    const bt = !remoteMode && !!(S.bfire && S.bfire.a === a), ymax = bt ? 220 : 8, T1 = bt ? 60 : 4.5, T2 = bt ? 80 : 7.1 // 26.10.29 배터리 이상 로봇을 고르면 진동 대신 배터리 온도(℃)와 위험선을 그린다
     const Y = (v) => B - (v / ymax) * (B - Tp)
     cx.font = "10px 'JetBrains Mono',monospace"; cx.textBaseline = 'middle'
-    ;[0, 2, 4, 6, 8].forEach((v) => { cx.strokeStyle = CH.edge; cx.lineWidth = 1; cx.beginPath(); cx.moveTo(L, Y(v) + 0.5); cx.lineTo(R, Y(v) + 0.5); cx.stroke(); cx.fillStyle = CH.dim; cx.textAlign = 'right'; cx.fillText(v, L - 5, Y(v)) })
-    cx.fillStyle = 'rgba(255,90,95,.06)'; cx.fillRect(L, Y(ymax), R - L, Y(7.1) - Y(ymax))
-    cx.fillStyle = 'rgba(255,184,77,.05)'; cx.fillRect(L, Y(7.1), R - L, Y(4.5) - Y(7.1))
-    ;[[4.5, COLORS.amber, '주의 4.5'], [7.1, COLORS.red, '고장 7.1']].forEach(([v, c, l]) => { cx.strokeStyle = c; cx.globalAlpha = 0.7; cx.setLineDash([3, 3]); cx.beginPath(); cx.moveTo(L, Y(v)); cx.lineTo(R, Y(v)); cx.stroke(); cx.setLineDash([]); cx.globalAlpha = 1; cx.fillStyle = c; cx.textAlign = 'left'; cx.fillText(l, L + 4, Y(v) - 7) })
-    cx.fillStyle = CH.dim; cx.textAlign = 'left'; cx.fillText(remoteMode ? '진동 · 최근 5분 (DB)' : '진동 · 최근 30초', L, h - 7); cx.textAlign = 'right'; cx.fillText('예측 구간', R, h - 7)
+    ;(bt ? [0, 50, 100, 150, 200] : [0, 2, 4, 6, 8]).forEach((v) => { cx.strokeStyle = CH.edge; cx.lineWidth = 1; cx.beginPath(); cx.moveTo(L, Y(v) + 0.5); cx.lineTo(R, Y(v) + 0.5); cx.stroke(); cx.fillStyle = CH.dim; cx.textAlign = 'right'; cx.fillText(v, L - 5, Y(v)) })
+    cx.fillStyle = 'rgba(255,90,95,.06)'; cx.fillRect(L, Y(ymax), R - L, Y(T2) - Y(ymax))
+    cx.fillStyle = 'rgba(255,184,77,.05)'; cx.fillRect(L, Y(T2), R - L, Y(T1) - Y(T2))
+    ;[[T1, COLORS.amber, bt ? '주의 60℃' : '주의 4.5'], [T2, COLORS.red, bt ? '위험 80℃' : '고장 7.1']].forEach(([v, c, l]) => { cx.strokeStyle = c; cx.globalAlpha = 0.7; cx.setLineDash([3, 3]); cx.beginPath(); cx.moveTo(L, Y(v)); cx.lineTo(R, Y(v)); cx.stroke(); cx.setLineDash([]); cx.globalAlpha = 1; cx.fillStyle = c; cx.textAlign = 'left'; cx.fillText(l, L + 4, Y(v) - 7) })
+    cx.fillStyle = CH.dim; cx.textAlign = 'left'; cx.fillText(remoteMode ? '진동 · 최근 5분 (DB)' : bt ? '배터리 온도(℃) · 최근 30초' : '진동 · 최근 30초', L, h - 7); cx.textAlign = 'right'; cx.fillText('예측 구간', R, h - 7)
     cx.strokeStyle = CH.edge; cx.beginPath(); cx.moveTo(L + pw + 0.5, Tp); cx.lineTo(L + pw + 0.5, B); cx.stroke()
-    const hs = remoteMode ? remoteHist : a.hist, N = 150, dx = pw / (N - 1), off = N - hs.length
+    const hs = remoteMode ? remoteHist : bt ? (a.thist || []) : a.hist, N = 150, dx = pw / (N - 1), off = N - hs.length
     const [lv] = remoteMode ? remoteLevel(remoteRobot()) : status(a), col = lvCol(lv === 'spare' ? 'ok' : lv)
     const segs = []; let cur = []
     hs.forEach((v, i) => { if (v == null) { if (cur.length) segs.push(cur); cur = []; return } cur.push([L + (off + i) * dx, Y(Math.min(ymax, v)), v]) })
@@ -482,7 +532,7 @@ export function mountAmrTwin(root, access = { canView: true, canManage: true, al
     const lastSeg = segs[segs.length - 1], lastPt = lastSeg && lastSeg[lastSeg.length - 1]
     if (lastPt && lastPt[0] > L + pw - dx * 2) {
       cx.fillStyle = col; cx.shadowColor = col; cx.shadowBlur = 8; cx.beginPath(); cx.arc(lastPt[0], lastPt[1], 3.2, 0, 7); cx.fill(); cx.shadowBlur = 0
-      if (!remoteMode && selected === 2 && a.maintFlag && S.sc.rul != null && a.state !== 'maint') {
+      if (!remoteMode && !bt && selected === 2 && a.maintFlag && S.sc.rul != null && a.state !== 'maint') {
         const sl = Math.max(0.08, S.sc.slope), ly = lastPt[2], secs = (7.1 - ly) / sl, px = Math.min(R, lastPt[0] + secs * 5 * dx)
         const py = px >= R ? Y(ly + (sl * (R - lastPt[0])) / (5 * dx)) : Y(7.1)
         cx.strokeStyle = COLORS.red; cx.setLineDash([2, 3]); cx.lineWidth = 1.5; cx.beginPath(); cx.moveTo(lastPt[0], lastPt[1]); cx.lineTo(px, py); cx.stroke(); cx.setLineDash([])
@@ -490,6 +540,51 @@ export function mountAmrTwin(root, access = { canView: true, canManage: true, al
       }
     }
   }
+
+  /* ── 26.10.29 전체 시연: AMR 허브 장면만 순서대로 (화재는 앱·웹 연동 시연에서 따로 진행) (S-Bot 허브 관제 화면 안에서만 · 조회 전용 화면에서는 숨김) ── */
+  const demo = (() => {
+    const bar = document.createElement('div')
+    bar.className = 'tw-demo'
+    bar.style.cssText = 'position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:8;display:none;align-items:center;gap:8px;padding:8px 12px;border-radius:10px;background:rgba(8,14,24,.86);border:1px solid rgba(120,170,255,.35);color:#e8eef6;font:600 13px "Malgun Gothic",sans-serif;max-width:94%;width:max-content'
+    const mk = (t, bg) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = t; b.style.cssText = 'white-space:nowrap;flex:none;font:inherit;padding:6px 10px;border-radius:7px;cursor:pointer;color:#fff;border:1px solid rgba(255,255,255,.25);background:' + bg; return b }
+    const bStart = mk('▶ 전체 시연', 'rgba(30,90,170,.92)'), bNext = mk('⏭ 다음 장면', 'rgba(60,70,90,.92)'), bStop = mk('■ 중단', 'rgba(110,30,30,.92)')
+    const cap = document.createElement('span'); cap.style.cssText = 'min-width:0;line-height:1.35'
+    bar.append(bStart, bNext, bStop, cap)
+    $('viewport').appendChild(bar)
+    let idx = -1, t0 = 0, sub = 0, timer = 0
+    // 장면: enter(진입) · tick(경과초 → 끝났으면 true) · leave(정리)
+    const scenes = [
+      { t: '① 정상 운영', d: 'AMR 5대와 지게차가 입고 · 출고 작업을 처리하는 평상시 화면이에요.', enter() {}, tick: (el) => el > 14, leave() {} },
+      { t: '② 고장 예측', d: '진동 이상 → 남은 수명 예측 → 정비 승인 → 예비기 AMR-05 투입 순서로 진행돼요.',
+        enter() { const sc = S.sc; if (sc.phase === 1) { sc.target = 2; S.amrs[2].deg = Math.max(S.amrs[2].deg, 2.35); sc.degrading = true; sc.start = sc.t - 19 } },
+        tick: (el) => (S.sc.phase >= 4 && S.amrs[S.sc.target].state === 'maint' && el > 20) || el > 90, leave() {} },
+      { t: '③ 비상 정지 · 작업 인계', d: '전체 정지 후 해제, 이어서 AMR-02 한 대만 정지하면 미집품 작업은 다른 장비가 이어받아요.',
+        enter() { sim.setEstop(null, true) }, tick: (el) => { if (el > 8 && sub === 0) { sim.setEstop(null, false); sim.setEstop(1, true); sub = 1 } return el > 16 }, leave() { sim.setEstop(null, false) } },
+      { t: '④ 마무리', d: 'S-Bot 대시보드에서 AMR 운영 결과를 확인하고 일일 보고서를 저장해요.', enter() {}, tick: (el) => el > 10, leave() {} },
+    ]
+    const show = () => { const c = scenes[idx]; cap.innerHTML = c ? '<b style="color:#ffc857">' + c.t + '</b> (' + (idx + 1) + '/' + scenes.length + ') · ' + c.d : '' ; bStart.textContent = idx >= 0 ? '↺ 처음부터' : '▶ 전체 시연' }
+    function go(n) {
+      if (scenes[idx]) { try { scenes[idx].leave() } catch { /* 정리 실패 무시 */ } }
+      idx = n; sub = 0; t0 = performance.now()
+      if (idx >= scenes.length) { stop(true); return }
+      try { scenes[idx].enter() } catch { /* 장면 시작 실패 시 다음 장면에서 계속 */ }
+      show()
+    }
+    function stop(done) {
+      clearInterval(timer); timer = 0
+      if (scenes[idx]) { try { scenes[idx].leave() } catch { /* 무시 */ } }
+      sim.setEstop(null, false); if (S.fire.on) sim.setFire(false); if (S.bfire) sim.clearBatteryFire()
+      idx = -1; cap.innerHTML = done ? '<b style="color:#7be0a4">시연이 끝났어요</b>' : ''; bStart.textContent = '▶ 전체 시연'
+    }
+    bStart.onclick = () => { if (remoteView()) return; stop(false); go(0); timer = setInterval(() => { if (idx < 0) return; if (scenes[idx].tick((performance.now() - t0) / 1000)) go(idx + 1) }, 250) }
+    bNext.onclick = () => { if (idx >= 0) go(idx + 1) }
+    bStop.onclick = () => stop(false)
+    const vis = () => { const on = !!document.querySelector('.sb-demo.run'); bar.style.display = (on && !remoteView()) ? 'flex' : 'none'
+      // 허브 하단 설명문을 가리지 않도록, 그 박스 바로 위에 띄움
+      try { const vp = $('viewport'); const c = $('caption'); const el = c && c.parentElement; let g = el ? vp.getBoundingClientRect().bottom - el.getBoundingClientRect().top : 0; if (!(g > 0 && g < 260)) g = 0; bar.style.bottom = (on && g ? Math.round(g) + 8 : 14) + 'px' } catch { /* 무시 */ } }   // 26.10.29 위쪽 '▶ 시연'이 도는 동안에만 보임 (SbotLayout 의 .sb-demo.run)
+    vis(); const visT = setInterval(vis, 600)
+    return { destroy() { clearInterval(timer); clearInterval(visT); bar.remove() }, get step() { return idx } }
+  })()
 
   /* ── 말풍선 (고장 대상 로봇) ── */
   function calloutInfo() {
@@ -728,9 +823,11 @@ export function mountAmrTwin(root, access = { canView: true, canManage: true, al
     sim,
     get scene() { return scene },
     destroy() {
+      clearInterval(alertTimer); clearInterval(syncTimer); clearInterval(estopTimer)
       destroyed = true
+      demo.destroy()
       offDb()
-      clearInterval(dbTimer); clearInterval(kpiTimer); clearInterval(authTimer); clearInterval(agTimer); clearInterval(histTimer)
+      clearInterval(dbTimer); clearInterval(kpiTimer); clearInterval(queueTimer); clearInterval(authTimer); clearInterval(agTimer); clearInterval(histTimer)
       offDenied(); amrApi.setReadOnly(false); amrApi.setHub(null) // 26.10.22 다른 계정이 이어 쓰지 않게 초기화
       offAuth(); document.removeEventListener('click', onDocClick); window.removeEventListener('resize', placePop); window.removeEventListener('scroll', placePop, true)
       cancelAnimationFrame(raf)

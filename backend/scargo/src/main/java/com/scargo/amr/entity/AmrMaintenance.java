@@ -11,6 +11,9 @@ import java.time.OffsetDateTime;
 // status: SCHEDULED(예약) → IN_PROGRESS(정비 중) → DONE
 // approved_at / approved_by 는 이번에 추가한 컬럼 (ddl-auto: update 가 자동으로 붙인다)
 //   SCHEDULED 이면서 approved_at 이 비어 있으면 "관리자 승인 대기"
+// 26.10.30 바뀐 컬럼만 UPDATE — 안 하면 상태만 바꿔도 robot_id · spare_robot_id 가 같이 나가서 DB 트리거(trg_amr_maint_spare)가 다시 검사하고,
+//   예비기가 이미 ACTIVE 라서 승인 · 시작 · 완료가 409 로 막힘
+@org.hibernate.annotations.DynamicUpdate
 @Entity
 @Table(name = "amr_maintenance")
 @Getter

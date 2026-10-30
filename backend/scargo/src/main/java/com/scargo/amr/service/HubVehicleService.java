@@ -39,12 +39,14 @@ public class HubVehicleService implements ApplicationRunner {
     private final HubVehicleRepository vehicleRepo;
     private final HubVehicleLogRepository logRepo;
     private final String ocrBase;
+    private final String ocrToken; // gate_api.py 의 X-Gate-Token (환경변수 GATE_API_TOKEN 과 같은 값)
     private final RestTemplate rest;
     private final JdbcTemplate jdbc;
 
     public HubVehicleService(AmrService amr, AmrAccessPolicy access, HubVehicleRepository vehicleRepo, HubVehicleLogRepository logRepo, JdbcTemplate jdbc,
-                             @Value("${amr.ocr.base:http://localhost:8001}") String ocrBase) {
-        this.amr = amr; this.access = access; this.vehicleRepo = vehicleRepo; this.logRepo = logRepo; this.jdbc = jdbc; this.ocrBase = ocrBase;
+                             @Value("${amr.ocr.base:http://localhost:8001}") String ocrBase,
+                             @Value("${amr.ocr.token:${GATE_API_TOKEN:}}") String ocrToken) {
+        this.amr = amr; this.access = access; this.vehicleRepo = vehicleRepo; this.logRepo = logRepo; this.jdbc = jdbc; this.ocrBase = ocrBase; this.ocrToken = ocrToken;
         SimpleClientHttpRequestFactory f = new SimpleClientHttpRequestFactory();
         f.setConnectTimeout(2000);
         f.setReadTimeout(20000); // CPU 인식은 첫 호출에 몇 초 걸릴 수 있음
@@ -100,10 +102,57 @@ public class HubVehicleService implements ApplicationRunner {
     private static String str(Object o) { return o == null ? null : String.valueOf(o); }
     private static Double dbl(Object o) { return o instanceof Number n ? n.doubleValue() : null; }
 
-    static VehicleView view(HubVehicleLog l) {
+    // 소속 업체: 등록 화물차(trucks) → 기업(companies) 에서 먼저 찾고, 없으면 허브 등록 차량(hub_vehicles.carrier)
+    private String companyOf(String plate) {
+        String p = norm(plate);
+        if (p == null || p.isEmpty()) return null;
+        try {
+            List<String> r = jdbc.queryForList("SELECT c.company_name FROM trucks t JOIN companies c ON c.company_id = t.company_id "
+                    + "WHERE REPLACE(t.vehicle_no,' ','') = ? LIMIT 1", String.class, p);
+            if (!r.isEmpty() && r.get(0) != null && !r.get(0).isBlank()) return r.get(0);
+        } catch (Exception ignore) { /* 테이블/컬럼이 다르면 다음 경로 */ }
+        try {
+            List<String> r = jdbc.queryForList("SELECT carrier FROM hub_vehicles WHERE plate_no = ? LIMIT 1", String.class, p);
+            if (!r.isEmpty() && r.get(0) != null && !r.get(0).isBlank()) return r.get(0);
+        } catch (Exception ignore) { }
+        return null;
+    }
+
+    VehicleView view(HubVehicleLog l) {
+        String plate = l.getRecognizedPlate() != null ? l.getRecognizedPlate() : l.getPhotoPlate();
         return new VehicleView(l.getLogId(), l.getDirection(), l.getRecognizedPlate(), l.getPhotoPlate(), l.getVehicleKind(),
                 l.getDecision(), l.getLane(), l.getDockNo(), l.getOcrConfidence(), l.getOcrEngine(), l.getImageUrl(), l.getBoxCount(),
-                l.getDestHub(), l.getCreatedAt(), l.getSealStatus(), l.getSealInput());
+                l.getDestHub(), l.getCreatedAt(), l.getSealStatus(), l.getSealInput(), companyOf(plate));
+    }
+
+    // 26.10.29 구간 관제 연동: 곤지암에 도착했는데 아직 허브 입차 기록이 없는 차량 중 가장 먼저 도착한 번호 (도착 순서 = 입차 순서)
+    //  구간 관제 서버(toll_demo)가 남기는 toll_trip_quotes · toll_trip_positions(route_status = ARRIVED) 를 그대로 읽는다. 없거나 테이블이 없으면 null → 예전처럼 허브가 알아서 받는다
+    private final Map<String, Long> reserved = new java.util.concurrent.ConcurrentHashMap<>(); // 동시에 두 도크가 같은 차를 집지 않게 60초 예약
+
+    private synchronized String nextArrival(Long hub) {
+        long now = System.currentTimeMillis();
+        reserved.values().removeIf(t -> now - t > 60_000);
+        try {
+            List<Map<String, Object>> rows = jdbc.queryForList(
+                    "SELECT q.vehicle_no FROM toll_trip_quotes q JOIN toll_trip_positions p ON p.trip_key = q.trip_key "
+                    + "WHERE p.route_status = 'ARRIVED' AND p.updated_at > now() - interval '3 hours' "
+                    + "AND NOT EXISTS (SELECT 1 FROM hub_vehicle_logs l WHERE l.hub_id = ? AND l.direction = 'ENTRY' "
+                    + "AND REPLACE(COALESCE(l.recognized_plate, l.photo_plate), ' ', '') = REPLACE(q.vehicle_no, ' ', '') AND l.created_at >= p.updated_at - interval '1 minute') "
+                    + "ORDER BY p.updated_at ASC, q.trip_key ASC LIMIT 20", hub);
+            for (Map<String, Object> r : rows) {
+                String p = norm(str(r.get("vehicle_no")));
+                if (p != null && !p.isEmpty() && !reserved.containsKey(p)) { reserved.put(p, now); return p; }
+            }
+        } catch (Exception ignore) { /* 구간 관제 테이블이 없으면 연동 없이 */ }
+        return null;
+    }
+
+    // S카고 에 등록된 화물차(trucks)인지 — 구간 관제 대기열로 들어온 차량은 hub_vehicles 에 없어도 입차를 허용
+    private boolean truckRegistered(String plate) {
+        try {
+            Integer n = jdbc.queryForObject("SELECT COUNT(*) FROM trucks WHERE REPLACE(vehicle_no, ' ', '') = ?", Integer.class, norm(plate));
+            return n != null && n > 0;
+        } catch (Exception e) { return false; }
     }
 
     // 지금 허브 안에 있는 차 (30분 안에 입차 허용 + 아직 출차 기록 없음) → 같은 사진이 겹치지 않게 OCR 에 넘긴다
@@ -122,6 +171,7 @@ public class HubVehicleService implements ApplicationRunner {
         Long hub = amr.hub(hubId, Access.MANAGE);
         String dir = "EXIT".equalsIgnoreCase(req.direction()) ? "EXIT" : "ENTRY";
         String kind = "COURIER".equalsIgnoreCase(req.kind()) ? "COURIER" : "CARGO";
+        String wantPlate = null;
         UriComponentsBuilder b = UriComponentsBuilder.fromUriString(ocrBase + "/hub/scan")
                 .queryParam("direction", dir).queryParam("kind", kind);
         if ("EXIT".equals(dir)) {
@@ -131,11 +181,14 @@ public class HubVehicleService implements ApplicationRunner {
         } else {
             Set<String> in = inside(hub);
             if (!in.isEmpty()) b.queryParam("exclude", String.join(",", in));
+            if ("CARGO".equals(kind)) { wantPlate = nextArrival(hub); if (wantPlate != null) b.queryParam("want", wantPlate); } // 26.10.29 구간 관제에서 먼저 도착한 차
         }
         URI uri = b.encode().build().toUri();
         Map<String, Object> r;
         try {
-            r = rest.postForObject(uri, null, Map.class);
+            org.springframework.http.HttpHeaders h = new org.springframework.http.HttpHeaders();
+            h.set("X-Gate-Token", ocrToken); // OCR 서버가 토큰 없는 호출을 거부함 (환경변수 GATE_API_TOKEN)
+            r = rest.exchange(uri, org.springframework.http.HttpMethod.POST, new org.springframework.http.HttpEntity<>(h), Map.class).getBody();
         } catch (HttpStatusCodeException e) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "OCR 서버 오류 " + e.getStatusCode().value() + ": " + e.getResponseBodyAsString());
         } catch (RestClientException e) {
@@ -154,6 +207,12 @@ public class HubVehicleService implements ApplicationRunner {
         String confTxt = log.getOcrConfidence() == null ? "" : " (" + log.getOcrConfidence() + "%)";
         if ("ENTRY".equals(dir)) {
             Optional<HubVehicle> reg = plate == null ? Optional.empty() : vehicleRepo.findById(plate);
+            // 26.10.29 구간 관제 대기열로 들어온 차량(번호가 지정한 번호와 같음)은 S카고 등록 화물차이면 허브 등록이 없어도 허용
+            boolean viaQueue = wantPlate != null && plate != null && plate.equals(norm(wantPlate));
+            if (reg.isEmpty() && viaQueue && truckRegistered(plate)) {
+                String co = companyOf(plate);
+                reg = Optional.of(new HubVehicle(plate, "CARGO", co == null ? "S카고" : co, "구간 관제 연동 화물차"));
+            }
             log.setVehicleKind(reg.map(HubVehicle::getVehicleKind).orElse("UNKNOWN"));
             // 26.10.20 등록 화물차인데 기준 씰 번호가 없으면 게이트에서 대기 + 긴급 알림
             boolean sealMissing = reg.isPresent() && "CARGO".equals(reg.get().getVehicleKind())
@@ -232,8 +291,38 @@ public class HubVehicleService implements ApplicationRunner {
         return view(logRepo.save(l));
     }
 
+    // 26.10.29 허브 화면 "입차 대기열": 구간 관제 도착 순서 그대로. 최근 입차 완료 2대 + 아직 입차 전인 차(맨 앞이 다음 차례)
+    public List<Map<String, Object>> arrivalQueue(Long hubId) {
+        Long hub = amr.hub(hubId, Access.VIEW);
+        List<Map<String, Object>> out = new ArrayList<>();
+        try {
+            List<Map<String, Object>> rows = jdbc.queryForList(
+                    "SELECT q.vehicle_no, (SELECT COUNT(*) FROM hub_vehicle_logs l WHERE l.hub_id = ? AND l.direction = 'ENTRY' "
+                    + "AND REPLACE(COALESCE(l.recognized_plate, l.photo_plate), ' ', '') = REPLACE(q.vehicle_no, ' ', '') "
+                    + "AND l.created_at >= p.updated_at - interval '1 minute') AS entered "
+                    + "FROM toll_trip_quotes q JOIN toll_trip_positions p ON p.trip_key = q.trip_key "
+                    + "WHERE p.route_status = 'ARRIVED' AND p.updated_at > now() - interval '3 hours' "
+                    + "ORDER BY p.updated_at ASC, q.trip_key ASC LIMIT 40", hub);
+            List<Map<String, Object>> done = new ArrayList<>(), wait = new ArrayList<>();
+            int seq = 0;
+            for (Map<String, Object> r : rows) {
+                seq++;
+                String plate = norm(str(r.get("vehicle_no")));
+                if (plate == null || plate.isEmpty()) continue;
+                boolean in = r.get("entered") instanceof Number n && n.longValue() > 0;
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("seq", seq); m.put("plate", plate); m.put("state", in ? "ENTERED" : "WAIT");
+                (in ? done : wait).add(m);
+            }
+            for (int i = Math.max(0, done.size() - 2); i < done.size(); i++) out.add(done.get(i));
+            if (!wait.isEmpty()) wait.get(0).put("state", "NEXT");
+            for (int i = 0; i < wait.size() && i < 4; i++) out.add(wait.get(i));
+        } catch (Exception ignore) { /* 구간 관제 테이블이 없으면 빈 목록 */ }
+        return out;
+    }
+
     public List<VehicleView> recent(Long hubId, int limit) {
-        return logRepo.findByHubIdOrderByLogIdDesc(amr.hub(hubId, Access.VIEW), PageRequest.of(0, Math.max(1, Math.min(limit, 100)))).stream().map(HubVehicleService::view).toList();
+        return logRepo.findByHubIdOrderByLogIdDesc(amr.hub(hubId, Access.VIEW), PageRequest.of(0, Math.max(1, Math.min(limit, 100)))).stream().map(this::view).toList();
     }
 
     // 등록 차량부는 허브 공통 (조회 권한만 확인)

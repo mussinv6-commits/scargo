@@ -6,7 +6,15 @@
 <title>관제 지도</title>
 <link rel="stylesheet" href="/leaflet.css">
 <style>
-  #map{height:560px;border-radius:10px;background:#e4eaf2;z-index:0}
+  html.embed .info2,html.embed .lgd{display:none}
+  html.embed #err:empty,html.embed #banner:empty{display:none}
+  html.embed .mrow{align-items:stretch!important}
+  html.embed .mrow>section.card{display:flex;flex-direction:column}
+  html.embed #map{flex:1 1 auto;height:auto;min-height:420px}
+  html.embed #evcard{display:none}
+  html.embed .mrow aside{gap:10px!important}
+  html.embed .kv{gap:3px 8px}
+  #map{height:420px;border-radius:10px;background:#e4eaf2;z-index:0}
   .lab{background:#fff;border:1px solid #9aa6c4;border-radius:4px;padding:1px 5px;font-size:11px;font-weight:700;color:#1c2540;box-shadow:none}
   .lab.warn{border-color:#c2570c;color:#8a4b00;background:#fff4e0}
   .veh{width:34px;height:22px;--c:#1d4ed8;--o:#fff;filter:drop-shadow(0 2px 3px rgba(0,0,0,.45));transform-origin:50% 50%}
@@ -19,6 +27,9 @@
   .veh.sel{transform:scale(1.3);filter:drop-shadow(0 0 0 #13203f) drop-shadow(0 0 4px rgba(19,32,63,.9))}
   .vl{display:flex;align-items:center;gap:8px;padding:6px 8px;border-bottom:1px solid #eceff5;font-size:12px;cursor:pointer;width:100%;box-sizing:border-box;border-left:0;border-right:0;border-top:0;background:#fff;font-family:inherit;text-align:left}
   .vl.sel{background:#fff7e0}
+  .vl .plate,.vl .pill{white-space:nowrap;flex:none}
+  .vl .plate{min-width:96px;text-align:center;letter-spacing:0;box-sizing:border-box}
+  .vl .sub{white-space:nowrap}
   .banner{border:1px solid #e5483b;background:#fdf1f0;border-radius:10px;padding:8px 12px;font-size:13px;color:#8a1a10}
   .leaflet-container{font-family:inherit}
   .lab.ref{border-color:#c9cfdf;color:#5b6479;font-weight:600}
@@ -34,22 +45,29 @@
 <div id="nav"></div>
 <main>
   <h1 style="margin:0;font-size:22px">관제 지도 <span class="sub" style="font-weight:400">운행 중 차량 위치 · 경로 이탈 · 검문소 접근 안내</span></h1>
+  <div style="display:flex;flex-wrap:wrap;gap:8px 22px;align-items:center">
   <div id="demo"></div>
   <div class="ctl" style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;font-size:12px">
     <label><input type="checkbox" id="lyCp"> 검문소 표시 <span class="sub">(이탈하면 자동으로 켬)</span></label>
     <label><input type="checkbox" id="lyDet" checked> 대체 경로</label>
+    <label><input type="checkbox" id="lyHw" checked> 고속도로 구간 <span class="sub">(대조된 구간만)</span></label>
+  </div>
   </div>
   <div id="err" class="sub" style="color:#b42318"></div>
   <div id="banner"></div>
-  <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start">
+  <div class="mrow" style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start">
     <section class="card" style="flex:999 1 560px"><div id="map"></div>
-      <div class="sub" style="margin-top:8px">파란 선 = 기본 경로(79.8km) · 주황 점선 = 대체 경로 · 차량 점 색: 파랑 정상 · 주황 주의 · 빨강 확정 · 흰 바탕 빨간 테두리 경로 이탈. 주황 점 = 이탈 시 안내 대상 검문소 · 빨간 점 = 경로 위 검문소. 검문소는 차량이 경로를 이탈하면 자동으로 표시됩니다.</div></section>
+      <div class="sub lgd" style="margin-top:8px">파란 선 = 기본 경로(79.8km) · 주황 점선 = 대체 경로 · 하늘색 굵은 선 = 대조된 고속도로 구간 · 차량(트럭) 색: 파랑 정상 · 주황 주의 · 빨강 확정 · 흰 바탕 빨간 테두리 경로 이탈. 주황 점 = 이탈 시 안내 대상 검문소 · 빨간 점 = 경로 위 검문소. 검문소는 차량이 경로를 이탈하면 자동으로 표시됩니다.</div></section>
     <aside style="flex:1 1 320px;display:flex;flex-direction:column;gap:14px;min-width:0">
-      <div class="card" style="padding:10px 0 0"><h3 style="padding:0 16px">운행 중 차량 <span id="vcount" class="sub" style="font-weight:400"></span></h3><div id="vlist" style="max-height:200px;overflow:auto"></div></div>
+      <div class="card" style="padding:10px 0 0"><h3 style="padding:0 16px">운행 중 차량 <span id="vcount" class="sub" style="font-weight:400"></span></h3><div id="vlist"></div></div>
       <div class="card"><h3>선택 차량 상태</h3><div id="status"></div></div>
-      <div class="card"><h3>이벤트 기록</h3><div id="events" style="max-height:230px;overflow:auto"></div></div>
-      <div class="card"><h3>이탈 감시 기준</h3><div id="rules" class="sub" style="line-height:1.7"></div></div>
+      <div class="card" id="evcard"><h3>이벤트 기록</h3><div id="events"></div></div>
     </aside>
+  </div>
+  <!-- 26.10.29 좌우 높이 균형: 길이가 긴 고정 안내 카드 2개는 지도 · 차량 아래 한 줄로 -->
+  <div class="info2" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px">
+    <div class="card"><h3>경로 주변 요금소 · 고속도로</h3><div id="roadInfo" class="sub" style="line-height:1.7"></div></div>
+    <div class="card"><h3>이탈 감시 기준</h3><div id="rules" class="sub" style="line-height:1.7"></div></div>
   </div>
 </main>
 <script src="/leaflet.js"></script>
@@ -70,6 +88,14 @@ async function init() {
   trailLine = L.polyline([], { color: '#b42318', weight: 7, opacity: .5 }).addTo(map);
   L.circleMarker(D.origin, { radius: 7, color: '#13203f', fillColor: '#fff', fillOpacity: 1, weight: 3 }).addTo(map).bindTooltip('출발 · 인천항 월미로 181', { permanent: true, direction: 'left', className: 'lab', offset: [-6, 0] });
   L.circleMarker(D.destination, { radius: 7, color: '#13203f', fillColor: '#13203f', fillOpacity: 1, weight: 3 }).addTo(map).bindTooltip('곤지암 허브', { permanent: true, direction: 'right', className: 'lab', offset: [8, 0] });
+  (D.osm_gantries || []).slice(0, 1).forEach(g => L.circleMarker([g.lat, g.lng], { radius: 4, color: '#0e7490', fillColor: '#fff', fillOpacity: 1, weight: 2 }).addTo(map).bindTooltip(`무정차 징수 지점 · ${g.km}km`));
+  const hwTot = (D.highways || []).reduce((a, h) => a + h.end_km - h.start_km, 0);
+  const hwNames = [...new Set((D.highways || []).map(h => h.name).filter(n => !n.startsWith('이름 미등록')))];
+  document.getElementById('roadInfo').innerHTML =
+    '<b>경로 위 요금소</b><br>' + D.tolls.map(t => `· ${t.name} (${t.km}km)`).join('<br>') +
+    ((D.osm_gantries || []).length ? `<br>· 무정차 징수 지점 (${D.osm_gantries[0].km}km 부근)` : '') +
+    `<br><b>매칭된 고속도로</b><br>· ${hwNames.join(', ') || '-'} · 약 ${hwTot.toFixed(1)}km` +
+    `<br><span style="color:#667085">표시 기준: 지도(OSM, 2026-10-23)의 고속도로 선형과 15m 이내로 겹치는 구간만 하늘색으로 표시합니다. 6.4~23.2km 구간만 대조되었고 나머지는 미대조이며, 길 안내 검증값은 아닙니다.</span>`;
   D.tolls.forEach(t => L.circleMarker([t.lat, t.lng], { radius: 7, color: '#0b6b3a', fillColor: '#2fa66a', fillOpacity: 1, weight: 2 }).addTo(map)
     .bindTooltip(t.name, { permanent: true, direction: 'bottom', className: 'lab', offset: [0, 6] }));
   layers.cp = L.layerGroup();
@@ -83,10 +109,15 @@ async function init() {
   });
   setCp(false);
   map.fitBounds(L.featureGroup([line, layers.det]).getBounds(), { padding: [30, 30] });
+  layers.hw = L.layerGroup((D.highways || []).map(h => L.polyline(h.coords, { color: '#0e7490', weight: 9, opacity: .35 })
+    .bindTooltip(`${h.name} · ${h.start_km}~${h.end_km}km`, { sticky: true })));
+  layers.hw.addTo(map); layers.hw.eachLayer(l => l.bringToBack());
   document.getElementById('lyCp').onchange = e => { autoCp = false; setCp(e.target.checked); };
+  document.getElementById('lyHw').onchange = e => e.target.checked ? layers.hw.addTo(map) : map.removeLayer(layers.hw);
   document.getElementById('lyDet').onchange = e => e.target.checked ? layers.det.addTo(map) : map.removeLayer(layers.det);
   await pollAll();
   loop();
+  try { new ResizeObserver(() => map.invalidateSize()).observe(document.getElementById('map')); } catch (e) { /* 무시 */ }   // 지도 칸 높이가 바뀌면 지도도 다시 맞춤
 }
 const err = m => { document.getElementById('err').textContent = m || ''; };
 async function act(url) { if (!selKey || busy) return; busy = true; try { await post(url); err(''); } catch (e) { err('오류: ' + e.message); } busy = false; pollAll(); }
@@ -109,9 +140,10 @@ const vcls = (v, lvl) => v.status === 'DEVIATING' ? 'dev' : v.status === 'STOPPE
 function render() {
   const all = Object.values(W), list = all.filter(v => !v.done);           // 곤지암 허브에 도착한 차량은 지도·목록에서 빠지고 차량 관제의 '운행 완료'로 넘어간다
   // 선택 차량: 없거나 사라졌으면 이탈 중 > 최근 차량
-  if ((W[selKey] && W[selKey].done) || (!W[selKey] && !(tripOf(selKey) && tripOf(selKey).position))) {
+  const valid = k => k != null && ((W[k] && !W[k].done) || (tripOf(k) && tripOf(k).position && !isDone(tripOf(k))));
+  if (!valid(selKey)) {                          // 운행 완료·사라진 차량은 선택을 풀고, 운행 중 차량이 없으면 비워 둔다
     const dev = list.find(v => v.status === 'DEVIATING');
-    selKey = dev ? dev.trip_id : list.length ? list[list.length - 1].trip_id : (trips.find(t => t.position) || {}).trip_id || null;
+    selKey = dev ? dev.trip_id : list.length ? list[list.length - 1].trip_id : null;
   }
   // 마커: 시뮬레이션 서버가 아는 차량은 실시간 위치, 서버 재시작 전 차량은 DB 의 마지막 위치(회색)
   const seen = new Set();
@@ -143,13 +175,13 @@ function render() {
 
 function banner(list) {
   const dev = list.filter(v => v.status === 'DEVIATING');
-  document.getElementById('banner').innerHTML = dev.length ? `<div class="banner"><b>⚠ 경로 이탈 ${dev.length}대</b> — ` + dev.map(v => `<a href="#" data-k="${v.trip_id}" class="jump">${esc(v.plate)}</a> (${v.vehicle.km}km 부근${v.alerts.length ? ', ' + esc(v.alerts[0].name) + ' 접근 중' : ''})`).join(' · ') + '</div>' : '';
+  document.getElementById('banner').innerHTML = dev.length ? `<div class="banner"><b>⚠ 경로 이탈 ${dev.length}대</b> — ` + dev.map(v => `<a href="#" data-k="${v.trip_id}" class="jump">${esc(v.plate)}</a> (${v.vehicle.km}km 부근${v.alerts.length ? ', ' + esc(v.alerts[0].name) + ' 접근 중' : ''})`).join(' · ') + ' <span style="margin-left:8px;color:#0b6b3a;font-weight:700">▶ 운행은 멈추지 않고 계속 진행됩니다 · 관제 안내만 표시</span></div>' : '';
   document.querySelectorAll('.jump').forEach(a => a.onclick = e => { e.preventDefault(); selKey = Number(a.dataset.k); render(); });
 }
 function vlist(list) {
   const rank = v => v.status === 'DEVIATING' ? 0 : v.status === 'STOPPED' ? 1 : v.done ? 3 : 2;
   const rows = [...list].sort((a, b) => rank(a) - rank(b));
-  document.getElementById('vcount').textContent = `· ${list.length}대${list.some(v => v.status === 'DEVIATING') ? ` (이탈 ${list.filter(v => v.status === 'DEVIATING').length})` : ''}${Object.values(W).some(v => v.done) ? ` · 운행 완료 ${Object.values(W).filter(v => v.done).length}대는 차량 관제에서 확인` : ''}`;
+  document.getElementById('vcount').textContent = `· ${list.length}대${list.some(v => v.status === 'DEVIATING') ? ` (이탈 ${list.filter(v => v.status === 'DEVIATING').length})` : ''}${Object.values(W).some(v => v.done) ? ` · 완료 ${Object.values(W).filter(v => v.done).length}대` : ''}`;
   document.getElementById('vlist').innerHTML = rows.length ? rows.map(v => {
     const st = v.status === 'DEVIATING' ? ['red', '경로 이탈'] : v.status === 'STOPPED' ? ['red', '정차'] : v.done ? ['gry', '도착'] : ['grn', '주행'];
     return `<button class="vl ${v.trip_id === selKey ? 'sel' : ''}" data-k="${v.trip_id}"><span class="plate" style="font-size:11px;padding:0 6px">${esc(v.plate)}</span>${pill(st[0], st[1])}${lvPill(v.level)}<span class="sub" style="margin-left:auto">${v.vehicle ? v.vehicle.km + 'km' : ''}</span></button>`;
@@ -166,7 +198,7 @@ function tripCard(t) {
     ${rr ? `<dt>대안 경로</dt><dd>${rr.issued ? '✔ 안내 발송됨' : '<button class="sendrr" style="padding:5px 10px;border:1px solid #13203f;border-radius:6px;background:#13203f;color:#fff;font-size:12px;cursor:pointer;font-family:inherit">대안 경로 안내 발송</button>'}</dd>` : ''}
     ${t.pending ? `<dt>관제 권고</dt><dd>${pill('red', `조치 대기 ${t.pending}건`)} <a href="/checkpoint${SUFFIX}">차량 관제에서 발송</a></dd>` : ''}</dl>`;
 }
-const eventsHtml = evs => evs.length ? evs.slice().reverse().map(e => `<div class="ev ${e.level}"><span class="k">${e.km != null ? e.km + 'km' : ''}</span><span><b>${KL[e.kind] || ''}</b> ${esc(e.text)}</span></div>`).join('') : '<div class="empty">기록이 없습니다</div>';
+const eventsHtml = evs => evs.length ? evs.slice().reverse().slice(0,4).map(e => `<div class="ev ${e.level}"><span class="k">${e.km != null ? e.km + 'km' : ''}</span><span><b>${KL[e.kind] || ''}</b> ${esc(e.text)}</span></div>`).join('') : '<div class="empty">기록이 없습니다</div>';
 
 function selected(s) {
   const t = tripOf(selKey);

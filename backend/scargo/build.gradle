@@ -71,3 +71,13 @@ tasks.withType(JavaCompile) {
 }
 
 // 26.10.20: QueryDSL 제거 (LoadingRecord 검색을 JPQL 로 교체) → Q클래스 생성/IDE 소스경로 설정 불필요
+
+// 26.10.30 런처 시작 단축용: 실행 클래스패스를 인자 파일로 저장 → java @build/run.args 로 gradle 없이 바로 기동
+tasks.register('writeRunArgs') {
+    dependsOn 'classes'
+    doLast {
+        // 프로젝트 폴더 경로에 한글이 있으면 java 인자 파일에서 깨지므로 상대 경로로 바꿈 (실행 위치 = backend/scargo)
+        def cp = sourceSets.main.runtimeClasspath.asPath.replace(projectDir.absolutePath + File.separator, '').replace('\\', '\\\\')
+        file("${buildDir}/run.args").text = '-cp "' + cp + '"\n'
+    }
+}

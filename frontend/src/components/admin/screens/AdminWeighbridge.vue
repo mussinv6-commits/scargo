@@ -349,7 +349,7 @@
                   {{ r.isPassed ? '통과' : '과적' }}{{ r.retryCount ? ` (재계량 ${r.retryCount})` : '' }}
                 </span>
               </td>
-              <td class="reason" :title="r.violationReason || ''">{{ r.violationReason || '-' }}</td>
+              <td class="reason is-left" :title="r.violationReason || ''">{{ r.violationReason || '-' }}</td>
               <td>
                 <button v-if="!r.isPassed" type="button" class="wb-mini" :disabled="busy" @click="startReweigh(r)">
                   재계량

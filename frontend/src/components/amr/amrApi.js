@@ -84,11 +84,19 @@ export const amrApi = {
   approve(id, by) { return req('POST', '/api/amr/maintenance/' + id + '/approve', { by }) },
   start(id) { return req('POST', '/api/amr/maintenance/' + id + '/start') },
   done(id) { return req('POST', '/api/amr/maintenance/' + id + '/done') },
+  // 26.10.29 긴급 경보: 허브 관제가 화재 시작·단계·종료를 서버에 알리고, 앱·S Cargo 가 읽어 간다
+  safetyNow() { return req('GET', '/api/amr/safety/alert') },
+  estopNow() { return req('GET', '/api/amr/safety/estop') },
+  estopSet(codes) { return req('POST', '/api/amr/safety/estop', { codes }) },
+  safetyAlert(body) { return req('POST', '/api/amr/safety/alert', body) },
+  safetyEnd() { return req('POST', '/api/amr/safety/alert/end') },
   event(code, level, phase, message) { return req('POST', hp('/api/amr/events'), { code, level, phase, message }) },
   settings() { return req('GET', hp('/api/amr/settings')) },
   saveSettings(rulThresholdHours, chargeAtPct, by) { return req('PUT', hp('/api/amr/settings'), { rulThresholdHours, chargeAtPct, by }) },
   history(code, minutes = 5) { return req('GET', hp('/api/amr/robots/' + encodeURIComponent(code) + '/telemetry?minutes=' + minutes)) },
   maintenanceList(limit = 10) { return req('GET', hp('/api/amr/maintenance?limit=' + limit)) },
+  // 26.10.28 AMR 일일 보고서용 상세: 오늘 건별 운반 내역 · 충전소 이동 기록 (S-Bot 공용 읽기 API)
+  reportDetail(date, to) { return req('GET', '/api/amr/sbot/report-detail' + (date ? '?date=' + encodeURIComponent(date) + (to && to !== date ? '&to=' + encodeURIComponent(to) : '') : ''), null, 10000) }, // 26.10.30 to: 기간 보고(주간·월간·연간) 끝 날짜 // 26.10.29 date=yyyy-MM-dd 로 지난 날 선택
   // 26.10.15 입구 · 출구 번호판 OCR: 서버가 gate_api.py(YOLO + CRNN)를 불러 인식하고 DB로 차종 판정
   //  인식에 몇 초 걸릴 수 있어 따로 기다리고, OCR 서버만 꺼져 있어도 DB 연결 표시는 바꾸지 않는다
   async vehicleScan(body) {
@@ -104,6 +112,7 @@ export const amrApi = {
     } catch (e) { return { error: '서버 연결 실패' } } finally { clearTimeout(t) }
   },
   sealCheck(id, sealNo) { return req('POST', '/api/amr/vehicles/' + id + '/seal-check', { sealNo }, 5000) },
+  queue() { return req('GET', hp('/api/amr/vehicles/queue'), null, 4000) }, // 26.10.29 입차 대기열 (구간 관제 도착순)
   vehicles(limit = 20) { return req('GET', hp('/api/amr/vehicles?limit=' + limit)) },
   // 26.10.15 KPI: 운반 1건 기록 · 오늘 지표
   task(p) {

@@ -12,7 +12,7 @@ import { apiBase } from './base' // fix_1600
 const MENU = [
   { group: '공통 컨트롤타워', items: [
     ['W-02', '통합 대시보드', 'dashboard', { ADMIN: 'P', CONTROL: 'P', HUB_OP: 'D', CENTER_OP: 'D', CARRIER: 'D' }],
-    ['W-09', '예외 알림 센터', 'exceptions', { ADMIN: 'V', CONTROL: 'P', HUB_OP: 'D', CENTER_OP: 'D', CARRIER: 'D' }],
+    ['W-09', '이상 상황 관리', 'exceptions', { ADMIN: 'V', CONTROL: 'P', HUB_OP: 'D', CENTER_OP: 'D', CARRIER: 'D' }],
   ]},
   { group: '항만 → 허브', items: [
     ['W-12', '톨게이트 · 검문소', 'toll', { ADMIN: 'V', CONTROL: 'P' }],
@@ -143,7 +143,7 @@ const SCREENS = {
     <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr));margin-top:12px">
       <div class="panel"><h2>거점 상태 <span class="right">정상 · 주의 · 긴급</span></h2><div class="grid" style="gap:8px">${sites}</div>
         <p class="faint" style="margin:10px 0 0">정상 = 미해결 예외 0건, 30분 이상 지연 0대. 10분 지연은 정상으로 본다.</p></div>
-      <div class="panel"><h2>최근 예외 <a href="#exceptions" class="right">예외 알림 센터 →</a></h2><div class="scroll"><table>
+      <div class="panel"><h2>최근 예외 <a href="#exceptions" class="right">이상 상황 관리 →</a></h2><div class="scroll"><table>
         <tr><th>심각도</th><th>유형</th><th>대상</th><th>시각</th></tr>
         ${MOCK.exceptions.slice(0, 5).map(e => `<tr><td>${tagOf(e.severity === 'CRITICAL' ? 'crit' : 'warn', e.severity === 'CRITICAL' ? '긴급' : '경고')}</td><td>${e.label}</td><td class="mono">${e.target}</td><td class="mono">${e.at}</td></tr>`).join('')}
       </table></div></div>
@@ -201,7 +201,7 @@ const SCREENS = {
     <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr))">
       <div class="panel"><h2><span class="n">①</span>들어올 지선 <span class="right">허브 입고 전 화물은 "해외 배송 중"</span></h2>
         ${C.incoming.map(t => `<div class="lane"><div class="row"><b class="mono">${t.tripId}</b><span style="margin-left:auto">${tagOf(t.status === 'RECEIVED' ? 'ok' : t.status === 'UNLOADED' ? 'warn' : 'mute', t.status)}</span></div><div class="faint">${t.vehicleNo} · 롤테이너 ${t.units} · ${t.eta}</div></div>`).join('')}
-        <div class="note">허브 → 센터 경로는 네트워크 관제(W-03)에서 3D로 보여준다.</div></div>
+        <div class="note">허브 → 센터 경로는 운송망 관제(W-03)에서 3D로 보여준다.</div></div>
       <div class="panel" style="grid-column:span 2;min-width:0"><h2><span class="n">③</span>검수 · 인수 확정 <span class="right">하차 → 식별 → 수량·파손 → 차이 처리 → 인수 확정</span></h2>
         ${C.units.length ? `<div class="scroll"><table><tr><th>롤테이너</th><th>박스(예정)</th><th>스캔</th><th>파손</th><th>오배송</th><th>처리</th></tr>
         ${C.units.map(u => `<tr><td class="mono">${u.unitId}</td><td class="mono">${u.boxes}</td><td class="mono">${u.scanned}</td><td>${u.damaged ? tagOf('warn', u.damaged + '건') : '-'}</td><td>${u.wrongDest ? tagOf('crit', u.wrongDest + '건') : '-'}</td>
@@ -249,7 +249,7 @@ const SCREENS = {
     const list = MOCK.exceptions.filter(e => state.exFilter === 'ALL' || e.severity === state.exFilter || (state.exFilter === 'OPEN' && e.status !== 'RESOLVED'));
     const site = (id) => (MOCK.sites.find(s => s.id === id) || { name: '도로' }).name;
     const next = { OPEN: '담당 지정', IN_PROGRESS: '처리 완료', RESOLVED: '' };
-    return head('W-09', '예외 알림 센터', 'GET /api/web/exceptions · PUT /api/web/exceptions/{id}', `<div class="seg">${[['ALL', '전체'], ['OPEN', '미해결'], ['CRITICAL', '긴급'], ['WARNING', '경고']].map(([k, l]) => `<button class="${state.exFilter === k ? 'on' : ''}" data-filter="${k}">${l}</button>`).join('')}</div>`) + `
+    return head('W-09', '이상 상황 관리', 'GET /api/web/exceptions · PUT /api/web/exceptions/{id}', `<div class="seg">${[['ALL', '전체'], ['OPEN', '미해결'], ['CRITICAL', '긴급'], ['WARNING', '경고']].map(([k, l]) => `<button class="${state.exFilter === k ? 'on' : ''}" data-filter="${k}">${l}</button>`).join('')}</div>`) + `
     <div class="panel"><div class="scroll"><table>
       <tr><th>심각도</th><th>유형 코드</th><th>내용</th><th>거점</th><th>대상</th><th>시각</th><th>상태</th><th>담당</th><th></th></tr>
       ${list.map(e => `<tr><td>${tagOf(e.severity === 'CRITICAL' ? 'crit' : 'warn', e.severity === 'CRITICAL' ? '긴급' : '경고')}</td><td class="mono">${e.type}</td><td>${e.label}</td><td>${site(e.siteId)}</td><td class="mono">${e.target}</td><td class="mono">${e.at}</td>

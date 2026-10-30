@@ -51,7 +51,7 @@ const apiMissing = ref(false)
 const TYPE_LABEL = { IN: '입구', OUT: '출구', BOTH: '출입구' }
 
 const columns = [
-  { key: 'gateId', label: 'ID', align: 'center', width: '70px', type: 'seq' },
+  { key: 'gateId', label: '번호', align: 'center', width: '70px', type: 'seq' },
   { key: 'gateCode', label: '게이트 코드' },
   { key: 'gateName', label: '검문소 명' },
   { key: 'gateType', label: '유형', align: 'center', formatter: (v) => TYPE_LABEL[v] || v || '-' },

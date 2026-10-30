@@ -3,6 +3,7 @@ package com.scargo.controller;
 import com.scargo.dto.GateLogCreateRequest;
 import com.scargo.dto.GateLogResponse;
 import com.scargo.dto.GateLogUpdateRequest;
+import com.scargo.security.GateLogAccessPolicy;
 import com.scargo.service.GateLogService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -15,6 +16,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType; // 26.10.01 병합(태수님)
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile; // 26.10.01 병합(태수님)
 
@@ -26,6 +28,7 @@ import java.time.OffsetDateTime;
 public class GateLogController {
 
     private final GateLogService gateLogService;
+    private final GateLogAccessPolicy accessPolicy; // 역할 + 소속 업체 범위 (관리자: 전체, 업체 담당자: 자기 업체 차량만)
 
     // 26.10.01 병합(태수님 26.09.30): 이미지 업로드 지원을 위해 생성 API를 JSON / multipart 두 가지로 분리
     //   (URL은 POST /api/v1/gate-logs 그대로, Content-Type으로 구분)
@@ -55,56 +58,68 @@ public class GateLogController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    // 2. 게이트 통과 이력 단건 조회
+    // 2. 게이트 통과 이력 단건 조회 (관리자 / 소속 업체 담당자 - 자기 업체 차량만)
     @GetMapping("/{gateLogId}")
-    public ResponseEntity<GateLogResponse> getGateLog(@PathVariable("gateLogId") Long gateLogId) {
-        GateLogResponse response = gateLogService.getGateLog(gateLogId);
+    @PreAuthorize("hasAnyRole('ADMIN', 'CORPORATE_APPROVED')")
+    public ResponseEntity<GateLogResponse> getGateLog(
+            @PathVariable("gateLogId") Long gateLogId,
+            Authentication authentication) {
+        GateLogResponse response = gateLogService.getGateLog(gateLogId, accessPolicy.scopeOf(authentication));
         return ResponseEntity.ok(response);
     }
 
-    // 3. 전체 게이트 통과 이력 조회 
+    // 3. 전체 게이트 통과 이력 조회 (관리자: 전체 / 업체 담당자: 자기 업체 차량만)
     @GetMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'CORPORATE_APPROVED')")
     public ResponseEntity<Page<GateLogResponse>> getAllGateLogs(
-            @PageableDefault(size = 10, sort = "passAt", direction = Sort.Direction.DESC) Pageable pageable) {
-        Page<GateLogResponse> response = gateLogService.getAllGateLogs(pageable);
+            @PageableDefault(size = 10, sort = "passAt", direction = Sort.Direction.DESC) Pageable pageable,
+            Authentication authentication) {
+        Page<GateLogResponse> response = gateLogService.getAllGateLogs(pageable, accessPolicy.scopeOf(authentication));
         return ResponseEntity.ok(response);
     }
 
     // 4. 차량 번호 기반 이력 검색
     @GetMapping("/search/vehicle")
+    @PreAuthorize("hasAnyRole('ADMIN', 'CORPORATE_APPROVED')")
     public ResponseEntity<Page<GateLogResponse>> getGateLogsByVehicleNo(
             @RequestParam("actualVehicleNo") String actualVehicleNo,
-            @PageableDefault(size = 10, sort = "passAt", direction = Sort.Direction.DESC) Pageable pageable) {
-        Page<GateLogResponse> response = gateLogService.getGateLogsByActualVehicleNo(actualVehicleNo, pageable);
+            @PageableDefault(size = 10, sort = "passAt", direction = Sort.Direction.DESC) Pageable pageable,
+            Authentication authentication) {
+        Page<GateLogResponse> response = gateLogService.getGateLogsByActualVehicleNo(actualVehicleNo, pageable, accessPolicy.scopeOf(authentication));
         return ResponseEntity.ok(response);
     }
 
     // 5. 게이트 타입(IN/OUT/BOTH)별 이력 검색
     @GetMapping("/search/type")
+    @PreAuthorize("hasAnyRole('ADMIN', 'CORPORATE_APPROVED')")
     public ResponseEntity<Page<GateLogResponse>> getGateLogsByGateType(
             @RequestParam("gateType") String gateType,
-            @PageableDefault(size = 10, sort = "passAt", direction = Sort.Direction.DESC) Pageable pageable) {
-        Page<GateLogResponse> response = gateLogService.getGateLogsByGateType(gateType, pageable);
+            @PageableDefault(size = 10, sort = "passAt", direction = Sort.Direction.DESC) Pageable pageable,
+            Authentication authentication) {
+        Page<GateLogResponse> response = gateLogService.getGateLogsByGateType(gateType, pageable, accessPolicy.scopeOf(authentication));
         return ResponseEntity.ok(response);
     }
 
     // 6. 기간별 이력 검색
     @GetMapping("/search/period")
+    @PreAuthorize("hasAnyRole('ADMIN', 'CORPORATE_APPROVED')")
     public ResponseEntity<Page<GateLogResponse>> getGateLogsBetween(
             @RequestParam("start") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime start,
             @RequestParam("end") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime end,
-            @PageableDefault(size = 10, sort = "passAt", direction = Sort.Direction.DESC) Pageable pageable) {
-        Page<GateLogResponse> response = gateLogService.getGateLogsBetween(start, end, pageable);
+            @PageableDefault(size = 10, sort = "passAt", direction = Sort.Direction.DESC) Pageable pageable,
+            Authentication authentication) {
+        Page<GateLogResponse> response = gateLogService.getGateLogsBetween(start, end, pageable, accessPolicy.scopeOf(authentication));
         return ResponseEntity.ok(response);
     }
 
-    // 7. 게이트 통과 이력 수동 수정 (관리자 권한 필요)
+    // 7. 게이트 통과 이력 수동 수정 (관리자: 전체 / 업체 담당자: 자기 업체 차량의 이력만, 차량 번호도 자기 업체 차량으로만)
     @PatchMapping("/{gateLogId}")
     @PreAuthorize("hasAnyRole('ADMIN', 'CORPORATE_APPROVED')") // 26.09.30 병합: 사업자 허용(백엔드.zip)
     public ResponseEntity<GateLogResponse> updateGateLog(
             @PathVariable("gateLogId") Long gateLogId,
-            @Valid @RequestBody GateLogUpdateRequest request) { // ★ @Valid 어노테이션 추가
-        GateLogResponse response = gateLogService.updateGateLog(gateLogId, request);
+            @Valid @RequestBody GateLogUpdateRequest request, // ★ @Valid 어노테이션 추가
+            Authentication authentication) {
+        GateLogResponse response = gateLogService.updateGateLog(gateLogId, request, accessPolicy.scopeOf(authentication));
         return ResponseEntity.ok(response);
     }
 

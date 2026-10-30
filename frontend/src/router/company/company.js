@@ -24,6 +24,7 @@ export default [
       { path: "drivers", name: "company-drivers", component: CompanyDrivers },
       { path: "container-locations", name: "company-container-locations", component: CompanyContainerLocations },
       { path: "inspections", name: "company-inspections", component: CompanyInspections },
+      { path: "handovers", name: "company-handovers", component: () => import("@/components/admin/screens/AdminHandovers.vue") }, // 26.10.29 인수 내역 · 인수증 (자기 회사)
       { path: "gate-reservations", name: "company-gate-reservations", component: CompanyGateReservations }, // 26.10.24
     ],
   },

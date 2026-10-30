@@ -57,21 +57,62 @@ export const viewDateRelativeLabel = computed(() => {
   return `${diff}일전`
 })
 
+/** 26.10.30 보고 구분: 일간 · 주간(월~일) · 월간 · 연간. 기준 날짜가 속한 기간을 본다 */
+export const PERIODS = [
+  { key: 'day', label: '일간' },
+  { key: 'week', label: '주간' },
+  { key: 'month', label: '월간' },
+  { key: 'year', label: '연간' },
+]
+export const viewPeriod = ref('day')
+
+/** 선택 기간의 [시작, 끝(포함)] — 개설일 이전 · 오늘 이후는 잘라낸다 */
+export const viewRange = computed(() => {
+  const d = startOfDay(viewDate.value)
+  let s = new Date(d), e = new Date(d)
+  if (viewPeriod.value === 'week') {
+    const off = (d.getDay() + 6) % 7 // 월요일 시작
+    s = new Date(d.getFullYear(), d.getMonth(), d.getDate() - off)
+    e = new Date(s.getFullYear(), s.getMonth(), s.getDate() + 6)
+  } else if (viewPeriod.value === 'month') {
+    s = new Date(d.getFullYear(), d.getMonth(), 1)
+    e = new Date(d.getFullYear(), d.getMonth() + 1, 0)
+  } else if (viewPeriod.value === 'year') {
+    s = new Date(d.getFullYear(), 0, 1)
+    e = new Date(d.getFullYear(), 11, 31)
+  }
+  const today = startOfDay(new Date())
+  if (s < SITE_OPEN) s = new Date(SITE_OPEN)
+  if (e > today) e = today
+  if (e < s) e = new Date(s)
+  return { start: s, end: e, from: toDateInput(s), to: toDateInput(e) }
+})
+
+export const viewPeriodLabel = computed(() => PERIODS.find((p) => p.key === viewPeriod.value)?.label || '일간')
+
+/** 기간 표시: 일간은 날짜 하나, 그 외는 '시작 ~ 끝' */
+export const viewRangeLabel = computed(() => {
+  const { from, to } = viewRange.value
+  return viewPeriod.value === 'day' || from === to ? from : `${from} ~ ${to}`
+})
+
 export function isSameViewDay(value) {
   if (!value) return false
   const x = toDate(value)
   if (Number.isNaN(x.getTime())) return false
-  const t = viewDate.value
-  return x.getFullYear() === t.getFullYear() && x.getMonth() === t.getMonth() && x.getDate() === t.getDate()
+  const t = startOfDay(x).getTime()
+  const { start, end } = viewRange.value
+  return t >= start.getTime() && t <= end.getTime()
 }
 
-/** 오늘은 전체 목록, 과거 날짜를 고르면 그 날짜에 해당하는 행만 */
+/** 오늘(일간)은 전체 목록, 그 외에는 선택 기간에 해당하는 행만 */
 export function rowsForViewDate(list, field) {
   const rows = list || []
-  if (isViewToday.value) return rows
+  if (viewPeriod.value === 'day' && isViewToday.value) return rows
   return rows.filter((row) => isSameViewDay(row?.[field]))
 }
 
 export function resetViewDateToday() {
   viewDate.value = startOfDay(new Date())
+  viewPeriod.value = 'day'
 }

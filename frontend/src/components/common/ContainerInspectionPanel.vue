@@ -44,8 +44,8 @@
           <tbody>
             <tr v-if="loading"><td colspan="7" class="cip-empty">불러오는 중...</td></tr>
             <tr v-else-if="!rows.length"><td colspan="7" class="cip-empty">점검 기록이 없습니다.</td></tr>
-            <tr v-for="r in rows" :key="r.inspectionId" :class="{ sel: selected?.inspectionId === r.inspectionId }" @click="select(r)">
-              <td>#{{ r.inspectionId }}</td>
+            <tr v-for="(r, i) in pg.rows" :key="r.inspectionId" :class="{ sel: selected?.inspectionId === r.inspectionId }" @click="select(r)">
+              <td>{{ pg.no(i) }}</td><!-- 26.10.28 QA#4 번호 1부터 -->
               <td>{{ r.containerNo || '-' }}</td>
               <td>{{ r.orderNo || '-' }}</td>
               <td><span class="cip-badge" :class="'r-' + r.recordStatus">{{ RECORD_LABEL[r.recordStatus] }}</span></td>
@@ -56,6 +56,7 @@
           </tbody>
         </table>
       </div>
+      <AdminPager v-model="pg.page" :page-count="pg.pageCount" /><!-- 26.10.28 QA#4 10건 페이징 -->
     </section>
 
     <section v-if="selected" class="cip-card">
@@ -104,6 +105,8 @@
 import { onMounted, reactive, ref, watch } from 'vue'
 import InspectionItemsInput from '@/components/common/InspectionItemsInput.vue'
 import InspectionPhotos from '@/components/common/InspectionPhotos.vue'
+import AdminPager from '@/components/admin/AdminPager.vue'
+import { usePaged } from '@/utils/usePaged.js'
 import { exportExcel } from '@/utils/exportExcel.js'
 import {
   ACTION_LABEL, OVERALL_LABEL, RECORD_LABEL, formatDateTime,
@@ -119,6 +122,7 @@ const props = defineProps({
 })
 
 const rows = ref([])
+const pg = usePaged(rows, 10)
 const loading = ref(false)
 const busy = ref(false)
 const message = ref('')

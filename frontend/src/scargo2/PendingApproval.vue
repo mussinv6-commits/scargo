@@ -4,7 +4,7 @@
     <div class="ico"><i class="bi bi-hourglass-split"></i></div>
     <h2>운송사 승인 대기 중입니다</h2>
     <p><b>{{ user?.userName }}</b> 계정의 운송사 가입 신청을 관리자가 검토하고 있습니다.<br>승인이 끝나면 통합 대시보드·운송오더·지선 배차 등 운송사 메뉴를 이용할 수 있습니다.</p>
-    <table><tr><th>아이디</th><td>{{ user?.userId }}</td></tr><tr><th>상태</th><td><span class="tag">승인 대기</span></td></tr></table>
+    <table><tbody><tr><th>아이디</th><td>{{ user?.userId }}</td></tr><tr><th>상태</th><td><span class="tag">승인 대기</span></td></tr></tbody></table>
     <div class="note">승인 결과는 알림(종 모양)으로 안내됩니다. 문의: 관리자 또는 고객센터</div>
     <div class="btns"><RouterLink to="/scargo" class="b1">홈으로</RouterLink><RouterLink to="/notice" class="b2">공지사항</RouterLink></div>
   </div></div>

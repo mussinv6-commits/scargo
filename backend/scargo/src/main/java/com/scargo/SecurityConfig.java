@@ -192,6 +192,9 @@ public class SecurityConfig {
 
                 // 26.10.21 v9: 승인 전(PENDING/REJECTED) 기사는 승인 상태 조회만 가능
                 .requestMatchers("/api/app/approval", "/api/app/auth/**").authenticated()
+                // fix_1027: 승인 대기·반려 기사도 본인 알림(가입 승인/반려 결과)은 볼 수 있게 (본인 account_id 알림만 반환)
+                .requestMatchers(HttpMethod.GET, "/api/app/notifications").authenticated()
+                .requestMatchers(HttpMethod.POST, "/api/app/notifications/read-all").authenticated()
                 .requestMatchers("/api/app/**", "/api/web/**").access((au, ctx) -> new org.springframework.security.authorization.AuthorizationDecision(
                         au.get().isAuthenticated() && au.get().getAuthorities().stream().noneMatch(g -> "ROLE_PENDING_DRIVER".equals(g.getAuthority()) || "ROLE_ANONYMOUS".equals(g.getAuthority()))
                         && au.get().getAuthorities().stream().anyMatch(g -> g.getAuthority().startsWith("ROLE_"))))

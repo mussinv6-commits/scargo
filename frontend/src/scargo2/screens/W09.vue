@@ -1,6 +1,6 @@
 <template>
-<section class="scr" id="W-09"><div class="card"><h3>예외 알림 센터</h3><table :style="pg.reset"><tr><th>등급</th><th>유형</th><th>발견</th><th>거점 · 대상</th><th>담당</th><th>발생</th><th>상태</th><th></th></tr><tbody id="exfull">
-<tr v-for="e in pg.rows" :key="e.exceptionId"><td><span :class="'b ' + lvc(e.severity)">{{ lv[e.severity] || e.severity }}</span></td><td><span :class="'b gray' + (String(EXL[e.type] || e.type).includes(' ') ? ' wrap2' : '')">{{ EXL[e.type] || e.type }}</span></td><td>{{ SRC[e.sourceTable] || e.sourceTable || '—' }}</td><td>{{ e.centerName || '' }} {{ e.message }}</td><td>{{ e.assignee || '—' }}</td><td>{{ md(e.occurredAt) }}</td><td><span class="b gray">{{ stl(e.status) }}</span></td><td><button v-if="e.status !== 'RESOLVED' && role !== 'ADMIN' && role !== 'carrier'" class="btn o" @click="done(e)">처리 완료</button></td></tr>
+<section class="scr" id="W-09"><div class="card"><h3>이상 상황 관리</h3><table :style="pg.reset"><thead><tr><th>등급</th><th>유형</th><th>발견</th><th>거점 · 대상</th><th>담당</th><th>발생</th><th>상태</th><th></th></tr></thead><tbody id="exfull">
+<tr v-for="e in pg.rows" :key="e.exceptionId"><td><span :class="'b ' + lvc(e.severity)">{{ lv[e.severity] || e.severity }}</span></td><td><span :class="'b gray' + (String(EXL[e.type] || e.type).includes(' ') ? ' wrap2' : '')">{{ EXL[e.type] || e.type }}</span></td><td>{{ SRC[e.sourceTable] || e.sourceTable || '—' }}</td><td class="l">{{ e.centerName || '' }} {{ e.message }}</td><td>{{ who(e) }}</td><td>{{ md(e.occurredAt) }}</td><td><span class="b gray">{{ stl(e.status) }}</span></td><td><button v-if="e.status !== 'RESOLVED' && role !== 'ADMIN' && role !== 'carrier'" class="btn o" @click="done(e)">처리 완료</button></td></tr>
 <tr v-if="!ex.length"><td colspan="8" class="meta">예외가 없습니다.</td></tr></tbody></table><Pager :p="pg"/></div>
 <div v-if="cur" class="mdl-bg" @click.self="close"><div class="mdl"><div class="mh">예외 처리 완료</div><div class="mb">
 <div><span :class="'b ' + lvc(cur.severity)">{{ lv[cur.severity] || cur.severity }}</span> <b>{{ EXL[cur.type] || cur.type }}</b></div>
@@ -16,6 +16,9 @@ import { usePage } from '../comp/pager.js'
 import { ref, reactive, computed, watch } from 'vue'
 import { get, req, hm, md, lv, lvc, EXL, SRC, stl } from '../api.js'
 import { authState } from '@/auth/authState.js'
+import { staffLabel } from '@/utils/staffLabel.js'
+// 26.10.29 QA: 담당은 실제 권한명으로 (예: 곤지암허브 관제사)
+const who = (e) => (e.assignee ? staffLabel({ role: e.assigneeRole, userName: e.assignee, hubName: e.assigneeHub, centerName: e.assigneeCenter }) : '—')
 const props = defineProps(['tick', 'role'])
 // 예외 알림 센터: GET /api/web/exceptions/view (권한별 범위). 처리 PUT /api/web/exceptions/{id} (OPEN→IN_PROGRESS→RESOLVED, 처리 내용 필수). ADMIN·운송사는 조회만
 const ex = ref([])

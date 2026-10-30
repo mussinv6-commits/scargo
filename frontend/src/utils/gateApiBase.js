@@ -3,3 +3,5 @@
 // gate_api.py가 uvicorn으로 localhost:8001에서 떠 있어야 이 주소로 접속됨.
 // (실행법: gate_api.py 상단 docstring 참고 - uvicorn gate_api:app --port 8001)
 export const GATE_SCAN_API_BASE = 'http://localhost:8001'
+// /scan 호출용 인증 헤더 - OCR 서버(gate_api.py)의 GATE_API_TOKEN 과 같은 값을 frontend/.env.local 의 VITE_GATE_API_TOKEN 에 넣는다
+export const GATE_SCAN_HEADERS = { 'X-Gate-Token': import.meta.env.VITE_GATE_API_TOKEN || '' }

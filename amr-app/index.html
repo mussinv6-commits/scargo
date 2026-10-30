@@ -66,24 +66,43 @@
       <section class="page full3d" data-page="3d">
         <div class="slot3d" id="full-slot"></div>
         <div class="ov-top">
-          <div class="row-sb"><div><small>LIVE 3D TWIN</small><h2>3D 뷰</h2></div><span class="live"><i></i>LIVE</span></div>
-          <div class="chips" id="v-chips">
-            <button type="button" data-v="auto">자동 연출</button>
-            <button type="button" data-v="overview">전체 보기</button>
-            <button type="button" data-v="follow" class="on">선택 AMR 따라가기</button>
-            <button type="button" data-v="cold">냉장 창고</button>
+          <div class="hud">
+            <div class="gl hud-clk"><i class="dot"></i><b id="hd-clk">--:--</b><em>LIVE</em></div>
+            <div class="gl hud-st"><span>가동</span><b id="hd-run">-</b><span>/ <i id="hd-all">-</i></span></div>
+            <div class="gl hud-al" id="hd-al"><span>경보</span><b id="hd-aln">0</b></div>
+            <span class="sp"></span>
+            <button type="button" class="gl rb" id="v-cam" aria-label="시점"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l1.6-2.4h6.8L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.2" r="3.4"/></svg></button>
+            <button type="button" class="gl rb" id="v-gear" aria-label="설정"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v2.6M12 18.6v2.6M2.8 12h2.6M18.6 12h2.6M5.5 5.5l1.8 1.8M16.7 16.7l1.8 1.8M18.5 5.5l-1.8 1.8M7.3 16.7l-1.8 1.8"/></svg></button>
           </div>
-          <div class="chips pre" id="v-presets">
+          <div class="fire-card" id="hd-fire" hidden><i>!</i><div><b id="hd-fire-t">-</b><small id="hd-fire-s">-</small></div><em id="hd-fire-tm">00:00</em></div>
+          <div class="pop" id="pop-cam" hidden>
+            <h4>시점</h4>
+            <div class="plist" id="v-presets">
             <button type="button" data-p="overview">부지 전체</button><button type="button" data-p="gateIn">입구 OCR</button><button type="button" data-p="dockIn">입고 도크</button><button type="button" data-p="rack">랙</button><button type="button" data-p="dockOut">출고 도크</button><button type="button" data-p="gateOut">출구 OCR</button><button type="button" data-p="station">충전 · 정비</button><button type="button" id="v-autogate" class="ag">게이트 자동</button>
+            </div>
+            <button type="button" class="plist-b" id="v-cold-go">냉장 창고</button>
           </div>
-        </div>
-        <div class="ov-side">
-          <button type="button" id="v-2d" title="2D / 3D 전환">2D</button>
+          <div class="pop wide" id="pop-gear" hidden>
+            <h4>화면</h4>
+            <div class="ov-side">
+            <button type="button" id="v-2d" title="2D / 3D 전환">2D</button>
           <button type="button" data-theme-toggle title="다크 / 라이트">라이트 모드</button>
           <button type="button" id="v-quality" title="화질">저사양</button>
           <button type="button" id="v-speed" title="배속">1x</button>
           <button type="button" id="v-pause" title="일시정지">Ⅱ</button>
+            </div>
+            <h4>훈련 · 비상</h4>
+            <div id="v-drill"></div>
+          </div>
         </div>
+        <div class="dock">
+          <button type="button" class="estop" id="v-estop" aria-label="비상 정지 (꾹 눌러서)"><svg class="ring" viewBox="0 0 100 100"><circle cx="50" cy="50" r="46"/></svg><span id="es-t">비상<br>정지</span><small id="es-s">꾹 눌러서</small></button>
+          <div class="seg3" id="v-chips">
+            <button type="button" data-v="auto">자동 연출</button>
+            <button type="button" data-v="overview">전체 보기</button>
+            <button type="button" data-v="follow" class="on">따라가기</button>
+            <button type="button" data-v="cold" hidden>냉장 창고</button>
+          </div>
         <div class="sheet" id="v-sheet">
           <div class="gr"></div>
           <div class="row-sb">
@@ -96,6 +115,7 @@
             <div class="met"><b id="s-batt">-</b><span>배터리 %</span></div>
           </div>
           <div class="pick" id="s-pick"></div>
+        </div>
         </div>
       </section>
 

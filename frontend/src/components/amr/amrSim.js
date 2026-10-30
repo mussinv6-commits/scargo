@@ -22,6 +22,11 @@ export const FL_HOME = { x: 660, y: STATION_Y, kind: 'station' }
 export const LEVEL_H = [1.75, 3.45, 5.15]
 // 냉장 · 냉동 창고: 0번 줄 랙을 단열 패널 방으로 감싼다 (북쪽 통로 쪽 한 면만 사용)
 export const COLD_ROW = 0
+// 26.10.28 화재 대응: 화재 구역 번호(0~3 = 랙 줄, 4 = 충전소) · 대피 대기 위치(정비 스테이션 동쪽, 비상구·소방차 진입로와 떨어진 곳)
+export const FIRE_REFUGE = [0, 1, 2, 3, 4, 5].map((i) => ({ x: 722 + (i % 3) * 48, y: STATION_Y + (i < 3 ? -22 : 22), kind: 'station' }))
+// 배터리 격리 구역: 방화벽으로 막은 AMR 전용 공간 (건물 남동쪽 구석)
+export const QUAR = { x: 900, y: 612, kind: 'station' }
+export const FIRE_ZONE_RECT = (z) => (z === 4 ? { x0: 230, x1: 490, y0: 560, y1: 640 } : { x0: 222, x1: 688, y0: ROWS[z][0] - 8, y1: ROWS[z][1] + 8 })
 export const COLD_ROOM = { x0: 222, x1: 688, y0: 32, y1: 120, doorY: 62, doors: [222, 688] }
 const VMAX = 84, ACC = 150, VMAX_FL = 56
 
@@ -77,6 +82,10 @@ export const zoneRow = (c) => (c.handle === '냉장' ? COLD_ROW : c.hub + 1)
 export const tons = (a) => (a.cumKg / 1000).toFixed(2)
 
 export function status(a) {
+  if (a.estop) return ['crit', '비상 정지']
+  if (a.hot >= 3) return ['crit', '배터리 화재']
+  if (a.hot === 2) return ['crit', '격리 이동']
+  if (a.hot === 1) return ['warn', '온도 이상']
   if (a.state === 'maint') return ['crit', '정비 중']
   if (a.maintFlag) return ['crit', '정비 필요']
   if (a.vib > 2.6 && a.deg > 0.5) return ['warn', '주의']
@@ -156,6 +165,9 @@ export function createSim(hooks = {}) {
       v: 0, blocked: 0, dirx: 0, diry: -1, pktAcc: 0.4, cumKg: 5300, vib: 1.1, temp: 41, batt: 82, health: 97, hist: [], maintFlag: false, release: false, deg: 0, ph: 1,
       forkH: 0, reach: 0, fw: null, fx: 0, fy: 0,
     })
+    S.fire = { on: false, zone: -1, t: 0, stage: 0, evac: 0, total: 0, label: '', clearedAt: 0 }
+    S.bfire = null
+    S.estop = false; S.amrs.forEach((a) => { a.estop = false })
     S.inter = {}; INTER_NODES.forEach((n) => (S.inter[n.key] = { owner: 0, waiters: 0 }))
     S.istats = { n: 0, total: 0, max: 0 }
     S.cfg = S.cfg || { rulAt: 24, chargeAt: 30, chargeTo: 90 }   // 관리자 운영 기준 (앱 · 웹에서 바꾸면 DB로 공유)
@@ -209,17 +221,27 @@ export function createSim(hooks = {}) {
     return null
   }
   function assign(a) {
+    if (S.bfire && S.bfire.a === a) return null // 배터리 이상 장비는 새 작업을 받지 않는다
+    if (S.fire.on) return null // 화재 중: 새 작업을 주지 않는다 (들고 있던 팔레트만 내려놓고 철수)
     const full = slotsWhere((v) => v.st === 1).length / slotsWhere((v) => v.st >= 0).length
     let preferIn = S.taskFlip++ % 2 === 0
     if (full > 0.7) preferIn = false
     if (full < 0.25) preferIn = true
     return preferIn ? tryIn(a) || tryOut(a) : tryOut(a) || tryIn(a)
   }
+  function releaseTask(a) {
+    const t = a.task; if (!t) return
+    if (t.type === 'out' && t.slot) { const sl = slotAt(t.slot); if (sl && sl.st === 3) sl.st = sl.box ? 1 : 0 }
+    if (t.type === 'in' && t.slot) { const sl = slotAt(t.slot); if (sl && sl.st === 2) sl.st = 0; if (t.box) t.box.res = false }
+    if (t.dock && t.dock.res > 0) t.dock.res--
+  }
   function dropBrokenTask(a) {
     const t = a.task
     if (t) {
       if (t.type === 'out' && t.slot) { const sl = slotAt(t.slot); if (sl && sl.st === 3) sl.st = sl.box ? 1 : 0 }
       if (t.dock && t.dock.res > 0) t.dock.res--
+      // 26.10.29 입고 작업을 중간에 취소하면 잡아 둔 랙 칸(st 2)과 화물 예약을 풀어 준다 (안 풀면 칸·화물이 영영 잠겨 작업이 멈춘다)
+      if (t.type === 'in' && !a.box) { const sl = t.slot && slotAt(t.slot); if (sl && sl.st === 2) sl.st = 0; if (t.box) t.box.res = false }
     }
     a.task = null; a.box = a.box || null
     afterTask(a)
@@ -283,7 +305,7 @@ export function createSim(hooks = {}) {
       addLog((r.plate ? '미등록 차량 ' + fmtPlate(r.plate) : '번호판 판독 불가') + ' · ' + where + ' 진입 차단', 'crit')
       return
     }
-    d.ocr = { st: 'ok', plate: r.plate, photo: r.photoPlate, conf: r.confidence, kind: r.kind, exit: null }
+    d.ocr = { st: 'ok', plate: r.plate, photo: r.photoPlate, conf: r.confidence, kind: r.kind, company: r.company || '', exit: null }
     addLog('입차 OCR ' + fmtPlate(r.plate) + (r.confidence != null ? ' (' + r.confidence + '%)' : '') + ' · ' + (r.kind === 'COURIER' ? '택배차' : '화물차') + ' → ' + where, '')
   }
 
@@ -291,7 +313,7 @@ export function createSim(hooks = {}) {
     S.inDocks.forEach((d, k) => {
       if (d.state === 'docked' && d.cargo.length === 0) d.state = 'leaving' // 화물차는 입차 때만 인식 (출차 OCR 은 택배차)
       else if (d.state === 'leaving') { d.off += dt / 2.2; if (d.off >= 1) { d.off = 1; d.state = 'empty'; d.timer = 1.5 + rnd() * 2.5 } }
-      else if (d.state === 'empty') { d.timer -= dt; if (d.timer <= 0) { d.state = 'arriving'; fillInTruck(d, k, 3 + Math.floor(rnd() * 2)); gateEntry(d, 'in', k, 'CARGO') } }
+      else if (d.state === 'empty') { d.timer -= dt; if (d.timer <= 0 && !S.fire.on) { d.state = 'arriving'; fillInTruck(d, k, 3 + Math.floor(rnd() * 2)); gateEntry(d, 'in', k, 'CARGO') } }
       else if (d.state === 'arriving') { d.off -= dt / 2.2; gateHold(d, dt, 'in', k); if (d.off <= 0) { d.off = 0; d.state = 'docked' } }
     })
     S.outDocks.forEach((d, k) => {
@@ -303,7 +325,7 @@ export function createSim(hooks = {}) {
         S.hubSent[d.hub] += d.boxes.length
         addLog('D' + (d.hub + 4) + ' ' + HUBS[d.hub].name + '행 택배차 출발 · ' + d.boxes.length + '건 ' + kg + 'kg', 'hub')
       } else if (d.state === 'leaving') { d.off += dt / 2.2; if (d.off >= 1) { d.off = 1; d.state = 'empty'; d.timer = 1.2 + rnd() * 2 } }
-      else if (d.state === 'empty') { d.timer -= dt; if (d.timer <= 0) { d.state = 'arriving'; d.boxes = []; gateEntry(d, 'out', k, 'COURIER') } }
+      else if (d.state === 'empty') { d.timer -= dt; if (d.timer <= 0 && !S.fire.on) { d.state = 'arriving'; d.boxes = []; gateEntry(d, 'out', k, 'COURIER') } }
       else if (d.state === 'arriving') { d.off -= dt / 2.2; gateHold(d, dt, 'out', k); if (d.off <= 0) { d.off = 0; d.state = 'docked' } }
     })
   }
@@ -414,6 +436,8 @@ export function createSim(hooks = {}) {
   }
   function arrive(a) {
     a.cur = a.dest; a.v = 0
+    // 방어: 이동 중 작업이 취소(비상 정지·인계·화재 해제 등)돼 task 가 없으면 오류 대신 대기로 전환
+    if (!a.task && (a.state === 'toPick' || a.state === 'toDrop')) { a.state = 'idle'; a.wait = 0.6; return }
     if (a.state === 'toPick') { a.state = 'load'; a.timer = a.task.type === 'in' ? 1.4 : 0.9 }
     else if (a.state === 'toDrop') { a.state = 'unload'; a.timer = 0.9 }
     else if (a.state === 'toMaint') { a.state = 'maint'; a.timer = 7; setPhase(4); addLog(a.name + ' 정비 시작 · 구동모터 베어링 교체', 'crit'); onEvent('maint', { code: a.name, eventType: 'START', vibration: a.vib, note: '구동모터 베어링 교체' }) }
@@ -441,6 +465,7 @@ export function createSim(hooks = {}) {
     return null
   }
   function flStart(a) {
+    if (S.fire.on) { if (a.cur !== a.home) goTo(a, a.home, 'toHome'); return false }
     const t = flAssign(a)
     if (!t) { if (a.cur !== a.home) goTo(a, a.home, 'toHome'); return false }
     const sl = slotAt(t.slot), u = upperAt(t.slot.r, t.slot.s, t.slot.i, t.lv)
@@ -512,8 +537,110 @@ export function createSim(hooks = {}) {
     }
     a.fwPhase = a.fw ? a.fw.list[a.fw.idx] && a.fw.list[a.fw.idx].k : null
   }
+  // ── 화재 대응 ──
+  const fireZoneName = (z) => (z === 4 ? '충전소' : ZONES[z].tag + ' ' + ZONES[z].name + ' 랙')
+  function startEvac(a) {
+    const i = Math.max(0, S.amrs.indexOf(a)); const wasCharging = a.state === 'charge'; goTo(a, FIRE_REFUGE[i % FIRE_REFUGE.length], 'evac')
+    addLog(a.name + ' 화재 경보 → 대피 구역 이동' + (wasCharging ? ' (충전 전원 차단)' : ''), 'crit')
+  }
+  function fireStep(a, dt) { // true 면 이 로봇은 화재 모드가 처리했으므로 일반 동작을 건너뛴다
+    if (a.state === 'evac') {
+      move(a, dt)
+      if (!a.path.length) { a.cur = a.dest; a.v = 0; a.state = 'fireHold'; S.fire.evac++; addLog(a.name + ' 대피 완료 (' + S.fire.evac + '/' + S.fire.total + ')', 'warn') }
+      return true
+    }
+    if (a.state === 'fireHold') { a.v = 0; return true }
+    // 안전하게 멈출 수 있는 상태(작업 없음 · 짐 없음)가 되면 바로 대피. 짐을 든 채는 내려놓을 때까지 작업을 마친다
+    if (!a.task && !a.box && (a.state === 'idle' || a.state === 'charge' || a.state === 'toHome')) { startEvac(a); return true }
+    return false
+  }
+  function fireEnd() { S.amrs.forEach((a) => { if (a.state === 'fireHold' || a.state === 'evac') { a.v = 0; a.state = 'idle'; a.wait = 1; if (a.cur !== a.home) goTo(a, a.home, 'toHome') } }) }
+  function setFire(on, zone) {
+    if (on && !S.fire.on) {
+      const z = zone == null ? 2 : zone
+      S.fire = { on: true, zone: z, t: 0, stage: 1, evac: 0, total: S.amrs.length, label: fireZoneName(z), clearedAt: 0 }
+      addLog('🔥 화재 경보 · ' + S.fire.label + ' 연기 감지 → 허브 비상 모드 · 신규 작업 중단 · 입차 게이트 차단', 'crit')
+      onEvent('fire', { on: true, zone: z, label: S.fire.label })
+    } else if (!on && S.fire.on) {
+      S.fire.on = false; S.fire.stage = 0; S.fire.clearedAt = S.simT
+      addLog('화재 경보 해제 (관리자 확인) · 장비 복귀 · 입차 게이트 재개', 'ok'); fireEnd()
+      onEvent('fire', { on: false, label: S.fire.label, evac: S.fire.evac, total: S.fire.total, secs: S.fire.t })
+    }
+  }
+  function fireTick(dt) {
+    const F = S.fire; if (!F.on) return
+    F.t += dt
+    if (F.stage === 1 && F.t > 4) { F.stage = 2; addLog('스프링클러 작동 신호 · ' + F.label + ' 살수 시작 · 소방 연동', 'crit') }
+  }
+  // ── AMR 배터리 화재 (조기 감지 → 격리 구역) ──
+  // 1 이상 징후(온도 상승률) → 2 격리 구역 이동 → 3 열폭주(격리 구역 안에서만 화재) → 4 진압 후 접근·재가동 금지 → 관리자 확인 후 복귀
+  function setBatteryFire(i) {
+    if (S.bfire) return
+    const a = S.amrs[i == null ? 1 : i]; if (!a || a.kind === 'fl') return
+    S.bfire = { a, i: S.amrs.indexOf(a), stage: 1, t: 0, temp: a.temp, arriveT: null, t3: null, label: a.name }
+    addLog('⚠ ' + a.name + ' 배터리 온도 상승 이상 (평소 대비 급상승) → 신규 작업 중단 · 격리 구역 이동 준비', 'warn')
+    onEvent('bfire', { code: a.name, stage: 1 })
+  }
+  function clearBatteryFire() {
+    const B = S.bfire; if (!B) return; const a = B.a
+    a.hot = 0; a.temp = 45; a.batt = 40; a.health = 98; a.deg = 0; a.vib = 1.5; a.hist = []; a.thist = []; a.maintFlag = false
+    releaseTask(a); a.task = null; a.box = null // 26.10.29 잡아 둔 랙 칸 · 도크 예약을 풀어 준다 (안 풀면 작업이 영영 막힌다)
+    a.state = 'idle'; a.wait = 1; if (a.cur !== a.home) goTo(a, a.home, 'toHome')
+    S.bfire = null
+    addLog(a.name + ' 관리자 확인 · 배터리 교체 후 점검 완료 → 작업 복귀', 'ok'); onEvent('bfire', { code: a.name, stage: 0 })
+  }
+  // 비상 정지: 개별(i) 또는 전체(i == null). 짐을 아직 집지 않은 작업은 대기열로 돌려 다른 장비가 이어받는다(인계). 짐을 든 채면 작업 실패로 기록하고 관리자 확인을 기다린다
+  function setEstop(i, on) {
+    const list = i == null ? S.amrs : [S.amrs[i]]
+    list.forEach((a) => {
+      if (!a || !!a.estop === !!on) return
+      a.estop = !!on
+      if (on) {
+        if (a.kind === 'fl') { addLog(a.name + ' 비상 정지' + (a.task ? ' · 작업 중 정지 (해제 시 이어서 진행)' : ''), 'crit'); onEvent('estop', { code: a.name, on: true }) } // 지게차는 작업 계획이 따로 있어 인계하지 않고 그 자리에서 멈춘다
+        else if (a.task && !a.box) { const tn = a.task.type === 'in' ? '입고' : '출고'; dropBrokenTask(a); addLog(a.name + ' 비상 정지 · 미집품 ' + tn + ' 작업 취소 → 다른 장비가 이어받음 (인계)', 'warn'); onEvent('estop', { code: a.name, on: true, handoff: true }) }
+        else if (a.task) { addLog(a.name + ' 비상 정지 · 화물 적재 중 → 작업 실패 처리 · 관리자 확인 필요', 'crit'); onEvent('estop', { code: a.name, on: true, fail: true }) }
+        else { addLog(a.name + ' 비상 정지', 'crit'); onEvent('estop', { code: a.name, on: true }) }
+      } else { a.wait = 0.6; addLog(a.name + ' 비상 정지 해제 · 작업 재개', 'ok'); onEvent('estop', { code: a.name, on: false }) }
+    })
+    S.estop = S.amrs.some((a) => a.estop)
+  }
+  function bfireStep(a, dt) { // true 면 일반 동작 건너뜀
+    const B = S.bfire; B.t += dt
+    if (B.stage === 1) {
+      B.temp = Math.min(66, B.temp + dt * 3.2)
+      if (a.task && !a.box && a.state === 'toPick') dropBrokenTask(a) // 아직 짐을 안 집었으면 작업 취소, 짐을 든 상태면 내려놓은 뒤 이동
+      if (B.t >= 5 && !a.task && !a.box && (a.state === 'idle' || a.state === 'toHome' || a.state === 'charge')) {
+        B.stage = 2; a.state = 'quar'; a.path = route(a.cur, QUAR); a.dest = QUAR
+        addLog(a.name + ' 위험 단계 (' + Math.round(B.temp) + '℃) → 배터리 격리 구역 이동 · 충전 차단 · 주변 장비 접근 금지', 'crit'); onEvent('bfire', { code: a.name, stage: 2, temp: Math.round(B.temp) })
+      } else if (B.t > 45) { B.stage = 2 } // 방어: 작업이 끝나지 않으면 계속 기다림 (아래에서 격리 진입)
+      return false
+    }
+    if (B.stage === 2) {
+      B.temp = Math.min(82, B.temp + dt * 1.6)
+      if (a.state === 'quar') { move(a, dt); if (!a.path.length) { a.cur = QUAR; a.v = 0; a.state = 'quarHold'; B.arriveT = B.t; addLog(a.name + ' 격리 구역 도착 · 방화 격납', 'warn') } return true }
+      if (a.state === 'quarHold') {
+        a.v = 0
+        if (B.t - B.arriveT >= 3) { B.stage = 3; B.t3 = B.t; addLog('🔥 ' + a.name + ' 배터리 열폭주 · 격리 구역 안에서 화재 발생 → 소방 설비 작동 (허브 전체 경보 없음 · 다른 장비 정상 운영)', 'crit'); onEvent('bfire', { code: a.name, stage: 3, temp: Math.round(B.temp) }) }
+        return true
+      }
+      // 방어: 아직 이동 전이면 지금 이동 시작
+      if (!a.task && !a.box) { a.state = 'quar'; a.path = route(a.cur, QUAR); a.dest = QUAR }
+      return false
+    }
+    if (B.stage === 3) {
+      B.temp = Math.min(210, B.temp + dt * 9); a.v = 0; a.state = 'quarHold'
+      if (B.t - B.t3 >= 22) { B.stage = 4; addLog(a.name + ' 화재 진압 · 접근·재가동 금지 (관리자 확인 전까지) · 사고 기록 저장', 'warn'); onEvent('bfire', { code: a.name, stage: 4, temp: Math.round(B.temp) }) }
+      return true
+    }
+    if (B.stage === 4) { B.temp = Math.max(70, B.temp - dt * 4); a.v = 0; a.state = 'quarHold'; return true }
+    return false
+  }
   function updAmr(a, dt) {
     a.ph += dt
+    if (a.estop) { a.v = 0; sensors(a, dt); return } // 26.10.29 비상 정지: 그 자리에서 멈춘다 (화물은 든 채로)
+    if (S.bfire && S.bfire.a === a) { if (bfireStep(a, dt)) { sensors(a, dt); return } }
+    if (S.fire.on) { if (fireStep(a, dt)) { sensors(a, dt); return } }
+    else if (a.state === 'evac' || a.state === 'fireHold') { a.state = 'idle'; a.wait = 0.6 }
     if (a.kind === 'fl') { updFork(a, dt); sensors(a, dt); return }
     switch (a.state) {
       case 'charge':
@@ -552,14 +679,34 @@ export function createSim(hooks = {}) {
     a.vib = a.state === 'maint' ? 0.2 + Math.random() * 0.05 : base + a.deg
     const tt = a.state === 'maint' ? 32 : 43 + (moving ? 3 : 0) + loadF * 6 + a.deg * 7 + (Math.random() - 0.5) * 0.6
     a.temp += (tt - a.temp) * Math.min(1, dt * 1.2)
+    learnBaseline(a, dt, moving)
+    if (S.bfire && S.bfire.a === a && S.bfire.stage < 5) { a.temp = S.bfire.temp; a.hot = S.bfire.stage }
     a.health = a.state === 'maint' ? a.health : Math.max(5, Math.min(99, 100 - Math.max(0, a.vib - 1.9) * 15 - Math.max(0, a.temp - 55) * 0.7))
     if (a.state !== 'maint' && (a.role === 'active' || a.state !== 'idle')) {
       a.pktAcc += dt
       if (a.pktAcc > 0.9) { a.pktAcc = 0; const [lv] = status(a); S.packets.push({ x: a.x, y: a.y, t: 0, lv }) }
     }
   }
+  // ── 이상 감지: 로봇마다 '평소 진동'을 스스로 배우고, 평소에서 크게 벗어난 상태가 일정 시간 이어질 때만 이상으로 본다 ──
+  //  평소값: 지수 이동 평균(EWMA)과 분산. 이동 중 / 정지 중을 따로 배운다(이동 중이 원래 더 크게 떨림).
+  //  판정 기준: 부드럽게 만든 진동 > 평소 평균 + max(0.35, 3 x 표준편차) 가 1.5초 이상 지속 → a.anom
+  //  이상 상태에서는 평소값을 갱신하지 않아, 마모가 '새로운 평소'로 학습되지 않는다.
+  const BL_MIN = 150, BL_ALPHA = 0.003, ANOM_HOLD = 1.5
+  function learnBaseline(a, dt, moving) {
+    if (a.state === 'maint') { a.hi = 0; a.anom = false; return }
+    a.bl = a.bl || [{ m: 0, v: 0.01, n: 0 }, { m: 0, v: 0.01, n: 0 }]
+    const b = a.bl[moving ? 1 : 0], x = a.vib
+    a.vs = a.vs == null ? x : a.vs + (x - a.vs) * Math.min(1, dt * 1.5)
+    if (b.n < BL_MIN) { b.n++; const k = 1 / b.n, d = x - b.m; b.m += d * k; b.v = b.n < 2 ? 0.01 : b.v + (d * d - b.v) * k; return }
+    if (b.s0 == null) b.s0 = Math.sqrt(b.v)           // 학습이 끝난 시점의 흔들림 폭을 고정해 둔다 (마모로 커진 흔들림이 기준을 넓히지 않게)
+    const thr = b.m + Math.max(0.35, 3 * b.s0)
+    a.thr = thr
+    if (a.vs > thr) a.hi = (a.hi || 0) + dt; else a.hi = Math.max(0, (a.hi || 0) - dt * 2)
+    a.anom = a.hi >= ANOM_HOLD
+    if (!a.anom && a.hi === 0 && x < b.m + 2 * b.s0) b.m += (x - b.m) * BL_ALPHA   // 평소 범위 안의 값만 천천히 반영
+  }
   function repair(a) {
-    a.deg = 0; a.maintFlag = false; a.health = 98; a.temp = 40; a.cumKg = 0
+    a.deg = 0; a.maintFlag = false; a.health = 98; a.temp = 40; a.cumKg = 0; a.hi = 0; a.anom = false
     S.sc.degrading = false; S.sc.rul = null
     addLog(a.name + ' 정비 완료 · 진동 정상, 누적 운반 초기화', 'ok')
     onEvent('maint', { code: a.name, eventType: 'DONE', vibration: a.vib, note: '정비 완료 · 진동 정상' })
@@ -573,10 +720,10 @@ export function createSim(hooks = {}) {
   function scenario(dt) {
     const sc = S.sc, SP = S.amrs[4]
     sc.t += dt
-    if (sc.phase === 1 && !sc.degrading && sc.t - sc.start > 9) { sc.target = pickTarget(); sc.degrading = true }
+    if (sc.phase === 1 && !sc.degrading && sc.t - sc.start > 18) { sc.target = pickTarget(); sc.degrading = true }
     const T = S.amrs[sc.target]
     if (sc.degrading && T.state !== 'maint') T.deg = Math.min(5.2, T.deg + dt * 0.27)
-    if (sc.phase === 1 && T.deg > 1.2) { setPhase(2); addLog(T.name + ' 진동 이상 감지 · 평소 대비 +' + Math.round((T.vib / 1.55 - 1) * 100) + '%', 'warn'); onEvent('maint', { code: T.name, eventType: 'WARN', vibration: T.vib, note: '진동 이상 감지' }) }
+    if (sc.phase === 1 && (T.anom || T.deg > 2.4)) { setPhase(2); addLog(T.name + ' 진동 이상 감지 · 평소 대비 +' + Math.round((T.vib / 1.55 - 1) * 100) + '%', 'warn'); onEvent('maint', { code: T.name, eventType: 'WARN', vibration: T.vib, note: '진동 이상 감지' }) }
     // 남은 수명(시간): 진동이 고장 기준 7.1 mm/s 에 닿기까지 · 이상 감지 뒤 계속 계산
     if (sc.phase >= 2 && sc.phase <= 3 && T.state !== 'maint') sc.rul = Math.max(1, Math.round(((5.55 - T.deg) / 0.27) * 4))
     if (sc.phase === 2 && sc.rul != null && sc.rul <= S.cfg.rulAt) {
@@ -629,9 +776,9 @@ export function createSim(hooks = {}) {
 
   function step(dt) {
     S.simT += dt
-    scenario(dt); updDocks(dt); S.amrs.forEach((a) => updAmr(a, dt))
+    fireTick(dt); scenario(dt); updDocks(dt); S.amrs.forEach((a) => updAmr(a, dt))
     S.sampleAcc += dt
-    while (S.sampleAcc >= 0.2) { S.sampleAcc -= 0.2; S.amrs.forEach((a) => { a.hist.push(a.state === 'maint' ? null : a.vib); if (a.hist.length > 150) a.hist.shift() }) }
+    while (S.sampleAcc >= 0.2) { S.sampleAcc -= 0.2; S.amrs.forEach((a) => { a.hist.push(a.state === 'maint' ? null : a.vib); if (a.hist.length > 150) a.hist.shift(); (a.thist || (a.thist = [])).push(a.temp); if (a.thist.length > 150) a.thist.shift() }) }
   }
 
   function locText(c) {
@@ -648,7 +795,7 @@ export function createSim(hooks = {}) {
   }
 
   init()
-  return { S, init, step, locText, approve, follow, setCfg, vehicleResult, setVehicleGate: (v) => { gate = !!v } }
+  return { S, init, step, locText, approve, follow, setCfg, vehicleResult, setVehicleGate: (v) => { gate = !!v }, setFire, setBatteryFire, clearBatteryFire, setEstop }
 }
 
 // 단계 설명 문구 속 로봇 이름을 실제 고장 대상으로 바꿔서 돌려준다

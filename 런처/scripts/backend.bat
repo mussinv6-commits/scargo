@@ -15,12 +15,32 @@ if errorlevel 1 (
   echo [ERROR] JDK not found. Install JDK 17 or set JAVA_HOME.
   exit /b 1
 )
+set "JAVA_TOOL_OPTIONS=-XX:TieredStopAtLevel=1 -XX:+UseSerialGC -Xshare:auto"
 cd /d "%ROOT%backend\scargo"
+rem (see launcher notes)
+rem (see launcher notes)
+rem (see launcher notes)
+set "STALE=1"
+if exist "build\run.args" if exist "build\classes\java\main" powershell -NoProfile -Command "$j=(Get-Item 'build\run.args').LastWriteTime; $n=Get-ChildItem 'src','build.gradle','settings.gradle' -Recurse -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1; if($n -and $n.LastWriteTime -gt $j){exit 1}else{exit 0}"
+if exist "build\run.args" if exist "build\classes\java\main" if not errorlevel 1 set "STALE=0"
+if "!STALE!"=="1" (
+  echo [build] source changed - compiling
+  call gradlew.bat classes writeRunArgs -x test
+  if errorlevel 1 goto :slow
+) else (
+  echo [fast] up-to-date, skip compile
+)
+if not exist "build\run.args" goto :slow
+echo [run] run java directly
+java @build\run.args com.scargo.ScargoApplication
+exit /b %errorlevel%
+
+:slow
 call gradlew.bat bootRun
 exit /b %errorlevel%
 
 :findjava
-rem PATH 에 Java 가 없을 때 STS / IntelliJ / 설치형 JDK 폴더에서 JDK 17 우선으로 자동 탐지
+rem (see launcher notes)
 set "J17=" & set "JBIN="
 for %%R in ("%USERPROFILE%\.jdks" "%USERPROFILE%\.gradle\jdks" "%ProgramFiles%\Java" "%ProgramFiles%\Eclipse Adoptium" "%ProgramFiles%\Microsoft" "%ProgramFiles%\Amazon Corretto" "%ProgramFiles%\Zulu" "%ProgramFiles%\BellSoft") do (
   if exist "%%~R" (
@@ -34,6 +54,6 @@ if defined J17 set "JBIN=!J17!"
 if defined JBIN (
   for %%A in ("!JBIN!..") do set "JAVA_HOME=%%~fA"
   set "PATH=!JAVA_HOME!\bin;!PATH!"
-  echo        Java 자동 탐지 : !JAVA_HOME!
+  echo        Java auto-detected: !JAVA_HOME!
 )
 exit /b 0

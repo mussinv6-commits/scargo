@@ -47,12 +47,13 @@ gate_watch_service.py(폴더 상시 감시)를 HTTP로 트리거하는 방식으
   gateCode를 받음). 이 파일도 그에 맞춰 payload의 "gateName"/"gateType"을
   "gateId": gate_id 하나로 교체함(위 DEFAULT_GATE_CODE 참고).
 실행 전 준비 (필수):
-    1. 환경변수 설정 (PowerShell 예시)
-       $env:GATE_API_ID = "admin"
-       $env:GATE_API_PW = "admin1234"
+    1. 환경변수 설정 (PowerShell 예시, 앞의 세 개(ID/PW/PGPASSWORD)는 필수 - 없으면 서버가 시작하지 않음)
+       $env:GATE_API_ID = "<시연 관리자 아이디>"
+       $env:GATE_API_PW = "<시연 관리자 비밀번호>"
        $env:PGPASSWORD = "<scargo Postgres 비밀번호>"
+       $env:GATE_API_TOKEN = "<선택: 임의의 긴 문자열 - 있으면 /scan, /hub/scan 에 X-Gate-Token 헤더 필수, 없으면 이 PC 안 요청만 허용>"
        (PGHOST/PGPORT/PGDATABASE/PGUSER는 기본값 localhost/5432/scargo/postgres -
-       다르면 같은 이름의 환경변수로 덮어쓰기)
+       다르면 같은 이름의 환경변수로 덮어쓰기. 값 예시는 env.example 참고)
     2. PostgreSQL에 scargo 데이터베이스가 이미 schema.sql로 구성돼 있어야 함
        (trucks/companies 테이블이 이미 존재해야 함 - 새로 만들지 않음)
     3. scargo 백엔드(Spring Boot)가 http://localhost:8080 에서 구동 중이어야 함
@@ -62,10 +63,10 @@ gate_watch_service.py(폴더 상시 감시)를 HTTP로 트리거하는 방식으
     (aiofiles는 정적 이미지 서빙(/images) 기능에 필요함. pg8000은 2026-09-30
     변경 - 한국어 Windows에서 psycopg2가 내는 UnicodeDecodeError를 피하기 위해
     순수 파이썬 드라이버로 교체함. psycopg2-binary는 더 이상 필요 없음)
-    uvicorn gate_api:app --host 0.0.0.0 --port 8001
+    uvicorn gate_api:app --host 127.0.0.1 --port 8001
 사용 (발표 중 버튼/curl로 트리거):
-    curl -X POST "http://localhost:8001/scan?scanType=ENTRY"
-    curl -X POST "http://localhost:8001/scan?scanType=EXIT&vehicleNo=006너7233"
+    curl -X POST -H "X-Gate-Token: <GATE_API_TOKEN 값>" "http://localhost:8001/scan?scanType=ENTRY"
+    curl -X POST -H "X-Gate-Token: <GATE_API_TOKEN 값>" "http://localhost:8001/scan?scanType=EXIT&vehicleNo=006너7233"
     -> 감시 폴더(기본: exe/스크립트 옆의 "게이트_수신함")에서 무작위로 사진 한 장을
        골라 인식하고, 등록차량(trucks) DB와 대조한 뒤, 게이트로그를 저장하고 결과를
        JSON으로 돌려줌. 폴더가 비어 있으면 204(처리할 사진 없음)를 돌려줌.
@@ -74,6 +75,8 @@ gate_watch_service.py(폴더 상시 감시)를 HTTP로 트리거하는 방식으
     그대로 붙이면 실제로 스캔된 사진을 프론트에서 <img>로 바로 보여줄 수 있음
     (2026-09-30 추가 - /images 경로를 감시 폴더 전체에 대해 정적으로 서빙함).
 """
+import contextlib
+import hmac
 import json
 import logging
 import os
@@ -91,7 +94,7 @@ import cv2
 import requests
 import torch
 import datetime as _dt
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -188,22 +191,38 @@ _state = {
     "ocr_reader": None,
     "imgsz": None,
     "session": None,
-    "db_conn": None,
     # ENTRY 성공 차량 -> processed 이미지 경로
     "entry_images": {},
     "entry_times": {},  # 2026-10-02: 차량별 이번 ENTRY 시각 (이전 방문 과적기록과 섞이지 않게)
 }
 
 
-def get_credentials():
-    user_id = os.environ.get("GATE_API_ID")
-    user_pw = os.environ.get("GATE_API_PW")
-    if not user_id or not user_pw:
+def _require_env(name):
+    """필수 환경변수 읽기 - 없거나 비어 있으면 값을 추측하지 않고 바로 중단한다."""
+    value = os.environ.get(name)
+    if not value:
         raise RuntimeError(
-            "환경변수 GATE_API_ID / GATE_API_PW 가 설정 안 됨 - "
-            '예(PowerShell): $env:GATE_API_ID = "admin"'
+            f"환경변수 {name} 가 설정 안 됨 - python/env.example 을 보고 설정하세요 (기본값 없음)"
         )
-    return user_id, user_pw
+    return value
+
+
+def get_credentials():
+    return _require_env("GATE_API_ID"), _require_env("GATE_API_PW")
+
+
+def require_gate_token(request: Request, x_gate_token: Optional[str] = Header(default=None)):
+    """/scan, /hub/scan 보호용 (이 서버는 내부에서 관리자 세션으로 게이트 로그를 기록하므로 무인증으로 열어 두지 않는다)
+    - 환경변수 GATE_API_TOKEN 이 있으면: X-Gate-Token 헤더가 그 값과 같아야 통과 (다른 PC 에서 붙일 때 필수)
+    - 없으면: 이 PC 자신(127.0.0.1 / ::1)에서 온 요청만 통과"""
+    expected = os.environ.get("GATE_API_TOKEN", "")
+    if expected:
+        if not x_gate_token or not hmac.compare_digest(x_gate_token.encode("utf-8"), expected.encode("utf-8")):
+            raise HTTPException(status_code=401, detail="X-Gate-Token 이 없거나 올바르지 않습니다.")
+        return
+    host = request.client.host if request.client else ""
+    if host not in ("127.0.0.1", "::1", "localhost"):
+        raise HTTPException(status_code=401, detail="토큰(GATE_API_TOKEN)이 설정되지 않아 이 PC 안에서 온 요청만 허용합니다.")
 
 
 def login(session, api_base, user_id, user_pw):
@@ -212,10 +231,10 @@ def login(session, api_base, user_id, user_pw):
         json={"userId": user_id, "userPw": user_pw},
         timeout=5,
     )
-    logger.info(f"[로그인 시도] status={resp.status_code}, 응답 내용={resp.text}")
-    logger.info(f"[확보된 세션 쿠키 목록] {session.cookies.get_dict()}")
+    # 응답 본문과 세션 쿠키(JSESSIONID)는 로그에 남기지 않는다 - 상태 코드만 기록
+    logger.info(f"[로그인 시도] status={resp.status_code}")
     if resp.status_code != 200:
-        raise RuntimeError(f"scargo 로그인 실패 (status={resp.status_code}): {resp.text}")
+        raise RuntimeError(f"scargo 로그인 실패 (status={resp.status_code})")
     # requests.Session이 자동으로 쿠키를 저장하지 못한 경우 대비 수동 주입
     if not session.cookies.get_dict():
         set_cookie = resp.headers.get("Set-Cookie")
@@ -273,8 +292,31 @@ def get_db_connection():
         port=int(os.environ.get("PGPORT", "5432")),
         database=os.environ.get("PGDATABASE", "scargo"),  # 26.10.24 팀 공유본: 기본 대상 = 새로 설치한 시연 DB
         user=os.environ.get("PGUSER", "postgres"),
-        password=os.environ.get("PGPASSWORD", "1234")  # 26.10.24 병합: 기존 로컬 기본값 유지 (환경변수 PGPASSWORD 로 덮어쓰기)
+        password=_require_env("PGPASSWORD"),  # 기본값 없음 - 환경변수 PGPASSWORD 필수
     )
+
+
+@contextlib.contextmanager
+def db_conn():
+    """요청마다 DB 연결을 새로 열고 닫는다 (이전: 전역 연결 1개를 모든 요청이 공유).
+    - 정상 종료: commit (읽기 트랜잭션도 닫음)
+    - 오류: rollback 후 다시 던짐 (실패한 트랜잭션이 다음 요청을 막지 않음)
+    - 연결이 끊겨도 다음 요청이 새 연결을 열어 자동으로 복구됨"""
+    conn = get_db_connection()
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 
 def ensure_dummy_trucks(conn):
@@ -541,6 +583,9 @@ class ScanResult(BaseModel):
 
 @app.on_event("startup")
 def startup():
+    # 필수 환경변수를 모델 로딩(수십 초) 전에 먼저 확인한다
+    for _name in ("GATE_API_ID", "GATE_API_PW", "PGPASSWORD"):
+        _require_env(_name)
     logger.info("모델 로딩 중...")
     from ultralytics import YOLO
     import easyocr
@@ -559,11 +604,20 @@ def startup():
     logger.info(f"EasyOCR GPU 사용: {use_gpu}")
     user_id, user_pw = get_credentials()
     session = requests.Session()
-    login(session, DEFAULT_SCARGO_API_BASE, user_id, user_pw)
+    # 26.10.29 런처가 백엔드(8080)와 동시에 켜므로, 백엔드가 아직 안 떴거나 계정 준비 중이면 최대 5분까지 3초마다 다시 시도한다
+    _t0 = time.time()
+    while True:
+        try:
+            login(session, DEFAULT_SCARGO_API_BASE, user_id, user_pw)
+            break
+        except Exception as _e:
+            if time.time() - _t0 > 300:
+                raise
+            logger.info(f"백엔드 기다리는 중... ({type(_e).__name__})")
+            time.sleep(3)
     _state["session"] = session
-    conn = get_db_connection()
-    ensure_dummy_trucks(conn)
-    _state["db_conn"] = conn
+    with db_conn() as conn:
+        ensure_dummy_trucks(conn)
     DEFAULT_WATCH_DIR.mkdir(parents=True, exist_ok=True)
     _dedupe_watch_dir(DEFAULT_WATCH_DIR)  # 2026-10-02 추가: 중복 사진 정리
     logger.info(f"감시 폴더: {DEFAULT_WATCH_DIR}")
@@ -592,9 +646,9 @@ _HUB_LAST = {}  # kind -> 직전에 나온 번호판
 _HUB_LOCK = threading.Lock()  # 26.10.22: FastAPI 는 def 엔드포인트를 여러 스레드에서 동시에 돌려서, 차례 목록을 고칠 때 잠근다
 
 
-@app.post("/hub/scan", response_model=HubScanResult)
+@app.post("/hub/scan", response_model=HubScanResult, dependencies=[Depends(require_gate_token)])
 def hub_scan(direction: ScanType = ScanType.ENTRY, kind: str = "CARGO",
-             vehicleNo: Optional[str] = None, exclude: Optional[str] = None):
+             vehicleNo: Optional[str] = None, exclude: Optional[str] = None, want: Optional[str] = None):
     """2026-10-15 추가 (허브 AMR): 허브 입구 · 출구 번호판 인식.
     - 1차 /scan 과 같은 recognize_one(YOLO + CRNN)을 그대로 쓴다.
     - 판정(등록 차량 · 차종)은 여기서 하지 않고 Spring(/api/amr/vehicles/scan)이 DB로 한다.
@@ -618,6 +672,37 @@ def hub_scan(direction: ScanType = ScanType.ENTRY, kind: str = "CARGO",
                 break
         if path is None:
             raise HTTPException(status_code=404, detail=f"허브_수신함에 {vehicleNo} 사진이 없습니다")
+    elif want and want.strip():
+        # 26.10.29 구간 관제 연동: 곤지암에 먼저 도착한 차량(want)의 사진을 그대로 읽는다 (도착 순서 = 입차 순서)
+        #   허브_수신함에 없으면 구간 관제 사진(toll_demo/photos, 환경변수 HUB_EXTRA_PHOTOS 로 바꿀 수 있음)에서 복사해 온다
+        key = want.replace(" ", "")
+        folder = HUB_DIR / HUB_KIND_DIR[kind]
+        folder.mkdir(parents=True, exist_ok=True)
+        path = None
+        for k in HUB_KIND_DIR.values():
+            d = HUB_DIR / k
+            if d.is_dir():
+                for p in d.iterdir():
+                    if p.is_file() and p.suffix.lower() in IMAGE_SUFFIXES and p.stem.replace(" ", "") == key:
+                        path = p
+                        break
+            if path:
+                break
+        if path is None:
+            extra = Path(os.environ.get("HUB_EXTRA_PHOTOS") or (APP_DIR.parent / "toll_demo" / "photos"))
+            if extra.is_dir():
+                for p in extra.iterdir():
+                    if p.is_file() and p.suffix.lower() in IMAGE_SUFFIXES and p.stem.replace(" ", "") == key:
+                        try:
+                            dst = folder / p.name
+                            if not dst.exists():
+                                shutil.copy2(p, dst)
+                            path = dst
+                        except Exception:
+                            logger.exception(f"[HUB ENTRY] 구간 관제 사진 복사 실패: {p}")
+                        break
+        if path is None:
+            raise HTTPException(status_code=404, detail=f"{want} 사진이 허브_수신함에도 구간 관제 사진에도 없습니다")
     else:
         skip = {x.replace(" ", "") for x in (exclude or "").split(",") if x.strip()}
         folder = HUB_DIR / HUB_KIND_DIR[kind]
@@ -663,7 +748,7 @@ def hub_scan(direction: ScanType = ScanType.ENTRY, kind: str = "CARGO",
     )
 
 
-@app.post("/scan", response_model=ScanResult)
+@app.post("/scan", response_model=ScanResult, dependencies=[Depends(require_gate_token)])
 def scan(scanType: ScanType = ScanType.ENTRY, vehicleNo: Optional[str] = None):
     watch_dir = DEFAULT_WATCH_DIR
     processed_dir = watch_dir / "processed"
@@ -674,7 +759,9 @@ def scan(scanType: ScanType = ScanType.ENTRY, vehicleNo: Optional[str] = None):
             raise HTTPException(status_code=400, detail="EXIT OCR에는 ENTRY 차량번호(vehicleNo)가 필요합니다.")
         vehicle_key = vehicleNo.replace(" ", "")
         # 2026-10-02 추가: 최신 과적 검사가 통과(is_passed=true)인 차량만 게이트아웃 허용
-        if not _overload_passed(_state["db_conn"], vehicleNo.strip(), _state["entry_times"].get(vehicle_key)):
+        with db_conn() as conn:
+            overload_ok = _overload_passed(conn, vehicleNo.strip(), _state["entry_times"].get(vehicle_key))
+        if not overload_ok:
             raise HTTPException(status_code=409, detail="과적 검사 통과 차량만 게이트아웃 할 수 있습니다.")
         saved_path = _state["entry_images"].get(vehicle_key)
         path = Path(saved_path) if saved_path else None
@@ -703,7 +790,10 @@ def scan(scanType: ScanType = ScanType.ENTRY, vehicleNo: Optional[str] = None):
         raise HTTPException(status_code=500, detail=f"이미지 파일을 못 읽음: {path.name}")
     pred = result["pred"]
     recognition_status = "SUCCESS" if pred else "FAILED"
-    matched_vehicle = lookup_vehicle(_state["db_conn"], pred, DEFAULT_VEHICLE_TYPE) if pred else None
+    matched_vehicle = None
+    if pred:
+        with db_conn() as conn:
+            matched_vehicle = lookup_vehicle(conn, pred, DEFAULT_VEHICLE_TYPE)
     if not pred:
         match_result = "NOT_RECOGNIZED"
     elif (
@@ -746,7 +836,8 @@ def scan(scanType: ScanType = ScanType.ENTRY, vehicleNo: Optional[str] = None):
             route_gate = planned_route.get(route_key)
             if route_gate:
                 gate_code = route_gate.split(" ", 1)[0].strip()
-    gate_id = lookup_gate_id(_state["db_conn"], gate_code)
+    with db_conn() as conn:
+        gate_id = lookup_gate_id(conn, gate_code)
     if gate_id is None:
         raise HTTPException(status_code=500, detail=f"활성 게이트를 찾을 수 없음: {gate_code}")
     payload = {

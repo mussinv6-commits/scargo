@@ -14,14 +14,15 @@
 
 <script setup>
 import { ADMIN_MENU } from '@/components/admin/adminMenu.js'
-const LABELS = [['member', '회원 · 업체'], ['vehicle', '차량 · 화물'], ['yard', '야드 · 적재'], ['etc', '안전 · 기타'], ['tower', '공통 컨트롤타워'], ['port', '항만 → 허브'], ['hubc', '허브 → 물류센터'], ['notice', '안내']]
+const LABELS = [['top', '대시보드 · 운영'], ['member', '회원 · 업체'], ['vehicle', '차량 · 화물'], ['yard', '야드 · 적재'], ['tower', '공통 컨트롤타워'], ['port', '항만 → 허브'], ['hubc', '허브 → 물류센터'], ['notice', '설정 · 안내']] // 26.10.28 메뉴 이동 반영
 const sections = LABELS.map(([key, label]) => ({ key, label, items: ADMIN_MENU[key] || [] }))
 </script>
 
 <style scoped>
-.mg { padding: 4px 2px; color: #102644; }
+.mg { padding: 4px 2px; color: #102644; overflow: visible; }
+/* 26.10.28 QA#20 제목은 상단 고정 바에서 다른 메뉴와 같은 글씨체·크기로 표시 (이 화면 h2 숨김) */
 .mg h2 { margin: 0 0 4px; font-size: 22px; }
-.mg-d { margin: 0 0 16px; color: #6b7280; font-size: 14px; }
+.mg-d { margin: 0 0 16px; color: #64748b; font-size: 13.5px; line-height: 1.5; }
 .mg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
 .mg-card { background: #fff; border-radius: 12px; padding: 14px 16px; box-shadow: 0 1px 3px #0001; }
 .mg-card h3 { margin: 0 0 8px; font-size: 14px; color: #8a6a10; }

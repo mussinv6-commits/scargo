@@ -1,6 +1,32 @@
 <template>
   <!-- 26.10.20 추가: S-Bot 전용 화면. S Cargo 메뉴/사이드바와 분리된 별도 셸. -->
-  <div class="sb-shell">
+  <!-- 26.10.28 S Cargo 관리자: S Cargo 와 같은 상단바(App.vue) + 사이드바 + 메뉴명 바 -->
+  <div v-if="canScargo" class="admin-app sb-admin">
+    <div class="admin-shell" :class="{ 'is-collapsed': collapsed }">
+      <aside class="admin-sidebar">
+        <div class="admin-nav-scroll">
+          <div class="admin-nav-group-label sb-grp"><span>S-Bot</span></div>
+          <RouterLink v-if="sbotAdminView" to="/sbot" class="admin-nav-item admin-nav-home" :class="{ active: route.path === '/sbot' }"><i class="bi bi-speedometer2"></i> 대시보드</RouterLink>
+          <RouterLink to="/sbot/hub" class="admin-nav-item admin-nav-home" :class="{ active: route.path.startsWith('/sbot/hub') }"><i class="bi bi-diagram-3"></i> 허브 관제</RouterLink>
+          <div class="admin-side-foot"><p>멈추지 않는 허브,<br />AMR 예지보전</p></div><!-- 26.10.28 S-Bot(AMR 전용) 문구 -->
+        </div>
+      </aside>
+      <div class="admin-main sb-main2" :class="{ 'has-title': true }">
+        <header class="admin-topbar">
+          <button type="button" class="admin-burger" :aria-label="collapsed ? '메뉴 펼치기' : '메뉴 숨기기'" @click="collapsed = !collapsed"><i class="bi bi-list"></i></button>
+          <div v-if="route.path === '/sbot'" class="ops-head-copy"><h1>S-Bot 대시보드</h1><p>허브 AMR 운영 현황을 한눈에 확인하세요.</p></div>
+          <h1 v-else class="admin-page-title">{{ route.path.startsWith('/sbot/hub') ? '허브 관제' : 'S-Bot' }}</h1>
+          <div class="admin-topbar-right">
+            <span class="sb-stat" :class="stat" :title="statTip"><i></i>{{ statText }}</span>
+            <a v-if="sbotAdminView" href="#" class="sb-demo2" :class="{ run: demo >= 0 }" @click.prevent="demo >= 0 ? stopDemo() : startDemo()">{{ demo >= 0 ? "■ 시연 중지" : "▶ 시연" }}</a>
+            <LiveClock />
+          </div>
+        </header>
+        <router-view />
+      </div>
+    </div>
+  </div>
+  <div v-else class="sb-shell">
     <header class="sb-top">
       <RouterLink :to="sbotAdmin ? '/sbot' : '/sbot/hub'" class="sb-brand"><img :src="logo" alt="S-Bot" /></RouterLink>
       <span class="sb-title">{{ sbotAdmin ? "S-Bot 대시보드" : "허브 AMR 관제" }}</span>
@@ -10,33 +36,33 @@
         <RouterLink to="/sbot/hub">허브 관제</RouterLink>
         <!-- 26.10.25 상단 메뉴에서 숨김: 출입증 감사(/sbot/amr-audit) 화면과 경로는 그대로 남겨 둠
         <RouterLink v-if="canAudit" to="/sbot/amr-audit">출입증 감사</RouterLink> -->
-        <RouterLink v-if="canScargo" to="/w/W-02" class="sb-sw">S CARGO</RouterLink><!-- fix_1105 (scargo_1): S Cargo 관리자는 S Cargo 로 전환 -->
+        <RouterLink v-if="canScargo" to="/admin" class="sb-sw">S CARGO</RouterLink><!-- 26.10.28 총관리자 첫 화면(/admin)으로 --><!-- fix_1105 (scargo_1): S Cargo 관리자는 S Cargo 로 전환 -->
         <RouterLink to="/">홈</RouterLink>
-        <a v-if="sbotAdmin" href="#" class="sb-demo" :class="{ run: demo >= 0 }" @click.prevent="demo >= 0 ? stopDemo() : startDemo()">{{ demo >= 0 ? "■ 시연 중지" : "▶ 시연" }}</a><!-- 26.10.25 시연 시나리오 -->
+        <a v-if="sbotAdmin" href="#" class="sb-demo" :class="{ run: demo >= 0 }" @click.prevent="demo >= 0 ? stopDemo() : startDemo()">{{ demo >= 0 ? "■ 시연 중지" : "▶ 시연" }}</a><!-- 26.10.29 시연: 허브 화면의 AMR 전체 시연만 실행 (화재는 앱·웹 연동 시연에서 따로) -->
         <span class="sb-stat":class="stat" :title="statTip"><i></i>{{ statText }}</span><!-- 26.10.25 추가: 서버 연결 상태 -->
         <span class="sb-user" v-if="authState.user">{{ displayName }}님<template v-if="accessLabel"> · {{ accessLabel }}</template></span>
         <a href="#" @click.prevent="logout">로그아웃</a>
       </nav>
     </header>
     <main class="sb-main"><router-view /></main>
-    <div v-if="demo >= 0" class="sb-cap">
-      <b>{{ demo + 1 }} / {{ DEMO.length }} · {{ DEMO[demo].t }}</b> {{ DEMO[demo].cap }}<em v-if="liveTxt" class="sb-live">{{ liveTxt }}</em>
-      <span class="sb-ctl"><button type="button" @click="demoGo(-1)">◀</button><button type="button" @click="demoPause">{{ paused ? "▶" : "❚❚" }}</button><button type="button" @click="demoGo(1)">▶▶</button></span>
-    </div>
   </div>
 </template>
 
 <script setup>
 import { computed, onMounted, onBeforeUnmount, ref } from "vue";
 import { amrApi } from "@/components/amr/amrApi.js";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
+import LiveClock from "@/components/common/LiveClock.vue";
 import axios from "axios";
 import { authState, clearLogin } from "@/auth/authState.js";
 import { API_BASE } from "@/utils/apiBase.js";
 import { hubAccess, isSbotAdmin, isMaster } from "@/components/amr/amrAccess.js"; // 26.10.22 통합: 화면별 권한
 import logo from "@/assets/sbot_logo.png";
+import { staffRole } from "@/scargo2/roles.js";
 
 const router = useRouter();
+const route = useRoute();
+const collapsed = ref(false); // 26.10.28 사이드바 숨김/펼침 (S Cargo 와 같은 삼선 버튼)
 const sbotAdmin = computed(() => isSbotAdmin(authState.user));
 // 26.10.22 통합: 상단에 권한 범위 표시 (관리자 · 전체 허브 / 통합 관제사 · 조회 전용 / 허브 관제사 · 소속 허브)
 const displayName = computed(() => (isMaster(authState.user) ? "마스터" : authState.user?.userName || "")); // 26.10.26 마스터 계정은 '마스터님'
@@ -44,7 +70,8 @@ const accessLabel = computed(() => hubAccess(authState.user).label || "");
 // 26.10.23 출입증 감사는 앱 연결 코드를 다루는 계정(S-Bot 관리자 · HUB_OP)만
 const canAudit = computed(() => hubAccess(authState.user).canManage);
 // fix_1105 (scargo_1): S Cargo 로 전환 (S Cargo 관리자만, sbot 계정은 숨김)
-const canScargo = computed(() => authState.user?.userType === "ADMIN" && authState.user?.adminScope !== "SBOT");
+const canScargo = computed(() => (authState.user?.userType === "ADMIN" && authState.user?.adminScope !== "SBOT") || (!!staffRole(authState.user) && hubAccess(authState.user).canView)); // 26.10.29 관제사(허브 관제)도 S Cargo 와 같은 상단바 · 사이드바
+const sbotAdminView = computed(() => authState.user?.userType === "ADMIN"); // 대시보드 · 시연은 관리자만
 // 26.10.22: 센터별 입고 · 통행료 공용 데이터(대시보드 · 택배 이동 · 물류센터 공유). S-Bot 화면이 열려 있는 동안 자동으로 진행된다
 //  26.10.22 통합: S-Bot 관리자 전용 API(/api/amr/sbot/**)를 2초마다 부르므로 S-Bot 관리자일 때만 불러온다 (관제사는 403)
 onMounted(() => {
@@ -77,85 +104,22 @@ async function checkStat() {
 }
 onMounted(() => { checkStat(); statTimer = setInterval(checkStat, 10000); });
 onBeforeUnmount(() => clearInterval(statTimer));
-// 26.10.25 시연 시나리오: 대시보드 → 허브 → 택배 이동 → 물류센터 → 대시보드 순서로 자동 이동하며 자막을 보여 준다
-// clock: 통행료 낮/밤 비교용 (sbot_clock). 없으면 그대로 둔다
-const DEMO = [
-  { to: "/sbot", sec: 7, t: "오늘의 현황", cap: "허브 처리 건수 · AMR 가동 · 운송 중 택배차를 한눈에 확인합니다" },
-  { to: "/sbot/hub", sec: 9, restart: true, pre: "gateIn", spd: 2, t: "허브 입고", cap: "항만에서 온 화물차가 허브에 들어와 입고됩니다" },
-  { to: "/sbot/hub", sec: 9, pre: "rack", spd: 2, t: "상하차", cap: "AMR이 택배를 센터별로 나눠 택배차에 적재합니다" },
-  { to: "/sbot/hub", sec: 22, pre: "station", spd: 4, t: "예지보전", cap: "AMR 이상 징후 감지부터 고장 예측, 정비·교대, 복귀까지 단계별로 확인합니다" },
-  { to: "/sbot/hub", sec: 8, act: "depart", pre: "dockOut", spd: 2, t: "택배차 출발", cap: "적재가 끝난 택배차가 허브를 출발합니다" },
-  { to: "/sbot/move", sec: 9, t: "통행료 · 낮", cap: "톨게이트 통행료는 낮 요금이 적용됩니다", clock: "day" },
-  { to: "/sbot/move", sec: 9, t: "통행료 · 밤", cap: "밤에는 심야 할인으로 통행료가 달라집니다", clock: "night" },
-  { to: "/sbot/center", sec: 10, act: "arrive", t: "센터 도착", cap: "배정된 택배차와 물류가 얼마나 도착했는지 확인합니다" },
-  { to: "/sbot", sec: 6, t: "결과 확인", cap: "센터별 입고 결과를 대시보드에서 다시 확인합니다" },
-];
-const demo = ref(-1);
-const paused = ref(false);
-let demoTimer;
-// 26.10.25 시연 전용 데이터: 시작 시각 이후의 기록만 보여 주고(DB 는 지우지 않음) 정해진 값으로 출발 · 도착을 만든다. 끝나면 실시간 모드로 되돌린다
-const SEED = { GGI: [18, 16, 12], SEL: [12, 10, 8], ICN: [30, 22] }; // 시연 시작 때 이미 도착해 있는 택배차(물품 수)
-const GO = { GGI: 14, SEL: 10, ICN: 20 }; // 4단계에서 출발해 8단계에서 도착하는 택배차
-let pend = [];
-const sb = () => window.SBOT;
-async function demoSeed() {
-  const S = sb(); if (!S) return;
-  try { localStorage.setItem("sbot_demo_since", String(Date.now())); } catch { /* 무시 */ }
-  S.setAuto(false); S.discReset(); pend = [];
-  for (const k of Object.keys(SEED)) for (const n of SEED[k]) { const j = await S.dispatchNow(k, n); if (j && j.assignmentId) await S.arrive(k, { asg: j.assignmentId, no: j.vehicleNo }); }
-  S.sync();
+// 26.10.29 시연: 상단 버튼은 허브 관제 화면(/sbot/hub)으로 가서 그 화면 아래의 "전체 시연"(AMR 장면만)을 눌러 준다.
+//  예전 9단계(대시보드 · 택배 이동 · 물류센터로 이동) 시연은 없앴다. 화재 상황은 앱 · 웹 연동 시연에서 따로 보여 준다
+const demo = ref(-1); // -1 멈춤 · 0 진행 중 (허브 시연 바의 버튼 글자로 판단)
+const hubBtn = (i) => document.querySelectorAll(".tw-demo button")[i];
+const hubDemoRunning = () => /처음부터/.test(hubBtn(0)?.textContent || "");
+const syncDemo = () => { demo.value = hubDemoRunning() ? 0 : -1; };
+let demoPoll;
+onMounted(() => { demoPoll = setInterval(syncDemo, 800); });
+onBeforeUnmount(() => clearInterval(demoPoll));
+async function startDemo() {
+  if (router.currentRoute.value.path !== "/sbot/hub") router.push("/sbot/hub");
+  for (let n = 0; n < 40 && !hubBtn(0); n++) await new Promise((r) => setTimeout(r, 250)); // 허브 화면이 뜰 때까지 최대 10초
+  hubBtn(0)?.click();
+  syncDemo();
 }
-async function demoDepart() {
-  const S = sb(); if (!S) return;
-  for (const k of Object.keys(GO)) { const j = await S.dispatchNow(k, GO[k]); if (j && j.assignmentId) pend.push({ k, asg: j.assignmentId, no: j.vehicleNo }); }
-  S.sync();
-}
-async function demoArrive() {
-  const S = sb(); if (!S) return;
-  for (const p of pend) await S.arrive(p.k, { asg: p.asg, no: p.no });
-  pend = []; S.sync();
-}
-function demoEnd() {
-  try { localStorage.removeItem("sbot_demo_since"); } catch { /* 무시 */ }
-  const S = sb(); if (S) { S.setAuto(true); S.sync(); }
-}
-// 허브 화면의 카메라 · 배속 버튼을 눌러 자막과 같은 장면을 보여 준다 (허브 화면이 뜬 뒤에 적용)
-function applyView(s) {
-  const q = (sel) => document.querySelector(sel);
-  if (s.restart) q("#tw-restart")?.click();
-  if (s.spd) q('.spd[data-s="' + s.spd + '"]')?.click();
-  if (s.pre) q('[data-preset="' + s.pre + '"]')?.click();
-}
-// 자막 끝에 화면의 실제 상태(허브 단계 · 택배 이동 시각)를 붙인다
-const liveTxt = ref("");
-let liveTimer;
-function readLive() {
-  try {
-    const s = demo.value >= 0 ? DEMO[demo.value] : null;
-    if (!s) { liveTxt.value = ""; return; }
-    if (s.to === "/sbot/hub") liveTxt.value = (document.querySelector(".stage.now")?.innerText || "").replace(/\s+/g, " ").trim();
-    else if (s.to === "/sbot/move") liveTxt.value = document.querySelector("iframe.sb-frame")?.contentDocument?.getElementById("clk")?.textContent || "";
-    else liveTxt.value = "";
-  } catch { liveTxt.value = ""; }
-}
-onMounted(() => { liveTimer = setInterval(readLive, 1000); });
-onBeforeUnmount(() => clearInterval(liveTimer));
-function runDemo(i) {
-  clearTimeout(demoTimer);
-  if (i >= DEMO.length || i < 0) { demo.value = -1; paused.value = false; demoEnd(); return; }
-  demo.value = i;
-  const s = DEMO[i];
-  if (s.act === "depart") demoDepart(); else if (s.act === "arrive") demoArrive();
-  if (s.pre || s.spd || s.restart) setTimeout(() => applyView(s), router.currentRoute.value.path === s.to ? 300 : 2200);
-  if (router.currentRoute.value.path !== s.to) router.push(s.to);
-  if (s.clock) { try { localStorage.setItem("sbot_clock", JSON.stringify({ tod: s.clock === "night" ? 23 : 12, at: Date.now(), rate: 0.2 })); } catch { /* 무시 */ } }
-  if (!paused.value) demoTimer = setTimeout(() => runDemo(i + 1), s.sec * 1000);
-}
-async function startDemo() { paused.value = false; demo.value = 0; await demoSeed(); runDemo(0); }
-function stopDemo() { clearTimeout(demoTimer); demo.value = -1; paused.value = false; demoEnd(); }
-function demoGo(d) { runDemo(Math.min(DEMO.length - 1, Math.max(0, demo.value + d))); }
-function demoPause() { paused.value = !paused.value; if (paused.value) clearTimeout(demoTimer); else runDemo(demo.value); }
-onBeforeUnmount(() => clearTimeout(demoTimer));
+function stopDemo() { hubBtn(2)?.click(); syncDemo(); }
 function logout() {
   axios.post(`${API_BASE}/api/accounts/logout`, {}, { withCredentials: true })
     .catch(() => {})
@@ -163,6 +127,7 @@ function logout() {
 }
 </script>
 
+<style src="@/components/CSS/admin.css"></style>
 <style scoped>
 .sb-shell { min-height: 100vh; background: #0b1d36; color: #e6eff7; }
 .sb-top { height: 64px; display: flex; align-items: center; gap: 18px; padding: 0 24px; background: #0f2a4a; border-bottom: 1px solid #1d3b60; position: sticky; top: 0; z-index: 50; }
@@ -172,7 +137,7 @@ function logout() {
 .sb-nav a { color: #c9d8ea; text-decoration: none; }
 .sb-nav a:hover { color: #ff9f1c; }
 .sb-user { color: #9fb0c6; }
-.sb-main { padding: 18px 24px 40px; }
+.sb-main { padding: 18px 24px 16px; } /* 26.10.28 아래 여백 줄여 대시보드가 한 화면에 들어가게 */
 .sb-nav a, .sb-user { white-space: nowrap; }
 /* 26.10.25 추가: 지금 보고 있는 메뉴 강조 + 서버 상태 배지 */
 .sb-nav a.router-link-exact-active { color: #ff9f1c; font-weight: 700; border-bottom: 2px solid #ff9f1c; padding-bottom: 3px; }
@@ -198,4 +163,33 @@ function logout() {
   .sb-main { padding: 12px 12px 32px; }
 }
 .sb-nav .sb-sw{background:#EECC83;color:#102644 !important;font-weight:800;border-radius:14px;padding:3px 12px;font-size:13px;letter-spacing:.03em;text-decoration:none} /* scargo_1 fix_1105 */
+
+/* 26.10.28 S Cargo 와 같은 밝은 틀 (바탕 · 상단 바). 허브 관제 3D 화면은 어둡게 그대로 */
+.sb-shell { background: #e8eef6; color: #112847; }
+.sb-top { background: #112847; border-bottom: 0; box-shadow: 0 2px 8px rgba(17,40,71,.18); }
+.sb-title { color: #fff; }
+.sb-nav a { color: #e6eff7; }
+.sb-nav a:hover { color: #EECC83; }
+.sb-nav a.router-link-exact-active { color: #EECC83; border-bottom-color: #EECC83; }
+.sb-user { color: #c9d8ea; }
+</style>
+<style scoped>
+/* 26.10.28 S Cargo 관리자용 S-Bot 셸 */
+.sb-grp { cursor: default; }
+.sb-admin .admin-side-foot { padding-top: 12px; border-top: 1px solid rgba(255, 255, 255, 0.1); } /* S Cargo 사이드바 문구와 같은 구분선 */
+.sb-main2 { background: #e8eef6; padding-bottom: 12px !important; } /* 26.10.28 아래 여백을 줄여 스크롤바가 생기지 않게 */
+/* 허브 관제 3D 화면이 한 화면에 들어오게 (상단바 · 메뉴명 바 높이만큼 줄임) */
+.sb-admin :deep(.amr-twin .wrap) { padding-block: 14px 10px; }
+/* 26.10.28 S Cargo 사이드바 스타일(admin.css)의 '.admin-shell .kpi-card'(S Cargo 대시보드 카드)가 허브 관제 KPI 카드에도 걸려서
+   카드가 가로 정렬로 바뀌고 시간대 막대 · AMR 가동률 막대 폭이 0 이 되던 문제 → 허브 관제 원래 카드 모양으로 되돌림 */
+.sb-admin :deep(.amr-twin .kpi-card) { display: block; align-items: normal; gap: normal; padding: 12px 14px; border-radius: 10px; background: linear-gradient(180deg, var(--panel2), var(--panel)); border: 1px solid var(--edge); transition: none; }
+.sb-admin :deep(.amr-twin .twin-viewport) { max-height: calc(100vh / var(--sc-zoom, 1) - var(--nav-h, 60px) - 306px); aspect-ratio: auto; height: calc(100vh / var(--sc-zoom, 1) - var(--nav-h, 60px) - 306px); }
+.admin-topbar-right .sb-stat { margin-right: 2px; }
+.sb-demo2 { display: inline-flex; align-items: center; height: 36px; padding: 0 14px; border-radius: 10px; background: #112847; color: #fff; font-size: 13px; font-weight: 700; text-decoration: none; }
+.sb-demo2:hover { color: #EECC83; }
+.sb-demo2.run { background: #e5484d; color: #fff; }
+.sb-admin .sb-stat { background: #fff; color: #0f7a5c; border-color: #bfe3d6; height: 36px; padding: 0 12px; border-radius: 10px; }
+.sb-admin .sb-stat.off { background: #fff4e8; color: #b86e00; border-color: #f3d2a8; }
+.sb-admin .sb-stat.auth { background: #fff9e6; color: #8a6410; border-color: #eedc9a; }
+.sb-admin .sb-stat.wait { background: #fff; color: #64748b; border-color: #e3e8ef; }
 </style>

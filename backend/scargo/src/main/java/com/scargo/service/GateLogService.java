@@ -1,6 +1,8 @@
 package com.scargo.service;
 
 import com.scargo.Enum.NotificationType; // 26.10.01 추가: 미등록 차량 알림
+import com.scargo.config.UploadStorage; // 업로드 저장 통일 (형식·이름 검증 + scargo.upload-root)
+import com.scargo.controller.TruckOwnership; // 업체 범위 검사
 import com.scargo.dto.GateLogCreateRequest;
 import com.scargo.dto.GateLogResponse;
 import com.scargo.dto.GateLogUpdateRequest;
@@ -16,11 +18,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j; // 26.10.01 추가: 알림 실패 로그
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.File;
 import java.io.IOException;
 import java.time.OffsetDateTime;
 import java.util.List; // 26.10.01 추가
@@ -45,8 +47,11 @@ public class GateLogService {
     // 26.10.03 2차 추가: EXIT(OUT 게이트) 통과 → 기사 앱 운송오더 GATE_OUT 처리
     private final com.scargo.app.service.TransportOrderService transportOrderService;
 
-    // 파일 저장 경로 설정 (서버 환경에 맞게 변경 가능)
-    private static final String UPLOAD_DIR = "/data/scargo/images/gate/";
+    // 업체 소속 차량 확인용 (업체 담당자는 자기 업체 차량의 이력만 조회·수정)
+    private final TruckOwnership truckOwnership;
+
+    // 이미지 저장 위치는 설정값 scargo.upload-root 하나만 쓴다 (UploadStorage) - 하위 폴더 gate
+    private static final String UPLOAD_SUB = "gate";
 
     // 게이트 통과 이력 생성 (OCR 수신 등록 + 이미지 파일 저장 포함)
     @Transactional
@@ -277,6 +282,9 @@ public class GateLogService {
     }
 
     // 파일 공통 저장 헬퍼 메서드
+    // 이전: 하드코딩 경로(/data/scargo/images/gate/)에 원래 파일명 그대로 저장 (형식·이름 검증 없음)
+    // 지금: UploadStorage 로 저장 - jpg·png·pdf 와 Content-Type 일치 검사, UUID 파일명, 경로는 설정값
+    //       (DB 에는 /uploads/gate/<uuid>.<확장자> 로 남고 GET /uploads/** 로 제공됨)
     private String saveFile(MultipartFile file) {
 
         if (file == null || file.isEmpty()) {
@@ -285,26 +293,7 @@ public class GateLogService {
 
         try {
 
-            File dir = new File(UPLOAD_DIR);
-
-            if (!dir.exists()) {
-                dir.mkdirs();
-            }
-
-            String originalFilename = file.getOriginalFilename();
-
-            String savedFileName =
-                    UUID.randomUUID().toString()
-                            + "_"
-                            + originalFilename;
-
-            File targetFile =
-                    new File(UPLOAD_DIR + savedFileName);
-
-            file.transferTo(targetFile);
-
-            // DB에 저장할 웹 접근 경로
-            return "/images/gate/" + savedFileName;
+            return UploadStorage.save(UPLOAD_SUB, UUID.randomUUID().toString(), file);
 
         } catch (IOException e) {
 
@@ -426,5 +415,123 @@ public class GateLogService {
         }
 
         gateLogRepository.deleteById(gateLogId);
+    }
+
+    // ───────── 업체 범위가 있는 조회·수정 (scope == null 이면 관리자: 전체, 값이 있으면 그 업체 소속 차량 이력만) ─────────
+
+    private boolean inScope(GateLog gateLog, Long scope) {
+        return scope == null
+                || (gateLog.getActualVehicleNo() != null
+                && truckOwnership.owns(gateLog.getActualVehicleNo(), scope));
+    }
+
+    public GateLogResponse getGateLog(Long gateLogId, Long scope) {
+
+        GateLog gateLog =
+                gateLogRepository
+                        .findById(gateLogId)
+                        .orElseThrow(() ->
+                                new IllegalArgumentException(
+                                        "존재하지 않는 게이트 통과 이력 ID입니다: "
+                                                + gateLogId
+                                )
+                        );
+
+        if (!inScope(gateLog, scope)) {
+            throw new AccessDeniedException("소속 업체 차량의 이력만 조회할 수 있습니다.");
+        }
+
+        return new GateLogResponse(gateLog);
+    }
+
+    public Page<GateLogResponse> getAllGateLogs(Pageable pageable, Long scope) {
+
+        if (scope == null) {
+            return getAllGateLogs(pageable);
+        }
+
+        return gateLogRepository
+                .findScoped(scope, pageable)
+                .map(GateLogResponse::new);
+    }
+
+    public Page<GateLogResponse> getGateLogsByActualVehicleNo(
+            String actualVehicleNo,
+            Pageable pageable,
+            Long scope
+    ) {
+
+        if (scope == null) {
+            return getGateLogsByActualVehicleNo(actualVehicleNo, pageable);
+        }
+
+        return gateLogRepository
+                .findScopedByVehicle(scope, actualVehicleNo, pageable)
+                .map(GateLogResponse::new);
+    }
+
+    public Page<GateLogResponse> getGateLogsByGateType(
+            String gateType,
+            Pageable pageable,
+            Long scope
+    ) {
+
+        if (scope == null) {
+            return getGateLogsByGateType(gateType, pageable);
+        }
+
+        return gateLogRepository
+                .findScopedByGateType(scope, gateType, pageable)
+                .map(GateLogResponse::new);
+    }
+
+    public Page<GateLogResponse> getGateLogsBetween(
+            OffsetDateTime start,
+            OffsetDateTime end,
+            Pageable pageable,
+            Long scope
+    ) {
+
+        if (scope == null) {
+            return getGateLogsBetween(start, end, pageable);
+        }
+
+        return gateLogRepository
+                .findScopedBetween(scope, start, end, pageable)
+                .map(GateLogResponse::new);
+    }
+
+    // 수정: 업체 담당자는 자기 업체 차량의 이력만, 차량 번호를 바꿀 때도 자기 업체 차량으로만
+    @Transactional
+    public GateLogResponse updateGateLog(
+            Long gateLogId,
+            GateLogUpdateRequest request,
+            Long scope
+    ) {
+
+        if (scope != null) {
+
+            GateLog gateLog =
+                    gateLogRepository
+                            .findById(gateLogId)
+                            .orElseThrow(() ->
+                                    new IllegalArgumentException(
+                                            "존재하지 않는 게이트 통과 이력 ID입니다: "
+                                                    + gateLogId
+                                    )
+                            );
+
+            if (!inScope(gateLog, scope)) {
+                throw new AccessDeniedException("소속 업체 차량의 이력만 수정할 수 있습니다.");
+            }
+
+            String newVehicleNo = request.getActualVehicleNo();
+
+            if (newVehicleNo != null && !truckOwnership.owns(newVehicleNo, scope)) {
+                throw new AccessDeniedException("소속 업체 차량 번호로만 바꿀 수 있습니다.");
+            }
+        }
+
+        return updateGateLog(gateLogId, request);
     }
 }

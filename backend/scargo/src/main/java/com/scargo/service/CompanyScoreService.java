@@ -5,6 +5,10 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.sql.Timestamp;
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -20,23 +24,49 @@ public class CompanyScoreService {
 
     @Transactional(readOnly = true)
     public List<Map<String, Object>> scorecard(Integer days) {
-        int n = days == null ? 30 : Math.max(1, Math.min(180, days));
-        List<Map<String, Object>> rows = jdbc.queryForList(
-                "SELECT c.company_id AS \"companyId\", c.company_name AS \"companyName\", "
-                        + "(SELECT COUNT(*) FROM transport_orders o WHERE o.company_id = c.company_id AND o.created_at >= now() - (? * interval '1 day')) AS \"orders\", "
-                        + "(SELECT COUNT(*) FROM transport_orders o WHERE o.company_id = c.company_id AND o.status = 'HANDED_OVER' AND o.created_at >= now() - (? * interval '1 day')) AS \"handedOver\", "
-                        + "(SELECT COUNT(*) FROM transport_orders o WHERE o.company_id = c.company_id AND o.arrived_at IS NOT NULL AND o.eta IS NOT NULL "
-                        + "   AND o.created_at >= now() - (? * interval '1 day')) AS \"arrived\", "
-                        + "(SELECT COUNT(*) FROM transport_orders o WHERE o.company_id = c.company_id AND o.arrived_at IS NOT NULL AND o.eta IS NOT NULL AND o.arrived_at > o.eta "
-                        + "   AND o.created_at >= now() - (? * interval '1 day')) AS \"late\", "
-                        + "(SELECT ROUND(AVG(EXTRACT(EPOCH FROM (o.arrived_at - o.departed_at)) / 60)::numeric, 1) FROM transport_orders o "
-                        + "   WHERE o.company_id = c.company_id AND o.arrived_at IS NOT NULL AND o.departed_at IS NOT NULL AND o.created_at >= now() - (? * interval '1 day')) AS \"avgTransitMin\", "
-                        + "(SELECT COUNT(*) FROM container_inspections i WHERE i.company_id = c.company_id AND i.record_status = 'FINALIZED' "
-                        + "   AND i.finalized_at >= now() - (? * interval '1 day')) AS \"inspections\", "
-                        + "(SELECT COUNT(*) FROM container_inspections i WHERE i.company_id = c.company_id AND i.record_status = 'FINALIZED' AND i.overall_status = 'FAIL' "
-                        + "   AND i.finalized_at >= now() - (? * interval '1 day')) AS \"failed\" "
-                        + "FROM companies c ORDER BY 3 DESC, c.company_name",
-                n, n, n, n, n, n, n);
+        return scorecard(days, null, null);
+    }
+
+    /**
+     * 26.10.29 기간 지정: from ~ to (둘 다 있으면 그 날짜 0시 ~ to 다음날 0시 전까지, 최대 366일). 없으면 예전처럼 최근 days 일
+     */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> scorecard(Integer days, LocalDate from, LocalDate to) {
+        List<Object> params = new ArrayList<>();
+        final boolean ranged = from != null && to != null;
+        final Timestamp start, end;
+        final int n;
+        if (ranged) {
+            if (to.isBefore(from)) throw new IllegalArgumentException("종료일이 시작일보다 빠릅니다.");
+            if (ChronoUnit.DAYS.between(from, to) > 365) throw new IllegalArgumentException("기간은 최대 1년까지 조회할 수 있습니다.");
+            start = Timestamp.valueOf(from.atStartOfDay());
+            end = Timestamp.valueOf(to.plusDays(1).atStartOfDay());
+            n = 0;
+        } else {
+            start = null;
+            end = null;
+            n = days == null ? 30 : Math.max(1, Math.min(180, days));
+        }
+        // 기간 조건 (컬럼별). 파라미터는 SQL 에 나오는 순서대로 params 에 쌓는다
+        java.util.function.Function<String, String> in = (col) -> {
+            if (ranged) { params.add(start); params.add(end); return col + " >= ? AND " + col + " < ?"; }
+            params.add(n); return col + " >= now() - (? * interval '1 day')";
+        };
+        String sql = "SELECT c.company_id AS \"companyId\", c.company_name AS \"companyName\", "
+                + "(SELECT COUNT(*) FROM transport_orders o WHERE o.company_id = c.company_id AND " + in.apply("o.created_at") + ") AS \"orders\", "
+                + "(SELECT COUNT(*) FROM transport_orders o WHERE o.company_id = c.company_id AND o.status = 'HANDED_OVER' AND " + in.apply("o.created_at") + ") AS \"handedOver\", "
+                + "(SELECT COUNT(*) FROM transport_orders o WHERE o.company_id = c.company_id AND o.arrived_at IS NOT NULL AND o.eta IS NOT NULL "
+                + "   AND " + in.apply("o.created_at") + ") AS \"arrived\", "
+                + "(SELECT COUNT(*) FROM transport_orders o WHERE o.company_id = c.company_id AND o.arrived_at IS NOT NULL AND o.eta IS NOT NULL AND o.arrived_at > o.eta "
+                + "   AND " + in.apply("o.created_at") + ") AS \"late\", "
+                + "(SELECT ROUND(AVG(EXTRACT(EPOCH FROM (o.arrived_at - o.departed_at)) / 60)::numeric, 1) FROM transport_orders o "
+                + "   WHERE o.company_id = c.company_id AND o.arrived_at IS NOT NULL AND o.departed_at IS NOT NULL AND " + in.apply("o.created_at") + ") AS \"avgTransitMin\", "
+                + "(SELECT COUNT(*) FROM container_inspections i WHERE i.company_id = c.company_id AND i.record_status = 'FINALIZED' "
+                + "   AND " + in.apply("i.finalized_at") + ") AS \"inspections\", "
+                + "(SELECT COUNT(*) FROM container_inspections i WHERE i.company_id = c.company_id AND i.record_status = 'FINALIZED' AND i.overall_status = 'FAIL' "
+                + "   AND " + in.apply("i.finalized_at") + ") AS \"failed\" "
+                + "FROM companies c ORDER BY 3 DESC, c.company_name";
+        List<Map<String, Object>> rows = jdbc.queryForList(sql, params.toArray());
         for (Map<String, Object> r : rows) {
             long arrived = ((Number) r.get("arrived")).longValue();
             long late = ((Number) r.get("late")).longValue();

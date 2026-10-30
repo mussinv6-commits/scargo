@@ -1,11 +1,11 @@
 // web.html(기획 목업) 의 권한표. v9: 권한 없는 메뉴는 숨김 (화면 ID 는 코드·라우트에만, 화면에는 이름만)
-export const T = { 'W-01': '로그인', 'W-02': '관제 현황', 'W-03': '네트워크 관제', 'W-04': '허브 관제', 'W-05': '지역센터 관제', 'W-06': 'AMR 관제', 'W-07': '운송오더·물품 관리', 'W-08': '지선 배차 관리', 'W-09': '예외 알림 센터', 'W-10': '기사 가입 승인', 'W-11': '기준정보', 'W-12': '구간 관제 지도', 'W-13': '구간 차량 관제', 'W-14': '구간 계측 이력', 'W-15': '차량 점검표', 'W-16': '직원관리' }
+export const T = { 'W-01': '로그인', 'W-02': '관제 현황', 'W-03': '운송망 관제', 'W-04': '허브 관제', 'W-05': '물류센터 관제', 'W-06': 'AMR 관제', 'W-07': '운송오더·물품 관리', 'W-08': '지선 배차 관리', 'W-09': '이상 상황 관리', 'W-10': '기사 가입 승인', 'W-11': '운영 기준 설정', 'W-12': '구간 관제', 'W-13': '구간 관제', 'W-14': '구간 관제', 'W-15': '점검표', 'W-16': '직원관리' }
 // 사이드바 순서·그룹 (web.html nav 그대로)
 export const NAV = [
   { grp: null, items: ['W-01'] },
   { grp: '공통 컨트롤타워', items: ['W-02', 'W-03', 'W-09', 'W-15', 'W-16', 'W-10', 'W-11'] },
-  { grp: '항만 → 허브', items: ['W-07', 'W-12', 'W-13', 'W-14'] }, // 26.10.26: W-12~14 = 인천항 → 곤지암 구간 관제 (toll_demo 서버 화면을 iframe 으로 표시)
-  { grp: '허브 → 물류센터', items: ['W-04', 'W-05', 'W-06', 'W-08'] },
+  { grp: '항만 → 허브', items: ['W-07', 'W-12'] }, // 26.10.26: W-12~14 = 인천항 → 곤지암 구간 관제 (toll_demo 서버 화면을 iframe 으로 표시)
+  { grp: '허브 → 물류센터', items: ['W-04', 'W-06', 'W-08', 'W-05'] }, // 26.10.28 순서 정리(처리순): 허브 → AMR → 지선 배차 → 지역센터
 ]
 export const R = {
   ADMIN: 'all',
@@ -31,6 +31,7 @@ export const DRIVER_TYPES = ['CONTAINER_DRIVER', 'BRANCH_DRIVER', 'GENERAL'] // 
 export function homeOf(user) {
   if (!user) return '/scargo'
   if (user.userType === 'ADMIN' && user.adminScope === 'SBOT') return '/sbot'
+  if (user.userType === 'BRANCH_DRIVER') return '/app-only' // 26.10.29 지선 운송기사는 웹 기사 화면 대신 앱 안내
   if (DRIVER_TYPES.includes(user.userType)) return '/driver/app/status'
   if (user.userType === 'CORPORATE_PENDING') return '/pending'
   if (user.userType === 'ADMIN') return '/admin' // 26.10.26 총관리자는 카르고 대시보드로
@@ -41,3 +42,7 @@ export function homeOf(user) {
 export function wMenuGroups(role) {
   return NAV.filter(g => g.grp).map(g => g.items.filter(id => canSee(role, id)).map(id => ({ to: '/w/' + id, label: T[id] }))).filter(g => g.length)
 }
+
+// 26.10.29 관제사(통합 · 허브 · 지역센터) 계정도 총관리자와 같은 사이드바 · 상단바를 쓴다 (보이는 메뉴는 권한만큼)
+export const STAFF_ROLES = ['CONTROL', 'HUB_OP', 'CENTER_OP']
+export const staffRole = (user) => { const r = webRole(user); return STAFF_ROLES.includes(r) ? r : null }

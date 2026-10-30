@@ -31,25 +31,30 @@
         <thead><tr><th>번호</th><th>중요도</th><th>유형</th><th>제목</th><th>컨테이너</th><th>상태</th><th>담당</th><th>접수</th><th>처리</th></tr></thead>
         <tbody>
           <tr v-if="!rows.length"><td colspan="9" class="ip2-empty">{{ loading ? '불러오는 중...' : '접수된 건이 없습니다.' }}</td></tr>
-          <template v-for="r in rows" :key="r.incidentId">
+          <template v-for="(r, i) in pg.rows" :key="r.incidentId">
             <tr :class="{ sel: open === r.incidentId, done: r.status === 'RESOLVED' }">
-              <td>#{{ r.incidentId }}</td>
+              <td>{{ pg.no(i) }}</td><!-- 26.10.28 QA#5 번호 1부터 순서대로 -->
               <td><span class="ip2-sev" :class="'s-' + r.severity">{{ SEVERITY[r.severity] }}</span></td>
               <td>{{ INCIDENT_TYPE[r.type] || r.type }}</td>
-              <td class="wrap">{{ r.title }}</td><td>{{ r.containerNo || '-' }}</td>
-              <td>{{ INCIDENT_STATUS[r.status] }}</td><td>{{ r.assignee || '-' }}</td>
+              <td class="wrap is-left">{{ r.title }}</td><td>{{ r.containerNo || '-' }}</td>
+              <td>{{ INCIDENT_STATUS[r.status] }}</td><td>{{ displayAssignee(r, staff) }}</td>
               <td>{{ formatDateTime(r.createdAt) }}</td>
               <td><button class="ip2-btn" @click="toggle(r)">{{ open === r.incidentId ? '닫기' : '열기' }}</button></td>
             </tr>
             <tr v-if="open === r.incidentId" class="ip2-detail">
-              <td colspan="9">
+              <td colspan="9" class="is-left">
                 <p v-if="r.detail" class="ip2-text">{{ r.detail }}</p>
                 <p class="ip2-muted">접수자 {{ r.reportedBy || '-' }}<template v-if="r.resolvedAt"> · 해결 {{ formatDateTime(r.resolvedAt) }}</template></p>
                 <div class="ip2-edit">
                   <select v-model="edit.status" class="ip2-in">
                     <option v-for="(label, key) in INCIDENT_STATUS" :key="key" :value="key">{{ label }}</option>
                   </select>
-                  <input v-model.trim="edit.assignee" class="ip2-in" maxlength="50" placeholder="담당자" />
+                  <!-- 26.10.29 QA: 담당자는 직접 입력 대신 직원 계정에서 선택 (실제 권한명으로 표시) -->
+                  <select v-model="edit.assignee" class="ip2-in" aria-label="담당자">
+                    <option value="">담당자 선택</option>
+                    <option v-if="edit.assignee && !staff.some((u) => u.label === edit.assignee)" :value="edit.assignee">{{ edit.assignee }}</option>
+                    <option v-for="u in staff" :key="u.accountId" :value="u.label">{{ u.label }}</option>
+                  </select>
                   <input v-model.trim="edit.resolution" class="ip2-in grow" placeholder="조치 내용 (해결 처리 때 필수)" />
                   <button class="ip2-btn primary" :disabled="busy" @click="save(r)">저장</button>
                 </div>
@@ -59,6 +64,7 @@
           </template>
         </tbody>
       </table>
+      <AdminPager v-model="pg.page" :page-count="pg.pageCount" /><!-- 26.10.28 QA#5 5건 페이징 -->
     </section>
   </div>
 </template>
@@ -69,10 +75,15 @@ import { INCIDENT_TYPE, SEVERITY, INCIDENT_STATUS, listIncidents, createIncident
 import { formatDateTime } from '@/utils/containerInspectionApi.js'
 import { exportExcel } from '@/utils/exportExcel.js'
 import { friendlyError } from '@/utils/apiHelpers.js'
+import AdminPager from '@/components/admin/AdminPager.vue'
+import { usePaged } from '@/utils/usePaged.js'
+import { displayAssignee, loadAssignees } from '@/utils/staffLabel.js'
 
 defineProps({ dark: { type: Boolean, default: false } })
 
 const rows = ref([])
+// 26.10.28 QA#5 최근 접수 순(접수 번호 큰 것부터)으로 정렬해 번호 1부터 표시, 5건씩
+const pg = usePaged(() => [...rows.value].sort((a, b) => (b.incidentId || 0) - (a.incidentId || 0)), 5)
 const loading = ref(false)
 const busy = ref(false)
 const filter = ref('')
@@ -81,6 +92,7 @@ const message = ref('')
 const messageOk = ref(false)
 const form = reactive({ type: 'DAMAGE', severity: 'MEDIUM', title: '', containerNo: '', detail: '' })
 const edit = reactive({ status: 'OPEN', assignee: '', resolution: '' })
+const staff = ref([])
 
 function note(text, ok = false) { message.value = text; messageOk.value = ok }
 
@@ -113,7 +125,9 @@ async function create() {
 function toggle(r) {
   if (open.value === r.incidentId) { open.value = null; return }
   open.value = r.incidentId
-  Object.assign(edit, { status: r.status, assignee: r.assignee || '', resolution: r.resolution || '' })
+  const shown = displayAssignee(r, staff.value)
+  const match = staff.value.find((u) => u.label === shown)
+  Object.assign(edit, { status: r.status, assignee: match?.label || (shown === '-' ? '' : shown), resolution: r.resolution || '' })
 }
 
 async function save(r) {
@@ -143,7 +157,7 @@ function exportRows() {
   ], rows.value)
 }
 
-onMounted(load)
+onMounted(() => { load(); loadAssignees().then((l) => { staff.value = l }).catch(() => { staff.value = [] }) })
 </script>
 
 <style scoped>

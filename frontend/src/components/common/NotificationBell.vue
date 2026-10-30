@@ -3,7 +3,7 @@
     <button class="notif-bell-btn" @click="togglePanel" aria-label="알림">
       <!-- 26.09.21 수정: assets/bell.png (프로젝트에 이미 저장된 종 이미지)로 교체 -->
       <img :src="bellIcon" alt="" class="notif-bell-icon" />
-      <span v-if="unreadCount > 0" class="notif-badge">{{ unreadCount > 99 ? '99+' : unreadCount }}</span>
+      <span v-if="totalUnread > 0" class="notif-badge">{{ totalUnread > 99 ? '99+' : totalUnread }}</span>
     </button>
 
     <div v-if="panelOpen" class="notif-panel">
@@ -11,7 +11,7 @@
         <span>알림</span>
         <button
           class="notif-readall-btn"
-          v-if="unreadCount > 0"
+          v-if="totalUnread > 0"
           :disabled="markingAll"
           @click="markAllRead"
         >
@@ -22,9 +22,9 @@
       <div class="notif-list">
         <div v-if="loading" class="notif-empty">불러오는 중...</div>
         <div v-else-if="error" class="notif-empty">{{ error }}</div>
-        <div v-else-if="notifications.length === 0" class="notif-empty">없음</div>
+        <div v-else-if="shown.length === 0" class="notif-empty">없음</div>
         <div
-          v-for="n in notifications"
+          v-for="n in shown"
           :key="n.notificationId"
           class="notif-item"
           :class="{ unread: !n.read }"
@@ -37,14 +37,18 @@
           <p class="notif-message">{{ n.message }}</p>
         </div>
       </div>
+      <!-- 26.10.28 지난 알림까지 모두 보는 화면으로 -->
+      <button type="button" class="notif-all-btn" @click="openHistory">전체 알림 내역 보기 ›</button>
     </div>
   </li>
 </template>
 
 <script setup>
-import { onMounted, onBeforeUnmount, ref } from 'vue'
+import { onMounted, onBeforeUnmount, ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { authState, isDriverType } from '@/auth/authState.js' // 26.10.22 통합: 기사 권한 3종
+import { authState } from '@/auth/authState.js'
+import { API_BASE } from '@/utils/apiBase.js'
+import { resolveTarget, historyPath } from '@/utils/notificationTarget.js'
 import { adminApi, pickErrorMessage } from '@/utils/adminApi'
 // 26.09.21 추가: assets 폴더에 저장된 종 이미지(bell.png)를 아이콘으로 사용
 import bellIcon from '@/assets/bell.png'
@@ -58,6 +62,34 @@ const markingAll = ref(false)
 const error = ref('')
 
 let pollTimer = null
+
+// 26.10.29 추가: 화재 경보(서버 /api/amr/safety/alert)가 진행 중이면 종 알림 맨 위에 긴급 알림으로 함께 표시
+//  (상단 공지 띠·팝업과 같은 경보를 알림 목록에서도 확인). 경보가 끝나면 자동으로 사라짐
+const live = ref(null)
+const liveRead = ref(false)
+let liveSince = 0
+async function fetchLive() {
+  try {
+    const c = await fetch(`${API_BASE}/api/amr/safety/alert`, { credentials: 'include' }).then((r) => (r.ok ? r.json() : null))
+    if (c && c.active) {
+      if (!live.value) { liveSince = Date.now(); liveRead.value = false }
+      live.value = c
+    } else { live.value = null; liveRead.value = false }
+  } catch { /* 서버 꺼짐 */ }
+}
+const liveItem = computed(() => {
+  const c = live.value
+  if (!c) return null
+  const batt = c.kind === 'batt'
+  return {
+    notificationId: 'sf-live', sf: true, read: liveRead.value, notificationType: 'SYSTEM',
+    title: batt ? '[긴급] AMR 배터리 화재가 발생했습니다' : '[긴급] 허브에 화재가 발생했습니다',
+    message: batt ? '허브 내 AMR 배터리 화재 발생 — 허브 진입·운행 시 서행하고 관제 안내에 따라 주세요.' : '허브 내 화재 발생 — 허브 진입·운행 시 차량 운행에 주의하고 관제 안내에 따라 주세요.',
+    createdAt: c.startedAt || c.createdAt || c.at || liveSince,
+  }
+})
+const shown = computed(() => (liveItem.value ? [liveItem.value, ...notifications.value] : notifications.value))
+const totalUnread = computed(() => unreadCount.value + (liveItem.value && !liveRead.value ? 1 : 0))
 
 function accountId() {
   return authState.user?.accountId
@@ -84,8 +116,8 @@ async function fetchNotifications() {
   loading.value = true
   error.value = ''
   try {
-    const res = await adminApi.get(`/api/notifications/account/${id}`, { params: { page: 0, size: 15 } })
-    notifications.value = res.data.content ?? res.data
+    const res = await adminApi.get(`/api/notifications/account/${id}`, { params: { page: 0, size: 5 } }) // 26.10.28 종 버튼은 최신 5건만 (나머지는 알림 내역에서)
+    notifications.value = [].concat(res.data.content ?? res.data ?? []).slice(0, 5)
   } catch (err) {
     error.value = pickErrorMessage(err, '알림을 불러오지 못했습니다.')
   } finally {
@@ -99,8 +131,8 @@ async function refreshNotificationsSilently() {
   const id = accountId()
   if (!id) return
   try {
-    const res = await adminApi.get(`/api/notifications/account/${id}`, { params: { page: 0, size: 15 } })
-    notifications.value = res.data.content ?? res.data
+    const res = await adminApi.get(`/api/notifications/account/${id}`, { params: { page: 0, size: 5 } }) // 26.10.28 종 버튼은 최신 5건만 (나머지는 알림 내역에서)
+    notifications.value = [].concat(res.data.content ?? res.data ?? []).slice(0, 5)
   } catch (err) {
     console.log('알림 목록 재조회 실패:', err)
   }
@@ -108,46 +140,22 @@ async function refreshNotificationsSilently() {
 
 function togglePanel() {
   panelOpen.value = !panelOpen.value
-  if (panelOpen.value) fetchNotifications()
+  if (panelOpen.value) { fetchNotifications(); fetchLive() }
 }
 
 function closePanel() {
   panelOpen.value = false
 }
 
-// 26.09.30 추가: 알림을 누르면 관련 기능 화면으로 이동
-// 백엔드 알림 유형(NotificationType): CORPORATE_APPROVAL / OVERLOAD_WARNING / NOTICE / SYSTEM
-//  - CORPORATE_APPROVAL : 기업회원 가입 신청(관리자) · 승인 완료(사업자)       referenceId = accountId
-//  - OVERLOAD_WARNING   : 과적 위반 발생                                      referenceId = checkId
-//  - NOTICE             : 차량 등록/진입 허가 결과 등 운영 안내, 공지사항
-function resolveTarget(n) {
-  const role = authState.user?.userType
-  const text = `${n.title || ''} ${n.message || ''}`
-  switch (n.notificationType) {
-    case 'CORPORATE_APPROVAL':
-      return role === 'ADMIN' ? '/admin/accounts' : role === 'CORPORATE_APPROVED' ? '/company' : '/'
-    case 'OVERLOAD_WARNING':
-      return role === 'ADMIN' ? '/admin/overload-checks' : isDriverType(role) ? '/driver/app/status' : '/company'
-    case 'NOTICE':
-    case 'SYSTEM':
-    default:
-      if (/미등록/.test(text) && role === 'ADMIN') return '/admin/trucks'
-      if (/공지/.test(text)) return n.referenceId && /게시|공지사항/.test(text) ? `/notice/${n.referenceId}` : '/notice'
-      if (/차량|진입|허가|반려|배정/.test(text)) {
-        if (role === 'ADMIN') return '/admin/trucks'
-        if (role === 'CORPORATE_APPROVED') return /배정/.test(text) ? '/company/drivers' : '/company'
-        if (isDriverType(role)) return '/driver/app/my-page'
-      }
-      if (/배차|컨테이너|적재/.test(text) && isDriverType(role)) return '/driver/app/dispatch-list'
-      if (/정산|세금계산서/.test(text) && isDriverType(role)) return '/driver/app/settlement'
-      if (role === 'ADMIN') return '/admin'
-      if (role === 'CORPORATE_APPROVED') return '/company'
-      if (isDriverType(role)) return '/driver/app/status'
-      return null
-  }
-}
+// 26.10.28 알림을 누르면 이동할 화면 규칙은 utils/notificationTarget.js 로 옮김 (알림 내역 화면과 같이 사용)
 
 async function handleItemClick(n) {
+  if (n.sf) {
+    liveRead.value = true
+    panelOpen.value = false
+    if (authState.user?.userType === 'ADMIN') router.push('/sbot/hub')
+    return
+  }
   // 백엔드 응답 키가 isRead 가 아니라 read (Jackson boolean 직렬화 규칙)
   if (!n.read) {
     try {
@@ -163,10 +171,16 @@ async function handleItemClick(n) {
   if (target) router.push(target)
 }
 
+function openHistory() {
+  panelOpen.value = false
+  router.push(historyPath())
+}
+
 async function markAllRead() {
   const id = accountId()
   if (!id) return
   markingAll.value = true
+  liveRead.value = true
   try {
     await adminApi.patch(`/api/notifications/account/${id}/read-all`)
     // 26.09.21 수정: 낙관적 업데이트만 믿지 않고, 서버에 실제로 반영됐는지 조용히 재확인
@@ -207,10 +221,10 @@ const vClickOutside = {
 }
 
 onMounted(() => {
-  fetchUnreadCount()
+  fetchUnreadCount(); fetchLive()
   // 26.09.21 수정: 1분 → 5초 폴링으로 단축해서 새로고침 없이도 뱃지 숫자가 자동으로 올라가게 함
   // (백엔드에 WebSocket/SSE 같은 실시간 푸시가 없어서, 짧은 주기로 계속 물어보는 방식으로 "거의 실시간"을 구현)
-  pollTimer = setInterval(fetchUnreadCount, 5000)
+  pollTimer = setInterval(() => { fetchUnreadCount(); fetchLive() }, 5000)
 })
 
 onBeforeUnmount(() => {
@@ -219,3 +233,8 @@ onBeforeUnmount(() => {
 </script>
 
 <style src="@/components/CSS/notification.css"></style>
+<style>
+/* 26.10.28 알림 패널 아래 '전체 알림 내역 보기' */
+.notif-all-btn { display: block; width: 100%; border: 0; border-top: 1px solid #e3e8ef; background: #f8fafc; color: #1d4ed8; font-size: 13px; font-weight: 700; padding: 10px 12px; cursor: pointer; text-align: center; }
+.notif-all-btn:hover { background: #eef3fb; }
+</style>

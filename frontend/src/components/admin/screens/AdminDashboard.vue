@@ -107,7 +107,7 @@
             <tr v-for="(e, i) in recentEvents" :key="i">
               <td>{{ e.time }}</td>
               <td><span class="ops-kind"><img :src="e.img" :alt="e.kind" /> {{ e.kind }}</span></td>
-              <td>{{ e.text }}</td>
+              <td class="is-left">{{ e.text }}</td>
               <td><span class="pill" :class="e.tone">{{ e.status }}</span></td>
             </tr>
           </tbody>

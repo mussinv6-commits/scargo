@@ -4,6 +4,7 @@ export const COMPANY_MENU = [
   { to: '/company/mapping', label: '운송 관리', icon: 'bi-truck' },
   { to: '/company/container-locations', label: '컨테이너 위치 조회', icon: 'bi-geo-alt' },
   { to: '/company/inspections', label: '컨테이너 점검표', icon: 'bi-clipboard-check' }, // 26.10.23
+  { to: '/company/handovers', label: '인수 내역', icon: 'bi-file-earmark-check' }, // 26.10.29 인수증 PDF
   { to: '/company/gate-reservations', label: '게이트 사전 예약', icon: 'bi-calendar-check' }, // 26.10.24
   { to: '/company/trucks/new', label: '차량 관리', icon: 'bi-truck-front' },
   { to: '/company/drivers', label: '기사 관리', icon: 'bi-person-badge' },

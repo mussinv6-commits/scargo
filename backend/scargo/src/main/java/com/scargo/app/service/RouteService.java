@@ -84,7 +84,7 @@ public class RouteService {
         }
 
         List<RoutePoi> checkpoints = new ArrayList<>();
-        for (OverloadCheckpoint c : overloadCheckpointRepository.findByLatitudeBetweenAndLongitudeBetween(
+        for (OverloadCheckpoint c : overloadCheckpointRepository.findByIsActiveTrueAndLatitudeBetweenAndLongitudeBetween(
                 GeoUtils.bd(box[0]), GeoUtils.bd(box[1]), GeoUtils.bd(box[2]), GeoUtils.bd(box[3]))) {
             GeoUtils.Projection p = GeoUtils.project(path, cum, c.getLatitude().doubleValue(), c.getLongitude().doubleValue());
             if (p.distanceFromRouteM() <= CHECKPOINT_NEAR_M) {

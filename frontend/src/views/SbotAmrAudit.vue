@@ -38,7 +38,7 @@
           <tr v-if="!data.failures.length"><td colspan="4" class="aud-empty">실패 기록이 없습니다.</td></tr>
           <tr v-for="(f, i) in data.failures" :key="i">
             <td>{{ formatDateTime(f.occurredAt) }}</td><td>{{ f.ip || '-' }}</td>
-            <td>{{ FAILURE_REASON_LABEL[f.reason] || f.reason }}</td><td :title="f.userAgent">{{ shortAgent(f.userAgent) }}</td>
+            <td class="is-left">{{ FAILURE_REASON_LABEL[f.reason] || f.reason }}</td><td :title="f.userAgent">{{ shortAgent(f.userAgent) }}</td>
           </tr>
         </tbody>
       </table>

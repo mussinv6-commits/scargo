@@ -60,24 +60,29 @@
         </div>
       </div>
       <div class="floorwrap">
+        <!-- 26.10.29 3D 위에 겹치던 메뉴를 위쪽 띠 한 줄로 모음 (훈련 버튼 · 시계는 3D 장면 쪽에서 이 띠로 옮겨 옴) -->
+        <div class="twin-bar" id="tw-bar">
+            <div class="twin-views">
+              <button type="button" data-view="auto" aria-pressed="true">자동 연출</button>
+              <button type="button" data-view="overview" aria-pressed="false">전체 보기</button>
+              <button type="button" data-view="follow" aria-pressed="false">선택 AMR 따라가기</button>
+            </div>
+            <div class="twin-presets" aria-label="바로가기">
+              <button type="button" data-preset="overview">부지 전체</button>
+              <button type="button" data-preset="gateIn">입구 OCR</button>
+              <button type="button" data-preset="dockIn">입고 도크</button>
+              <button type="button" data-preset="rack">랙</button>
+              <button type="button" data-preset="dockOut">출고 도크</button>
+              <button type="button" data-preset="gateOut">출구 OCR</button>
+              <button type="button" data-preset="station">충전 · 정비</button>
+              <button type="button" id="tw-autoGate" aria-pressed="false" title="입구 · 출구에서 번호판 인식이 시작되면 그 게이트를 6초 보여 주고 돌아옵니다">게이트 자동</button>
+            </div>
+          <div class="twin-bar-br"></div>
+        </div>
         <div class="twin-viewport" id="tw-viewport" aria-label="허브 3D 디지털 트윈. 입고 도크에서 운송장을 스캔하고, 권역별 랙에 보관한 뒤, 권역별 출고 도크의 택배차로 옮긴다.">
           <div class="twin-banner" id="tw-banner"><i></i><span></span></div>
-          <div class="twin-views">
-            <button type="button" data-view="auto" aria-pressed="true">자동 연출</button>
-            <button type="button" data-view="overview" aria-pressed="false">전체 보기</button>
-            <button type="button" data-view="follow" aria-pressed="false">선택 AMR 따라가기</button>
-          </div>
-          <div class="twin-presets" aria-label="바로가기">
-            <button type="button" data-preset="overview">부지 전체</button>
-            <button type="button" data-preset="gateIn">입구 OCR</button>
-            <button type="button" data-preset="dockIn">입고 도크</button>
-            <button type="button" data-preset="rack">랙</button>
-            <button type="button" data-preset="dockOut">출고 도크</button>
-            <button type="button" data-preset="gateOut">출구 OCR</button>
-            <button type="button" data-preset="station">충전 · 정비</button>
-            <button type="button" id="tw-autoGate" aria-pressed="false" title="입구 · 출구에서 번호판 인식이 시작되면 그 게이트를 6초 보여 주고 돌아옵니다">게이트 자동</button>
-          </div>
           <div class="capbar">
+            <button type="button" class="cap-tg" aria-expanded="false" title="단계 설명 펼치기 · 접기" @click="$event.currentTarget.closest('.capbar').classList.toggle('open'); $event.currentTarget.setAttribute('aria-expanded', $event.currentTarget.closest('.capbar').classList.contains('open'))"><i>ⓘ</i> 단계 설명<em></em></button>
             <p class="caption" id="tw-caption"></p>
             <div class="pipe" aria-label="데이터 흐름">
               <span class="node" data-k="0">AMR 센서</span><span class="arr">›</span>
@@ -113,6 +118,11 @@
             <div><b id="tw-kpiGate">-</b><span>입출차 / 차단</span></div>
             <div><b id="tw-kpiOcr">-</b><span>OCR 신뢰도</span></div>
           </div>
+        </div>
+        <div class="card"><!-- 26.10.29 구간 관제 도착 순서 = 허브 입차 순서 -->
+          <div class="grouphead"><span class="gtitle">입차 대기열</span><span class="gmeta">구간 관제 도착순</span></div>
+          <ul class="scans gates" id="tw-queue"><li><span class="sd" style="grid-column:1/-1">서버 연결 시 표시</span></li></ul>
+          <div class="hint">맨 앞 차량부터 입구 OCR로 읽고 입차 처리합니다. 순서 기준은 구간 관제 도착 목록 하나뿐입니다.</div>
         </div>
         <div class="card sim-only">
           <div class="grouphead"><span class="gtitle">화물 처리</span><span class="gmeta">처리 <b id="tw-kThru">0</b>건</span></div>

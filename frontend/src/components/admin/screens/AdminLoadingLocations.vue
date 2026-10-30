@@ -56,7 +56,7 @@ const STATUS_BADGE = {
 // 26.09.30 수정: 상태(AVAILABLE 등 영문)와 이용가능(예/아니오) 컬럼이 같은 의미로 겹쳐 보이던 문제 →
 // '적재 상태'(비어있음/사용중/사용불가)와 '배정 가능'(가능/불가)으로 구분
 const columns = [
-  { key: 'locationId', label: 'ID', width: '60px', align: 'center' },
+  { key: 'locationId', label: '번호', width: '60px', align: 'center', type: 'seq' },
   { key: 'yardId', label: '소속야드', format: (v) => yardNameById.value[v] || `#${v}` },
   { key: 'sector', label: '섹터/블록명' },
   { key: 'status', label: '적재 상태', type: 'badge', align: 'center', badge: (v) => STATUS_BADGE[v] || { label: v || '-', tone: 'muted' } },

@@ -35,6 +35,15 @@
       :detail-route="detailRoute"
     />
 
+    <div v-if="(safety.length || live) && !isAdmin" class="safety-notice">
+      <div class="safety-notice-head">🚨 긴급 안전 공지 (자동)</div>
+      <div v-if="live" class="safety-notice-row live"><span class="safety-notice-title">🚨 진행 중 · {{ live.kind === 'batt' ? 'AMR 배터리 화재가 발생했습니다' : '허브에 화재가 발생했습니다' }} (관리자가 종료하면 해제)</span></div>
+      <div v-for="h in safety.slice(0, 5)" :key="h.at" class="safety-notice-row" :class="{ end: h.type === '해제' }">
+        <span class="safety-notice-title">{{ h.title }}</span>
+        <span class="safety-notice-time">{{ new Date(h.at).toLocaleString('ko-KR') }}</span>
+      </div>
+    </div>
+
     <table class="table notice-table">
       <thead>
         <tr>
@@ -64,7 +73,7 @@
           <td class="text-muted small">{{ formatDate(notice.updatedAt) }}</td>
           <td class="text-muted small">{{ notice.viewCount }}</td>
         </tr>
-        <tr v-if="noticeList.length === 0">
+        <tr v-if="noticeList.length === 0" class="is-empty-row"><!-- 26.10.28 QA#19 -->
           <td colspan="7" class="py-5 text-muted">등록된 공지사항이 없습니다.</td>
         </tr>
       </tbody>
@@ -87,6 +96,7 @@
 
 <script>
 import { postsApi, NOTICE_CATEGORY, noticeTypeLabel, noticeTypeClass, isAdminUser, withAuthors, fmtDate, parseNoticeLevel } from '@/utils/postsApi.js'
+import { API_BASE } from '@/utils/apiBase.js'
 import PostEditor from '@/components/notice/PostEditor.vue'
 
 const PAGE_SIZE = 5
@@ -101,6 +111,8 @@ export default {
       categoryKeyword: '',
       pageNumber: 1,
       cnt: 0,
+      live: null, // 진행 중인 경보
+      safety: [], // 26.10.29 허브 화재 경보 자동 공지 (서버 /api/amr/safety/history)
     }
   },
   computed: {
@@ -119,8 +131,19 @@ export default {
   },
   mounted() {
     this.getNoticeList()
+    this.loadSafety()
+    this._sf = setInterval(this.loadSafety, 5000)
   },
+  beforeUnmount() { clearInterval(this._sf) },
   methods: {
+    async loadSafety() {
+      try {
+        const r = await fetch(API_BASE + '/api/amr/safety/history', { credentials: 'include' })
+        if (r.ok) this.safety = await r.json()
+        const c = await fetch(API_BASE + '/api/amr/safety/alert', { credentials: 'include' })
+        this.live = c.ok ? ((a) => (a && a.active ? a : null))(await c.json()) : null
+      } catch { /* 서버 꺼짐 · 공지만 표시 */ }
+    },
     noticeTypeLabel,
     noticeTypeClass,
     displayNo(index) {
@@ -201,4 +224,12 @@ export default {
 </script>
 
 <style scoped src="./noticeList.css"></style>
+<style scoped>
+.safety-notice { border: 1px solid #e0b4b0; background: #fff4f2; border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; }
+.safety-notice-head { font-weight: 700; color: #b3261e; margin-bottom: 6px; }
+.safety-notice-row { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; border-top: 1px dashed #eccac6; font-size: .92rem; }
+.safety-notice-row.live { color: #c62828; font-weight: 700; }
+.safety-notice-row.end { color: #1e7a46; }
+.safety-notice-time { color: #888; white-space: nowrap; }
+</style>
 <style scoped src="@/components/CSS/board.css"></style>

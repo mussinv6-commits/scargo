@@ -1,7 +1,7 @@
 <template>
-<section class="scr" id="W-06"><div class="card"><h3>AMR 관제 (허브 내 자율이동로봇 {{ rows.length }}대)</h3><table :style="pg.reset"><tr><th>로봇</th><th>종류</th><th>상태</th><th>배터리</th><th>현재 작업</th><th>위치</th></tr>
-<tr v-for="r in pg.rows" :key="r.code"><td>{{ r.code }}</td><td>{{ r.type }}</td><td><span :class="'b ' + (['ERROR','STOPPED','FAULT'].includes(r.state) ? 'crit' : r.state === 'IDLE' ? 'gray' : 'ok')">{{ stl(r.state) }}</span></td><td>{{ r.battery == null ? '—' : Math.round(r.battery) + '%' }}</td><td>{{ r.task || '—' }}</td><td>{{ r.place || '—' }}</td></tr>
-<tr v-if="!rows.length"><td colspan="6" class="meta">등록된 로봇이 없습니다.</td></tr></table><Pager :p="pg"/></div></section>
+<section class="scr" id="W-06"><div class="card"><h3>AMR 관제 (허브 내 자율이동로봇 {{ rows.length }}대)</h3><table :style="pg.reset"><thead><tr><th>로봇</th><th>종류</th><th>상태</th><th>배터리</th><th>현재 작업</th><th>위치</th></tr></thead>
+<tbody><tr v-for="r in pg.rows" :key="r.code"><td>{{ r.code }}</td><td>{{ r.type }}</td><td><span :class="'b ' + (['ERROR','STOPPED','FAULT'].includes(r.state) ? 'crit' : r.state === 'IDLE' ? 'gray' : 'ok')">{{ stl(r.state) }}</span></td><td>{{ r.battery == null ? '—' : Math.round(r.battery) + '%' }}</td><td>{{ r.task || '—' }}</td><td>{{ r.place || '—' }}</td></tr>
+<tr v-if="!rows.length"><td colspan="6" class="meta">등록된 로봇이 없습니다.</td></tr></tbody></table><Pager :p="pg"/></div></section>
 </template>
 <script setup>
 import Pager from '../comp/Pager.vue'

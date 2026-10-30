@@ -141,6 +141,7 @@ public class AccountService {
                     .referenceId(company.getCompanyId())
                     .build());
         }
+        markRequestRead(account.getAccountId()); // fix_1027
         if (pendingAccount) {
             account.setUserType(Account.UserType.CORPORATE_APPROVED);
             accountRepository.flush();
@@ -164,6 +165,7 @@ public class AccountService {
     public void rejectCorporateAccount(Long accountId, String reason) {
         Account account = findAccount(accountId);
         requireManagedAccount(account, requireAdminOperator(currentAccount()));
+        markRequestRead(account.getAccountId()); // fix_1027
         if (account.getUserType() == Account.UserType.CORPORATE_PENDING) {
             accountRepository.delete(account);
             return;
@@ -174,13 +176,20 @@ public class AccountService {
             throw new IllegalArgumentException("승인 대기 중인 기업 계정이 아닙니다.");
         }
         company.rejectCarrier(reason == null || reason.isBlank() ? "관리자 반려" : reason);
+        // fix_1027: 반려된 회사는 '승인 운송사'가 아니어서 회사 알림을 못 봄 → 신청 계정에게 직접 보냄
         notificationService.createNotification(NotificationCreateRequest.builder()
-                .companyId(company.getCompanyId())
+                .accountId(account.getAccountId())
                 .title("운송사 승인 반려")
                 .message(company.getCompanyName() + " 운송사 등록이 반려되었습니다. 사유: " + company.getRejectReason())
                 .notificationType(NotificationType.CORPORATE_APPROVAL)
                 .referenceId(company.getCompanyId())
                 .build());
+    }
+
+    // fix_1027: 처리된 기업 회원 가입 요청 알림은 관리자 종에서 읽음 처리
+    private void markRequestRead(Long accountId) {
+        entityManager.createNativeQuery("UPDATE notifications SET is_read = true, read_at = now() WHERE notification_type = 'CORPORATE_APPROVAL' "
+                + "AND reference_id = :id AND title = '기업 회원 가입 승인 요청' AND NOT is_read").setParameter("id", accountId).executeUpdate();
     }
 
     // 계정 등록

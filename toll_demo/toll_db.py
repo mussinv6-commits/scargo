@@ -319,7 +319,7 @@ def tons_s(kg):
     return '—' if kg is None else f'{kg / 1000:.1f}t'
 
 
-def trips_data(url, since):
+def trips_data(url, since, until=None):
     """통행 1건당 1행: 차량 · 현재 위치 · 지점별 계측/판정 · 예상 통행료 · 경로 이벤트 · 관제 권고/조치.  W-12 · W-13 · W-14 가 같이 쓴다."""
     trips = _rows(url, f"""SELECT v.trip_id, v.vehicle_no, v.entered_at, v.plate_confidence, v.plate_crop_url,
                                   v.last_point, v.last_point_name, v.last_seq, v.last_km, v.status, v.fine_manwon, v.paid_won,
@@ -330,7 +330,8 @@ def trips_data(url, since):
                              JOIN companies c ON c.company_id = t.company_id
                              LEFT JOIN vehicle_specs vs ON vs.vehicle_no = v.vehicle_no
                             WHERE v.entered_at >= COALESCE(%s::timestamptz, '-infinity'::timestamptz)
-                            ORDER BY v.entered_at DESC LIMIT 200""", (since,))
+                              AND v.entered_at < COALESCE(%s::timestamptz, 'infinity'::timestamptz)
+                            ORDER BY v.entered_at DESC LIMIT 500""", (since, until))
     if not trips:
         return []
     keys = [t['trip_id'] for t in trips]
@@ -387,11 +388,50 @@ def trips_data(url, since):
         t['recs'] = _build_recs(t)
         t['pending'] = sum(1 for r in t['recs'] if not r['issued'] and r['level'] == 'CONFIRMED')
         t['paid_won'] = int(t['paid_won'] or 0)
+    _hub_link(url, trips)
     return trips
 
 
-def departure_issues(url, since):
+def _hub_link(url, trips):
+    """26.10.29 허브 입차 연동: 통행마다 t['hub'] = {state, arrived_at, entered_at, decision, confidence, queue} 를 붙인다.
+    state: ENROUTE(곤지암 도착 전) / ARRIVED(도착했고 허브 입차 전) / ENTERED(허브 입차 기록 있음).  queue = 도착했지만 아직 입차 안 한 차량의 입차 순번(도착 순서, 1부터).
+    허브 입차 기록은 백엔드(HubVehicleService)가 hub_vehicle_logs 에 남기며, 테이블이 없거나 조회가 막히면 연동 없이(ENROUTE/ARRIVED 까지만) 보여 준다."""
+    import datetime
+    plates = sorted({(t['vehicle_no'] or '').replace(' ', '') for t in trips if t.get('vehicle_no')})
+    logs = []
+    if plates:
+        try:
+            logs = _rows(url, """SELECT log_id, created_at, decision, ocr_confidence, COALESCE(recognized_plate, photo_plate) AS plate
+                                   FROM hub_vehicle_logs
+                                  WHERE direction = 'ENTRY' AND REPLACE(COALESCE(recognized_plate, photo_plate), ' ', '') = ANY(%s)
+                                  ORDER BY created_at""", (plates,))
+        except Exception:
+            logs = []
+    waiting = []
+    for t in trips:
+        p = t.get('position') or {}
+        arrived = p.get('updated_at') if p.get('route_status') == 'ARRIVED' else None
+        h = dict(state='ENROUTE', arrived_at=arrived, entered_at=None, decision=None, confidence=None, queue=None)
+        if arrived:
+            h['state'] = 'ARRIVED'
+            key = (t['vehicle_no'] or '').replace(' ', '')
+            lim = arrived - datetime.timedelta(minutes=1)
+            try:
+                hit = next((l for l in logs if (l['plate'] or '').replace(' ', '') == key and l['created_at'] >= lim), None)
+            except TypeError:                                         # 시간대 유무가 다르면 비교하지 않고 입차 전으로 본다
+                hit = None
+            if hit:
+                h.update(state='ENTERED', entered_at=hit['created_at'], decision=hit['decision'], confidence=hit['ocr_confidence'])
+            else:
+                waiting.append((arrived, t['trip_id'], h))
+        t['hub'] = h
+    for i, (_, _, h) in enumerate(sorted(waiting, key=lambda x: (x[0], x[1])), 1):
+        h['queue'] = i
+
+
+def departure_issues(url, since, until=None):
     """출차 OCR 단계에서 막힌 건 (인식 실패 / 미등록 차량)"""
     return _rows(url, """SELECT departure_id, departed_at, recognized_plate_no, plate_confidence, result FROM departure_logs
                           WHERE result <> 'DEPARTED' AND departed_at >= COALESCE(%s::timestamptz, '-infinity'::timestamptz)
-                          ORDER BY departed_at DESC LIMIT 20""", (since,))
+                            AND departed_at < COALESCE(%s::timestamptz, 'infinity'::timestamptz)
+                          ORDER BY departed_at DESC LIMIT 20""", (since, until))

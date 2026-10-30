@@ -57,6 +57,11 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     @org.springframework.data.jpa.repository.Query("SELECT count(n) FROM Notification n WHERE n.isRead = false AND (n.accountId = :a OR (:c IS NOT NULL AND n.companyId = :c))")
     long countMineUnread(@org.springframework.data.repository.query.Param("a") Long accountId, @org.springframework.data.repository.query.Param("c") Long companyId);
 
+    // 26.10.29 인계를 마친 오더의 'HUB 도착 · 인계를 진행하세요' 알림은 읽음 처리 (인계 뒤에 앱 팝업이 다시 뜨던 문제)
+    @Modifying
+    @Query("UPDATE Notification n SET n.isRead = true, n.readAt = :now WHERE n.accountId = :a AND n.referenceId = :ref AND n.title = :title AND n.isRead = false")
+    int markReadByReference(@Param("a") Long accountId, @Param("ref") Long referenceId, @Param("title") String title, @Param("now") OffsetDateTime now);
+
     @org.springframework.data.jpa.repository.Query("SELECT n FROM Notification n WHERE n.isRead = false AND (n.accountId = :a OR (:c IS NOT NULL AND n.companyId = :c)) ORDER BY n.createdAt DESC")
     List<Notification> findMineUnread(@org.springframework.data.repository.query.Param("a") Long accountId, @org.springframework.data.repository.query.Param("c") Long companyId);
 }

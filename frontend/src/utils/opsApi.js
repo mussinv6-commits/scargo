@@ -33,4 +33,5 @@ export const backupInfo = () => http.get('/api/ops/backup-info').then((r) => r.d
 
 // 26.10.24 경보 규칙 / 업체별 실적
 export const opsAlerts = () => http.get('/api/ops/alerts').then((r) => r.data)
-export const companyScorecard = (days = 30) => http.get('/api/reports/company-scorecard', { params: { days } }).then((r) => r.data)
+// 26.10.29 기간 지정: companyScorecard({ from, to }) (yyyy-MM-dd). 숫자를 넘기면 예전처럼 최근 N일
+export const companyScorecard = (q = 30) => http.get('/api/reports/company-scorecard', { params: typeof q === 'object' ? { from: q.from, to: q.to, days: q.days } : { days: q } }).then((r) => r.data)

@@ -32,6 +32,7 @@ h1{margin:4px 0 2px;font-size:25px;font-weight:bold}
 .stop{background:#33425f;color:#cdd8ea}
 .dis{opacity:.45;cursor:default}
 .web{margin-top:10px;font-size:13px;color:#7fb2ff;height:18px}
+.sp{margin-top:14px;text-align:center}.sp .t{font-size:11px;color:#8fa6cc;margin-bottom:8px}.sp table{width:100%;table-layout:fixed;border-collapse:collapse}.sp td{text-align:center;height:64px;vertical-align:middle}.sp img{max-width:92%;max-height:46px}
 </style>
 </head>
 <body>
@@ -44,7 +45,7 @@ h1{margin:4px 0 2px;font-size:25px;font-weight:bold}
   <div class="bar"><i id="bar"></i></div>
   <div class="note" id="note"></div>
   <div class="btns"><div class="btn go" id="bgo" onclick="doStart()">▶ 실행</div><div class="btn stop" id="bstop" onclick="doStop()">■ 종료</div></div>
-  <div class="web" id="web"></div>
+  <div class="web" id="web"></div><div class="sp"><div class="t">함께하는 곳</div><table><tr><td><img src="l_its.png"></td><td><img src="l_st.png"></td><td><img src="l_mbc.png"></td></tr></table></div>
 </div>
 
 <script language="JavaScript">
@@ -164,8 +165,8 @@ function readPorts() {
 function probe(s) {
   var on = listening[String(s.port)] ? true : false;
   if (s.key == "be") {
-    // 백엔드는 포트가 열린 뒤에도 계정 생성 등 마무리가 있어서 20초 더 기다린다
-    if (on) { if (!s.seen) s.seen = now(); s.alive = (now() - s.seen) >= 20000; }
+    // 백엔드는 포트가 열린 뒤에도 계정 생성 등 마무리가 있어서 8초 더 기다린다
+    if (on) { if (!s.seen) s.seen = now(); s.alive = (now() - s.seen) >= 8000; }
     else { s.seen = 0; s.alive = false; }
   } else { s.alive = on; }
 }
@@ -185,7 +186,7 @@ function launch(s) {
     if (!fso.FileExists(p)) { s.st = "fail"; return; }
     runHidden(p, "ocr");
   } else if (s.key == "web") {
-    runHidden(HERE + "\\scripts\\web.bat", "web");
+    runHidden(HERE + "\\scripts\\web.bat", "web_" + (new Date().getTime() % 100000));
   } else if (s.key == "toll") {
     if (!fso.FileExists(ROOT + "\\toll_demo\\gate_env\\Scripts\\activate.bat") || !fso.FileExists(ROOT + "\\toll_demo\\models\\ocr.pth")) { s.st = "skip"; return; }
     runHidden(HERE + "\\scripts\\toll.bat", "toll");
@@ -222,14 +223,15 @@ function tick() {
     var be = SV[0];
     if (be.alive) be.st = "up";
     else if (be.st == "idle") launch(be);
-    // 백엔드가 켜진 뒤에 나머지를 함께 켠다
-    if (be.st == "up") {
-      for (k = 1; k < SV.length; k++) {
-        s = SV[k];
-        if (s.alive) s.st = "up";
-        else if (s.st == "idle") launch(s);
-      }
-    } else if (be.st == "fail") {
+    // 26.10.30 켜는 순서: 백엔드 먼저. OCR 서버는 모델을 읽는 데 오래 걸리고 백엔드가 뜰 때까지 스스로 기다리므로 같이 시작하고,
+    //   웹 화면 · 구간 관제는 백엔드 포트가 열린 뒤에 켠다 (백엔드 없이 "실행 중"으로 먼저 뜨는 일이 없게)
+    var beOn = listening[String(be.port)] ? true : false;
+    for (k = 1; k < SV.length; k++) {
+      s = SV[k];
+      if (s.alive) s.st = "up";
+      else if (s.st == "idle" && (SV[k].key == "ocr" || beOn)) launch(s);
+    }
+    if (be.st == "fail") {
       for (k = 1; k < SV.length; k++) if (SV[k].st == "idle") SV[k].st = "fail";
     }
     for (k = 0; k < SV.length; k++) {

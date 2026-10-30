@@ -41,23 +41,28 @@
   overflow: visible;
 }
 
+/* 26.10.28 QA C-3: 화면 축소(zoom) 때도 창 높이에 딱 맞게 (100vh / zoom) → 바깥 상하 스크롤바가 생기지 않음 */
 .wrapper-admin {
   display: flex;
   flex-direction: column;
-  min-height: calc(100vh - var(--nav-h, 60px));
+  min-height: calc(100vh / var(--sc-zoom, 1) - var(--nav-h, 60px));
 }
 .wrapper-admin > :deep(*) {
   flex: 1 1 auto;
   display: flex;
   width: 100%;
-  min-height: calc(100vh - var(--nav-h, 60px));
+  min-height: calc(100vh / var(--sc-zoom, 1) - var(--nav-h, 60px));
 }
 .wrapper-admin :deep(.admin-app) {
   flex: 1 1 auto;
   width: 100%;
-  min-height: calc(100vh - var(--nav-h, 60px));
-  height: calc(100vh - var(--nav-h, 60px));
+  min-height: calc(100vh / var(--sc-zoom, 1) - var(--nav-h, 60px));
+  height: calc(100vh / var(--sc-zoom, 1) - var(--nav-h, 60px));
 }
+/* 관제사 화면(/w, 사이드바 nav 형식)도 창 높이 안에서만 */
+.wrapper-admin :deep(.sc2:not(.sc2-in-admin) > .app) { min-height: calc(100vh / var(--sc-zoom, 1) - var(--nav-h, 60px)); }
+/* 26.10.28 관리자 셸 안의 통합 관제 화면은 높이를 강제하지 않음 (내용이 짧으면 스크롤 없음) */
+.wrapper-admin :deep(.sc2-in-admin > .app) { min-height: 0 !important; }
 
 a {
   text-decoration: none !important;

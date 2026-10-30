@@ -8,14 +8,14 @@
 </div>
 <h3 class="sec">거점 현황 (거점 {{ d.sites.length }}곳)</h3>
 <div class="grid g4" id="sites"><div v-for="s in d.sites" :key="s.centerId" :class="'card site ' + st(s)[0]"><div style="display:flex;justify-content:space-between"><b>{{ s.t }} {{ s.name }}</b><span :class="'b ' + st(s)[0]">{{ st(s)[1] }}</span></div><div class="meta" style="margin-top:8px">미해결 예외 긴급 {{ s.crit }} · 경고 {{ s.warn }}<br>최대 지연 {{ s.maxDelay }}분</div></div></div>
-<div class="bottom"><div class="card"><h3>최근 예외</h3><table :style="pgR.reset"><tr><th class="c">등급</th><th class="c">유형</th><th>거점·대상</th><th class="c">상태</th></tr><tbody id="exmini"><tr v-for="e in pgR.rows" :key="e.exceptionId"><td><span :class="'b ' + lvc(e.severity)">{{ lv[e.severity] || e.severity }}</span></td><td><span class="b gray">{{ EXL[e.type] || e.type }}</span></td><td>{{ e.centerName || '' }} {{ e.message }}</td><td><span class="b gray">{{ stl(e.status) }}</span></td></tr><tr v-if="!d.recent.length"><td colspan="4" class="meta">예외가 없습니다.</td></tr></tbody></table><Pager :p="pgR"/></div>
-<div class="card"><h3>오늘의 배송 내역<template v-if="f.containerNo"> (최근 컨테이너 {{ f.containerNo }})</template></h3><table><tr><th>단계</th><th>수량</th><th>진행</th></tr>
-<tr v-for="r in flow" :key="r[0]"><td>{{ r[0] }}</td><td>{{ r[1] }} / {{ r[2] }}{{ r[3] }}</td><td><div class="bar"><i :style="'width:' + (r[2] ? Math.round(r[1] * 100 / r[2]) : 0) + '%'"></i></div></td></tr></table></div></div>
+<div class="bottom"><div class="card"><h3>최근 예외</h3><table :style="pgR.reset"><thead><tr><th class="c">등급</th><th class="c">유형</th><th>거점·대상</th><th class="c">상태</th></tr></thead><tbody id="exmini"><tr v-for="e in pgR.rows" :key="e.exceptionId"><td><span :class="'b ' + lvc(e.severity)">{{ lv[e.severity] || e.severity }}</span></td><td><span class="b gray">{{ EXL[e.type] || e.type }}</span></td><td class="l">{{ e.centerName || '' }} {{ e.message }}</td><td><span class="b gray">{{ stl(e.status) }}</span></td></tr><tr v-if="!d.recent.length"><td colspan="4" class="meta">예외가 없습니다.</td></tr></tbody></table><Pager :p="pgR"/></div>
+<div class="card"><h3>오늘의 배송 내역<template v-if="f.containerNo"> (최근 컨테이너 {{ f.containerNo }})</template></h3><table><thead><tr><th>단계</th><th>수량</th><th>진행</th></tr></thead>
+<tbody><tr v-for="r in flow" :key="r[0]"><td>{{ r[0] }}</td><td>{{ r[1] }} / {{ r[2] }}{{ r[3] }}</td><td><div class="bar"><i :style="'width:' + (r[2] ? Math.round(r[1] * 100 / r[2]) : 0) + '%'"></i></div></td></tr></tbody></table></div></div>
 <div class="legend"><span class="lt"><i class="bi bi-info-circle"></i> 거점 색 기준</span>
 <span class="chip"><i style="background:#2e9e5a"></i><b>정상</b> 미해결 예외 없음 · 지연 {{ d.warnDelayMin }}분 미만</span>
 <span class="chip"><i style="background:#f08c00"></i><b>주의</b> 경고 예외 1건↑ 또는 {{ d.warnDelayMin }}분↑ 지연 차량</span>
 <span class="chip"><i style="background:#d32f2f"></i><b>긴급</b> 긴급 예외 1건↑</span>
-<span class="meta">기준 값은 기준정보에서 변경<template v-if="role === 'carrier'"> · 자기 운송사 데이터만 집계</template></span></div>
+<span class="meta">기준 값은 운영 기준 설정에서 변경<template v-if="role === 'carrier'"> · 자기 운송사 데이터만 집계</template></span></div>
 </section>
 </template>
 <script setup>

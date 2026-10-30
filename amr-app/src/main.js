@@ -7,6 +7,7 @@
 // ─────────────────────────────────────────────────────────────
 import { createSim, HUBS, ZONES, STATE_KO, PHASE_T, CAPTIONS, COLORS, status, lvCol, tons, captionOf, fmtPlate } from './twin/amrSim.js'
 import { createAmrScene } from './twin/amrScene3d.js'
+import { startSafetyWatch } from './twin/safetyWatch.js' // 26.10.29 긴급 경보: 화면 전체가 붉게
 import { amrApi } from './twin/amrApi.js'   // DB 연동: 웹 관제 화면과 같은 서버 · 같은 DB
 import { LocalNotifications } from '@capacitor/local-notifications' // 휴대폰 알림 (차단 · 정비)
 import { mountAuthGate, hoursLeft } from './twin/amrAuthGate.js' // 26.10.16 관리자 잠금 화면 (웹의 앱 연결 QR · 6자리)
@@ -80,7 +81,15 @@ let remote = null            // 서버 /api/amr/state 응답
 const linked = () => !!(remote && remote.producerLive && amrApi.online)   // 웹 관제(현장)가 돌고 있을 때만 따라간다
 let dbHist = null            // 선택 로봇의 DB 진동 기록
 
-const sim = createSim({ onLog, onPhase, autoApproveSec: 0 })
+// 26.10.30 앱에서 누른 화재 · 배터리 화재도 서버 경보로 알림 → 웹 허브 관제가 같은 화재를 켬 (웹에서 누르면 아래 syncSafety 가 앱에 켬)
+let alertSent = false, remoteBorn = false, localEndAt = 0
+function onSimEvent(type, p) {
+  if (type !== 'fire' && type !== 'bfire') return
+  if (type === 'fire') { if (p.on) { alertSent = true; amrApi.safetyAlert({ kind: 'hub', label: p.label, zone: p.zone, evac: 0, total: 0 }) } else { localEndAt = Date.now(); amrApi.safetyEnd() } }
+  else if (p.stage >= 2 && p.stage <= 4) { alertSent = true; amrApi.safetyAlert({ kind: 'batt', label: p.code, code: p.code, stage: p.stage, temp: p.temp || 0 }) }
+  else if (p.stage === 0) { localEndAt = Date.now(); amrApi.safetyEnd() }
+}
+const sim = createSim({ onLog, onPhase, onEvent: onSimEvent, autoApproveSec: 0 })
 const S = sim.S
 for (let i = 0; i < 80; i++) sim.step(0.05)
 S.packets.length = 0
@@ -104,7 +113,14 @@ try {
 let coldView = ''
 
 // 3D 화면을 홈 미니 칸 ↔ 3D 탭으로 옮긴다 (렌더러는 하나만 쓴다)
+// 훈련 버튼 묶음은 장면이 만들어 host 안에 두므로, 설정 팝업 안으로 옮긴다 (시계 · 안내 띠는 새 HUD 로 대체)
+function dockBar() {
+  const ctl = host.querySelector('.twin-fire-ctl')
+  if (ctl && $('v-drill') && ctl.parentElement !== $('v-drill')) $('v-drill').appendChild(ctl)
+}
+setInterval(dockBar, 1500) // 훈련 버튼이 늦게 만들어져도 띠로 옮김
 function placeHost() {
+  dockBar()
   const slot = tab === '3d' ? $('full-slot') : tab === 'home' ? $('mini-slot') : null
   if (slot && host.parentElement !== slot) slot.appendChild(host)
   if (!slot && host.parentElement !== $('app')) $('app').appendChild(host)
@@ -363,7 +379,59 @@ function toast(text, cls) {
 $('toast').addEventListener('click', () => { $('toast').classList.remove('show'); setTab('alert') })
 
 /* ── 루프 ── */
+/* ── 3D 탭 HUD · 팝업 · 비상정지(꾹) ── */
+let fireSince = 0
+function renderHud() {
+  const now = new Date()
+  $('hd-clk').textContent = clock(now)
+  const run = S.amrs.filter((a) => !a.estop && a.state !== 'maint').length
+  $('hd-run').textContent = run; $('hd-all').textContent = S.amrs.length
+  const F = S.fire, hubFire = !!(F && F.on), bat = !!S.bfire
+  const crit = S.amrs.filter((a) => status(a)[0] === 'crit').length
+  const n = (hubFire ? 1 : 0) + (bat ? 1 : 0) + crit
+  $('hd-aln').textContent = n; $('hd-al').classList.toggle('on', n > 0)
+  const fire = hubFire || bat
+  if (fire && !fireSince) fireSince = Date.now(); if (!fire) fireSince = 0
+  $('hd-fire').hidden = !fire
+  document.querySelector('.full3d').classList.toggle('alarm', fire)
+  if (fire) {
+    $('hd-fire-t').textContent = hubFire ? ((F.label || '') + ' 화재 감지').trim() : '배터리 화재 감지'
+    $('hd-fire-s').textContent = hubFire ? '비상 대응 진행 중' : '격리 구역 · 접근 금지'
+    const s = Math.floor((Date.now() - fireSince) / 1000); $('hd-fire-tm').textContent = pad(Math.floor(s / 60)) + ':' + pad(s % 60)
+  }
+  const anyStop = S.amrs.some((a) => a.estop)
+  $('v-estop').classList.toggle('rel', anyStop)
+  $('es-t').innerHTML = anyStop ? '정지<br>해제' : '비상<br>정지'
+  $('es-s').textContent = anyStop ? '꾹 눌러 해제' : '꾹 눌러서'
+}
+const pops = { cam: $('pop-cam'), gear: $('pop-gear') }
+function togglePop(k) {
+  Object.keys(pops).forEach((x) => { pops[x].hidden = x === k ? !pops[x].hidden : true })
+  $('v-cam').classList.toggle('on', !pops.cam.hidden); $('v-gear').classList.toggle('on', !pops.gear.hidden)
+}
+function closePops() { Object.values(pops).forEach((p) => { p.hidden = true }); $('v-cam').classList.remove('on'); $('v-gear').classList.remove('on') }
+$('v-cam').addEventListener('click', (e) => { e.stopPropagation(); togglePop('cam') })
+$('v-gear').addEventListener('click', (e) => { e.stopPropagation(); togglePop('gear') })
+$('v-presets').addEventListener('click', () => setTimeout(closePops, 120))
+$('v-cold-go').addEventListener('click', () => { const b = document.querySelector('#v-chips [data-v="cold"]'); if (b) b.click(); closePops() })
+document.addEventListener('click', (e) => { if (!e.target.closest('.pop,.rb')) closePops() })
+let esTimer = 0
+function esStart(e) {
+  e.preventDefault(); const b = $('v-estop'); b.classList.add('holding')
+  try { b.setPointerCapture(e.pointerId) } catch { /* 무시 */ }
+  clearTimeout(esTimer)
+  esTimer = setTimeout(() => {
+    b.classList.remove('holding'); esTimer = 0
+    const any = S.amrs.some((a) => a.estop); sim.setEstop(null, !any)
+    toast(any ? '비상 정지를 해제했음' : '전체 AMR 비상 정지', any ? 'ok' : 'crit'); if (navigator.vibrate) navigator.vibrate(any ? 40 : [60, 40, 60]); renderHud()
+  }, 700)
+}
+function esEnd() { if (esTimer) { clearTimeout(esTimer); esTimer = 0 } $('v-estop').classList.remove('holding') }
+const esb = $('v-estop'); esb.addEventListener('pointerdown', esStart); ;['pointerup', 'pointercancel'].forEach((ev) => esb.addEventListener(ev, esEnd))
+esb.addEventListener('contextmenu', (e) => e.preventDefault())
+
 function renderAll() {
+  renderHud()
   if (tab === 'home') renderHome()
   if (tab === '3d') { renderSheet(); renderPick() }
   if (tab === 'robot') renderRobot()
@@ -458,7 +526,6 @@ function applyVehicles(list) {
     const d = (out ? S.outDocks : S.inDocks)[v.dock]; if (!d) return
     if (v.direction === 'EXIT') d.ocr = { st: 'ok', plate: v.plate, photo: v.photoPlate, conf: v.confidence, kind: v.kind, exit: null }
     else d.ocr = { st: v.decision === 'BLOCK' || v.decision === 'HOLD' ? 'block' : 'ok', plate: v.plate, photo: v.photoPlate, conf: v.confidence, kind: v.kind, exit: null }
-    if (v.decision === 'BLOCK' && !first) { toast('미등록 차량 차단 · ' + (fmtPlate(v.plate) || '판독 불가'), ''); phoneNotify('미등록 차량 진입 차단', (fmtPlate(v.plate) || '판독 불가') + ' · ' + (v.lane === 'OUT' ? '출고' : '입고') + ' 게이트', 'crit') }
   })
   lastVehicleId = Math.max(lastVehicleId, ...list.map((v) => v.id))
   vehCache = list
@@ -506,6 +573,10 @@ $('v-seal-go').addEventListener('click', async () => {
   toast(r.sealStatus === 'OK' ? '씰 대조 일치 · 하차 가능' : '씰 불일치 · 하차 보류 · 관리자 알림', '')
   showSeal(r); renderVehicles()
 })
+// 26.10.27 관리자 앱은 AMR 관리 + 바코드 이동만: 입출차 목록 · 도크 씰 확인 · 입출차/차단 숫자를 숨긴다 (OCR 표시는 그대로)
+$('c-seg').hidden = true; $('c-gate').hidden = true; $('c-box').hidden = false
+$('c-seg').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x.dataset.s === 'box'))
+;['h-gate', 'h-block', 'k-gate'].forEach((id) => { const el = $(id); if (el && el.parentElement) el.parentElement.hidden = true })
 $('c-seg').addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return
   $('c-seg').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b))
@@ -516,8 +587,6 @@ $('c-seg').addEventListener('click', (e) => {
 const ackBlock = new Set()
 function renderTodo(T) {
   const items = []
-  vehCache.filter((v) => (v.decision === 'BLOCK' || v.decision === 'HOLD') && !ackBlock.has(v.id) && v.createdAt && Date.now() - new Date(v.createdAt).getTime() < 15 * 60 * 1000).slice(0, 2).forEach((v) =>
-    items.push({ lv: 'r', title: v.sealStatus === 'MISMATCH' ? '씰 불일치 · 하차 대기' : v.sealStatus === 'MISSING' ? '씰 미등록 · 게이트 대기' : '미등록 차량 진입 차단', body: `<span class="vp">${fmtPlate(v.plate) || '판독 불가'}</span> ${v.lane === 'OUT' ? '출고' : '입고'} D${v.dock + (v.lane === 'OUT' ? 4 : 1)} · ${clock(new Date(v.createdAt))}`, go: 'gate', id: v.id, btn: '기록 보기' }))
   const [lv] = status(T)
   if (T.state === 'maint') items.push({ lv: 'a', title: T.name + ' 정비 중 · 베어링 교체', body: '예비기 AMR-05 가 작업을 대신하는 중', robot: S.sc.target, btn: '로봇 보기' })
   else if (T.maintFlag) items.push({ lv: 'a', title: T.name + ' 자동 정비 예약됨', body: '남은 수명 약 ' + S.sc.rul + '시간 · 기준 ' + S.cfg.rulAt + '시간 · 예비기 투입', robot: S.sc.target, btn: '로봇 보기' })
@@ -654,6 +723,7 @@ function renderAuth() {
   $('au-status').style.color = ok ? 'var(--green)' : 'var(--amber)'
   $('au-out').hidden = !ok
 }
+startSafetyWatch({ getFn: () => amrApi.safetyNow(), skip: () => tab === '3d' }) // 3D 탭에는 자체 경보 카드 · 훈련 버튼이 있어 전체 붉은 화면은 숨김 // 종료는 웹의 "화재 종료" 버튼
 gate = mountAuthGate(document.body, {
   client: 'APP', keypad: true, blockOffline: true, onScan: scanQr,
   onServer: (b) => { $('db-url').value = b; toast('QR로 서버 주소 설정: ' + b.replace(/^https?:\/\//, ''), 'ok') },
@@ -683,3 +753,29 @@ amrApi.onStatus((on) => {
     toast('노트북 서버 연결 끊김', ''); phoneNotify('AMR 서버 연결 끊김', '노트북 서버(웹 관제 · DB)가 15초 넘게 응답하지 않습니다', 'crit')
   }, 15000)
 })
+
+// 26.10.30 웹에서 낸 화재를 앱 시뮬레이터에도 똑같이 켜고, 웹에서 끄면 같이 끔
+setInterval(async () => {
+  const a = await amrApi.safetyNow(); if (!a) return
+  const localOn = S.fire.on || !!S.bfire
+  if (a.active) {
+    if (!localOn && Date.now() - localEndAt > 8000) {
+      remoteBorn = true
+      if (a.kind === 'hub') sim.setFire(true, a.zone == null ? undefined : +a.zone)
+      else { const bi = S.amrs.findIndex((r) => r.name === (a.code || a.label)); sim.setBatteryFire(bi >= 0 ? bi : undefined) }
+    }
+  } else if (remoteBorn && localOn) { remoteBorn = false; if (S.fire.on) sim.setFire(false); if (S.bfire) sim.clearBatteryFire() }
+  else if (!localOn) remoteBorn = false
+}, 2000)
+
+// 26.10.30 비상 정지 동기화: 웹 ↔ 앱이 서버의 정지 목록을 같이 본다. 이쪽이 바뀌면 서버에 올리고, 서버가 바뀌었으면 이쪽 시뮬레이터에 반영
+let estopSynced = ''
+setInterval(async () => {
+  const mine = S.amrs.filter((a) => a.estop).map((a) => a.name).sort().join(',')
+  if (mine !== estopSynced) { const r = await amrApi.estopSet(mine ? mine.split(',') : []); if (r) estopSynced = mine; return }
+  const r = await amrApi.estopNow(); if (!r || !Array.isArray(r.codes)) return
+  const srv = r.codes.slice().sort().join(',')
+  if (srv === estopSynced) return
+  S.amrs.forEach((a, i) => { const want = r.codes.includes(a.name); if (!!a.estop !== want) sim.setEstop(i, want) })
+  estopSynced = S.amrs.filter((a) => a.estop).map((a) => a.name).sort().join(',')
+}, 1500)

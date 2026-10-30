@@ -63,7 +63,7 @@ const STATUS_BADGE = {
 //  - '상태'(AVAILABLE 영문 그대로)와 '이용가능'(예/아니오)이 같은 뜻으로 겹쳐 보이던 문제 →
 //    상태는 운영 상태(운영중/점검중/운영중지), 이용가능은 배차 가능 여부(가능/불가)로 구분해 표시
 const columns = [
-  { key: 'yardId', label: 'ID', width: '60px', align: 'center' },
+  { key: 'yardId', label: '번호', width: '60px', align: 'center', type: 'seq' },
   { key: 'yardName', label: '야드명' },
   { key: 'yardType', label: '용도', format: (v) => TYPE_LABEL[v] || v || '-' },
   { key: 'status', label: '운영 상태', type: 'badge', align: 'center', badge: (v) => STATUS_BADGE[v] || { label: v || '-', tone: 'muted' } },

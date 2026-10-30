@@ -104,8 +104,11 @@ public class TransportOrderService {
         Map<Long, TransportOrder> byId = new LinkedHashMap<>();
         orderRepository.findByDriverAccountIdAndStatusInOrderByAssignedAtAsc(accountId, OrderStatus.ACTIVE)
                 .forEach(o -> byId.put(o.getOrderId(), o));
+        // 26.10.27: 차량으로 찾은 오더는 '배차 기사가 비어 있는' 것만. 다른 기사(driver_account_id)에게 배차된 오더가
+        //  같은 차량을 쓰는 기사의 홈·내비에도 보여서, 한 기사가 도착하면 다른 기사도 '도착'으로 보이던 문제
         myTruck(accountId).ifPresent(t -> orderRepository
-                .findByVehicleNoAndStatusInOrderByAssignedAtAsc(t.getVehicleNo(), OrderStatus.ACTIVE)
+                .findByVehicleNoAndStatusInOrderByAssignedAtAsc(t.getVehicleNo(), OrderStatus.ACTIVE).stream()
+                .filter(o -> o.getDriverAccountId() == null)
                 .forEach(o -> byId.putIfAbsent(o.getOrderId(), o)));
         List<String> priority = List.of("ARRIVED", "IN_TRANSIT", "GATE_OUT", "LOADED", "ASSIGNED", "CREATED");
         List<TransportOrder> list = new ArrayList<>(byId.values());
@@ -364,7 +367,7 @@ public class TransportOrderService {
         event(order, "HUB_ENTER", "HUB", String.valueOf(order.getDestHubId()), lat, lng,
                 hubName + " 도착 (" + ("MANUAL".equals(how) ? "기사 수동" : "지오펜스 자동") + ")");
         if (order.getDriverAccountId() != null) {
-            notifyDriver(order.getDriverAccountId(), order, NotificationType.SYSTEM, "HUB 도착", hubName + " 에 도착했습니다. 인계를 진행하세요.");
+            notifyDriver(order.getDriverAccountId(), order, NotificationType.SYSTEM, "HUB 도착", hubName + "에 도착했습니다. 인계를 진행하세요."); // 26.10.29 "허브 에" 띄어쓰기
         }
     }
 
@@ -415,6 +418,8 @@ public class TransportOrderService {
                 "인계 완료" + (receiverName == null || receiverName.isBlank() ? "" : " (인수자 " + receiverName + ")")
                         + (sealOk && damageFree ? "" : " - 이상 있음 표시"));
         setTruckStatus(order.getVehicleNo(), "OUTSIDE");
+        // 26.10.29 QA: 인계를 마쳤으니 이 오더의 'HUB 도착 · 인계를 진행하세요' 알림은 읽음 (앱이 인계 뒤에 팝업을 다시 띄우지 않게)
+        try { notificationRepository.markReadByReference(accountId, orderId, "HUB 도착", OffsetDateTime.now()); } catch (Exception e) { log.warn("도착 알림 읽음 처리 실패: {}", e.getMessage()); }
 
         double traveledKm = traveledKm(order);
         OffsetDateTime start = order.getGateOutAt() != null ? order.getGateOutAt() : order.getDepartedAt();
@@ -582,9 +587,14 @@ public class TransportOrderService {
         return order;
     }
 
+    /**
+     * 26.10.27: 본인 오더 = 배차 기사(driver_account_id)가 나. 배차 기사가 비어 있을 때만 내 전담 차량으로 판단
+     *  (lookup·SealService·V9AppController 와 같은 기준. 예전엔 차량만 같아도 다른 기사의 오더를 조회·도착·인계할 수 있었음)
+     */
     private void checkOwner(Long accountId, TransportOrder order) {
-        boolean mine = Objects.equals(order.getDriverAccountId(), accountId)
-                || myTruck(accountId).map(t -> t.getVehicleNo().equals(order.getVehicleNo())).orElse(false);
+        boolean mine = order.getDriverAccountId() != null
+                ? Objects.equals(order.getDriverAccountId(), accountId)
+                : myTruck(accountId).map(t -> t.getVehicleNo().equals(order.getVehicleNo())).orElse(false);
         if (!mine) throw new IllegalArgumentException("본인에게 배차된 오더가 아닙니다.");
     }
 

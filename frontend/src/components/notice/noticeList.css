@@ -68,4 +68,7 @@
 }
 #notice-list .notice-table tbody tr { cursor: pointer; }
 #notice-list .notice-table tbody tr:hover { background-color: #f8f9fc; }
+/* 26.10.28 QA#19 목록이 없을 때는 손가락 커서·색 변화 없음 */
+#notice-list .notice-table tbody tr.is-empty-row { cursor: default; }
+#notice-list .notice-table tbody tr.is-empty-row:hover { background-color: transparent; }
 #notice-list .attach-icon { margin-left: 4px; font-size: 13px; }

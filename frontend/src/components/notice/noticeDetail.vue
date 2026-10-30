@@ -42,8 +42,8 @@
       <div class="notice-actions">
         <button type="button" class="btn btn-outline-secondary" @click="goList">목록</button>
         <div v-if="canEdit">
-          <button type="button" class="btn btn-outline-primary me-2" @click="goUpdate">수정</button>
-          <button type="button" class="btn btn-outline-danger" @click="deleteNotice">삭제</button>
+          <button type="button" class="btn-act edit me-2" @click="goUpdate">수정</button>
+          <button type="button" class="btn-act del" @click="deleteNotice">삭제</button>
         </div>
       </div>
     </div>

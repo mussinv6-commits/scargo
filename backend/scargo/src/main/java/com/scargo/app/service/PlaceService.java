@@ -81,8 +81,8 @@ public class PlaceService {
             }
             case "CHECKPOINT" -> {
                 var list = hasQuery
-                        ? checkpointRepository.findByCheckpointNameContainingOrAddressContaining(q.trim(), q.trim())
-                        : checkpointRepository.findByLatitudeBetweenAndLongitudeBetween(box[0], box[1], box[2], box[3]);
+                        ? checkpointRepository.findActiveByNameOrAddress(q.trim())
+                        : checkpointRepository.findByIsActiveTrueAndLatitudeBetweenAndLongitudeBetween(box[0], box[1], box[2], box[3]);
                 for (var c : list) {
                     items.add(item("CHECKPOINT", String.valueOf(c.getCheckpointId()), c.getCheckpointName(),
                             c.getRoadAddress() != null ? c.getRoadAddress() : c.getAddress(),

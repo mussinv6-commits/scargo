@@ -64,8 +64,8 @@
                  헤더/데이터 열이 어긋나고 상태 컬럼이 겹쳐 보였다 → 안쪽 div 로 분리 -->
             <td v-if="editable || deletable" class="crud-actions-col is-center">
               <div class="crud-actions">
-                <button v-if="editable" class="btn-admin btn-admin-ghost" @click="openEdit(row)">수정</button>
-                <button v-if="deletable" class="btn-admin btn-admin-danger" @click="confirmDelete(row)">삭제</button>
+                <button v-if="editable" class="btn-act edit" @click="openEdit(row)">수정</button>
+                <button v-if="deletable" class="btn-act del" @click="confirmDelete(row)">삭제</button>
               </div>
             </td>
           </tr>

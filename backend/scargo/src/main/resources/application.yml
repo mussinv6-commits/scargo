@@ -26,8 +26,9 @@ spring:
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
-        format_sql: true
-    show-sql: true
+        format_sql: false
+        temp.use_jdbc_metadata_defaults: false   # 26.10.27 기동 시 DB 메타데이터 조회 생략 (시작 단축)
+    show-sql: false   # 26.10.27 SQL 전체 출력은 느려져서 끔 (필요하면 true)
 
 # [FCM 비활성화 26.09.30] Firebase 설정 주석 처리 (다시 쓰려면 주석 해제)
 # # Firebase Cloud Messaging 설정

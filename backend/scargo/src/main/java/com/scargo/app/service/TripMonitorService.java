@@ -141,11 +141,11 @@ public class TripMonitorService {
         for (RoutePoi c : route.checkpoints()) {
             double ahead = c.alongM() - along;
             if (ahead < 0 || ahead > checkpointAlertM) continue;
-            alerts.add(new Alert("CHECKPOINT", "WARN", "전방 " + km(ahead) + " 과적검문소",
+            alerts.add(new Alert("CHECKPOINT", "WARN", "전방 " + km(ahead) + " 과적검문소입니다",
                     c.name() + (order.getGrossWeightKg() == null ? "" : " · 예상 총중량 " + order.getGrossWeightKg() + "kg"), ahead));
             if (record && once(order, "CHECKPOINT_NEAR", c.id())) {
                 orderService.event(order, "CHECKPOINT_NEAR", "CHECKPOINT", c.id(), c.lat(), c.lng(), c.name() + " 접근");
-                notifyDriver(order, "과적검문소 접근", "전방 " + km(ahead) + " " + c.name());
+                notifyDriver(order, "과적검문소 접근", "전방 " + km(ahead) + " 과적검문소입니다. " + c.name());
             }
         }
 
@@ -166,7 +166,7 @@ public class TripMonitorService {
         }
         boolean arrived = order.is(OrderStatus.ARRIVED);
         if (arrived) {
-            alerts.add(0, new Alert("ARRIVED", "INFO", "HUB 도착", hub.getBusinessName() + " 에 도착했습니다. 인계를 진행하세요.", 0d));
+            alerts.add(0, new Alert("ARRIVED", "INFO", "HUB 도착", hub.getBusinessName() + "에 도착했습니다. 인계를 진행하세요." /* 26.10.29 띄어쓰기 */, 0d));
         }
 
         alerts.sort((a, b) -> Integer.compare(levelRank(a.level()), levelRank(b.level())));

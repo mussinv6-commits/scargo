@@ -9,6 +9,7 @@
     </AdminPageHeader>
 
     <CrudTable
+      class="ct-fit"
       title="컨테이너"
       id-key="containerNo"
       :columns="columns"
@@ -243,3 +244,13 @@ onMounted(async () => {
   await Promise.all([loadCompanyOptions(), loadLocations(), loadRows()])
 })
 </script>
+
+<style scoped>
+/* 26.10.28 QA#3 컨테이너 관리: 표 하단 좌우 스크롤바 제거 + 컬럼 간격 조정 (컬럼 11개가 한 화면에 들어가게) */
+.ct-fit :deep(.crud-table-scroll) { overflow-x: hidden; }
+.ct-fit :deep(.crud-table) { table-layout: auto; font-size: 12.5px; }
+.ct-fit :deep(.crud-table thead th) { padding: 9px 6px; white-space: normal; word-break: keep-all; line-height: 1.3; }
+.ct-fit :deep(.crud-table tbody td) { padding: 9px 6px; }
+.ct-fit :deep(.crud-actions) { gap: 4px; }
+.ct-fit :deep(.crud-actions .btn-admin) { padding: 4px 8px; }
+</style>
