@@ -45,7 +45,7 @@
 
 <script setup>
 import { onMounted, onBeforeUnmount, ref, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { authState } from '@/auth/authState.js'
 import { API_BASE } from '@/utils/apiBase.js'
 import { resolveTarget, historyPath } from '@/utils/notificationTarget.js'
@@ -54,6 +54,15 @@ import { adminApi, pickErrorMessage } from '@/utils/adminApi'
 import bellIcon from '@/assets/bell.png'
 
 const router = useRouter()
+const route = useRoute()
+// 26.10.31 S-Bot(허브 AMR) 화면의 종에는 AMR · 화재 관련 알림만 보인다 (S카고의 예약 입차 · 사고 · 도착 지연 · 과적 알림은 제외)
+const isSbot = computed(() => route.path.startsWith('/sbot'))
+const SBOT_RE = /AMR|S-?Bot|배터리|화재|정비|예지|예비기|진동|충전|비상/i
+const inScope = (n) => !isSbot.value || SBOT_RE.test(`${n.title || ''} ${n.message || ''}`)
+const fetchList = async (id) => {
+  const res = await adminApi.get(`/api/notifications/account/${id}`, { params: { page: 0, size: isSbot.value ? 100 : 5 } }) // 26.10.28 종 버튼은 최신 5건만 (나머지는 알림 내역에서)
+  return [].concat(res.data.content ?? res.data ?? []).filter(inScope)
+}
 const panelOpen = ref(false)
 const notifications = ref([])
 const unreadCount = ref(0)
@@ -99,8 +108,8 @@ async function fetchUnreadCount() {
   const id = accountId()
   if (!id) return
   try {
-    const res = await adminApi.get(`/api/notifications/account/${id}/count`)
-    unreadCount.value = res.data
+    if (isSbot.value) unreadCount.value = (await fetchList(id)).filter((n) => !n.read).length   // S-Bot 에서는 보이는 알림 기준으로 센다
+    else unreadCount.value = (await adminApi.get(`/api/notifications/account/${id}/count`)).data
   } catch (err) {
     // 뱃지 갱신 실패는 조용히 무시 (로그인 직후 세션 반영 지연 등)
     console.log('알림 개수 조회 실패:', err)
@@ -116,8 +125,7 @@ async function fetchNotifications() {
   loading.value = true
   error.value = ''
   try {
-    const res = await adminApi.get(`/api/notifications/account/${id}`, { params: { page: 0, size: 5 } }) // 26.10.28 종 버튼은 최신 5건만 (나머지는 알림 내역에서)
-    notifications.value = [].concat(res.data.content ?? res.data ?? []).slice(0, 5)
+    notifications.value = (await fetchList(id)).slice(0, 5)
   } catch (err) {
     error.value = pickErrorMessage(err, '알림을 불러오지 못했습니다.')
   } finally {
@@ -131,8 +139,7 @@ async function refreshNotificationsSilently() {
   const id = accountId()
   if (!id) return
   try {
-    const res = await adminApi.get(`/api/notifications/account/${id}`, { params: { page: 0, size: 5 } }) // 26.10.28 종 버튼은 최신 5건만 (나머지는 알림 내역에서)
-    notifications.value = [].concat(res.data.content ?? res.data ?? []).slice(0, 5)
+    notifications.value = (await fetchList(id)).slice(0, 5)
   } catch (err) {
     console.log('알림 목록 재조회 실패:', err)
   }

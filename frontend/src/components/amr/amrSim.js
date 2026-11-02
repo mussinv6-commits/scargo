@@ -720,7 +720,8 @@ export function createSim(hooks = {}) {
   function scenario(dt) {
     const sc = S.sc, SP = S.amrs[4]
     sc.t += dt
-    if (sc.phase === 1 && !sc.degrading && sc.t - sc.start > 18) { sc.target = pickTarget(); sc.degrading = true }
+    if (sc.phase === 1 && !sc.degrading && !S.holdDegrade && sc.t - sc.start > 18) {   // 26.10.31 시연 중 앞 장면에서는 고장이 저절로 시작되지 않게(S.holdDegrade)
+      sc.target = pickTarget(); sc.degrading = true }
     const T = S.amrs[sc.target]
     if (sc.degrading && T.state !== 'maint') T.deg = Math.min(5.2, T.deg + dt * 0.27)
     if (sc.phase === 1 && (T.anom || T.deg > 2.4)) { setPhase(2); addLog(T.name + ' 진동 이상 감지 · 평소 대비 +' + Math.round((T.vib / 1.55 - 1) * 100) + '%', 'warn'); onEvent('maint', { code: T.name, eventType: 'WARN', vibration: T.vib, note: '진동 이상 감지' }) }
@@ -731,7 +732,7 @@ export function createSim(hooks = {}) {
       setPhase(3)
       addLog('AI 예측 · ' + T.name + ' 남은 수명 약 ' + sc.rul + '시간 (정비 기준 ' + S.cfg.rulAt + '시간 이하)', 'crit')
       onEvent('maint', { code: T.name, eventType: 'PREDICT', vibration: T.vib, rulHours: sc.rul, slope: sc.slope, cumKg: T.cumKg, note: '고장 예측 · 기준 ' + S.cfg.rulAt + '시간 이하 → 자동 정비 예약' })
-      sc.await = true; approve('자동 (기준 ' + S.cfg.rulAt + '시간 이하)')
+      sc.await = true; if (!S.holdApprove) approve('자동 (기준 ' + S.cfg.rulAt + '시간 이하)')   // 26.10.31 시연 중에는 '정비 승인' 장면에서 승인
     }
     if (sc.phase === 3 && sc.rul != null) sc.slope = Math.max(0.08, slopeOf(T.hist) || sc.slope)
     if (sc.phase === 5 && sc.t - sc.start > 9) { setPhase(1); addLog('정상 운영 · 다음 주기 모니터링', '') }

@@ -55,7 +55,7 @@ async function loadSafetyTicker() {
   } catch { /* 서버 꺼짐 */ }
 }
 let safetyTimer = 0;
-const tickItems = computed(() => [...safetyItems.value, ...noticeItems.value]);
+const tickItems = computed(() => (isSbotApp.value ? [...safetyItems.value] : [...safetyItems.value, ...noticeItems.value])); // 26.10.31 S-Bot(AMR) 화면에는 S카고 공지 대신 화재 경보만
 const noticeTitles = computed(() => tickItems.value.map((n) => n.title));
 const tickSec = computed(() => Math.max(20, tickItems.value.reduce((s, n) => s + String(n.title).length, 0) * 0.5));
 async function loadNoticeTicker() {
@@ -184,7 +184,7 @@ function scrollToTop() {
               <a href="#" class="nav-link menu-btn" :class="{ on: menuOpen }" @click.prevent="toggleMenu">☰ 메뉴 {{ menuOpen ? "▴" : "▾" }}</a>
             </li>
             <!-- 26.10.26 관리자 상단바: 최신 공지 제목이 흐르는 띠 (마우스를 올리면 멈춤, 누르면 공지 상세) -->
-            <li v-if="shellTop" class="nav-item notice-tick" :title="noticeTitles.length ? '' : '등록된 공지사항이 없습니다'">
+            <li v-if="shellTop && (!isSbotApp || safetyItems.length)" class="nav-item notice-tick" :title="noticeTitles.length ? '' : '등록된 공지사항이 없습니다'">
               <b class="nt-label">📢 공지</b>
               <div class="nt-view">
                 <div v-if="tickItems.length" class="nt-track" :style="{ animationDuration: tickSec + 's' }">
@@ -236,7 +236,7 @@ function scrollToTop() {
             <li v-if="canSbot" class="nav-item d-flex align-items-center">
               <RouterLink :to="isSbotApp ? staffHome : (isAdmin ? '/sbot' : '/sbot/hub')" class="sbot-sw">{{ isSbotApp ? "S CARGO" : "S-BOT" }}</RouterLink><!-- 26.10.28 S-Bot 화면에서는 같은 자리에서 S Cargo 로 -->
             </li>
-            <NotificationBell />
+            <NotificationBell v-if="!isSbotApp" /><!-- 26.10.31 S-Bot 화면에는 알림 종을 두지 않는다 -->
             <li class="nav-item auth-user">
               <span v-if="roleBadge" class="role-badge" :class="roleBadge.cls">{{ roleBadge.label }}</span>
               <span class="auth-name">{{ authState.user.userName }}님</span>

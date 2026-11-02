@@ -47,4 +47,33 @@ public class DailyReportController {
                         ContentDisposition.attachment().filename(name, StandardCharsets.UTF_8).build().toString())
                 .body(body);
     }
+
+    // 26.10.31 확정 도장 (작성 확정 → 승인). 같은 date · to 로 한 보고서를 가리킨다
+    @GetMapping("/daily/sign")
+    public ResponseEntity<Map<String, Object>> sign(Authentication authentication,
+            @RequestParam(name = "date", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(name = "to", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        return ResponseEntity.ok(service.sign(authentication, date, to));
+    }
+
+    @PostMapping("/daily/sign/prepare")
+    public ResponseEntity<Map<String, Object>> prepare(Authentication authentication,
+            @RequestParam(name = "date", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(name = "to", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        return ResponseEntity.ok(service.prepare(authentication, date, to));
+    }
+
+    @PostMapping("/daily/sign/approve")
+    public ResponseEntity<Map<String, Object>> approve(Authentication authentication,
+            @RequestParam(name = "date", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(name = "to", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        return ResponseEntity.ok(service.approve(authentication, date, to));
+    }
+
+    @DeleteMapping("/daily/sign")
+    public ResponseEntity<Map<String, Object>> resetSign(Authentication authentication,
+            @RequestParam(name = "date", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(name = "to", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        return ResponseEntity.ok(service.resetSign(authentication, date, to));
+    }
 }

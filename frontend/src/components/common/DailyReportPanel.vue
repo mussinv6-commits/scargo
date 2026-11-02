@@ -37,6 +37,14 @@
       <button class="drp-btn primary" :disabled="loading || !report" @click="download">Excel 내려받기</button>
       <span v-if="report" class="drp-muted">{{ report.scope }}</span>
     </div>
+    <!-- 26.10.31 확정 도장: 작성 확정 → 승인. 엑셀 결재란에 이름 · 시각이 찍힌다 -->
+    <div v-if="report" class="drp-sign">
+      <span class="drp-stamp" :class="{ on: sign.preparedBy }"><b>작성</b>{{ sign.preparedBy ? sign.preparedBy + ' · ' + sign.preparedAt : '미확정' }}</span>
+      <span class="drp-stamp" :class="{ on: sign.approvedBy }"><b>승인</b>{{ sign.approvedBy ? sign.approvedBy + ' · ' + sign.approvedAt : '대기' }}</span>
+      <button class="drp-btn" :disabled="loading || sign.locked" @click="doPrepare">{{ sign.preparedBy ? '작성 다시 확정' : '작성 확정' }}</button>
+      <button class="drp-btn primary" :disabled="loading || sign.locked || !sign.preparedBy || !sign.canApprove" :title="sign.canApprove ? '' : '승인은 관리자 · 관제만 할 수 있어요'" @click="doApprove">승인</button>
+      <button v-if="sign.canReset && (sign.preparedBy || sign.approvedBy)" class="drp-btn" :disabled="loading" @click="doReset">되돌리기</button>
+    </div>
     <div v-if="report" class="drp-wrap">
       <table class="drp-table">
         <thead><tr><th class="no">번호</th><th class="sec">구분</th><th>항목</th><th class="num">건수</th></tr></thead>
@@ -60,7 +68,7 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { dailyReport, downloadDailyReport } from '@/utils/dailyReportApi.js'
+import { dailyReport, downloadDailyReport, reportSign, prepareSign, approveSign, resetSign } from '@/utils/dailyReportApi.js'
 import { friendlyError } from '@/utils/apiHelpers.js'
 
 defineProps({ dark: { type: Boolean, default: false } })
@@ -80,6 +88,7 @@ const range = computed(() => {
   return { from: f(s), to: f(e) > today ? today : f(e) }
 })
 const loading = ref(false)
+const sign = ref({}) // 26.10.31 확정 도장 상태
 const message = ref('')
 // 같은 구분(section)끼리 처음 나온 순서대로 묶는다 (서버 응답 순서가 섞여도 구분별로 모아 보이게)
 const groups = computed(() => {
@@ -110,6 +119,7 @@ async function load() {
   message.value = ''
   try {
     report.value = await dailyReport(range.value.from, range.value.to)
+    sign.value = (await reportSign(range.value.from, range.value.to).catch(() => null)) || {}
   } catch (err) {
     report.value = null
     message.value = friendlyError(err, '보고서를 불러오지 못했습니다.')
@@ -117,6 +127,14 @@ async function load() {
     loading.value = false
   }
 }
+
+async function signDo(fn, fail) {
+  message.value = ''
+  try { sign.value = await fn(range.value.from, range.value.to) } catch (err) { message.value = friendlyError(err, fail) }
+}
+const doPrepare = () => signDo(prepareSign, '작성 확정에 실패했습니다.')
+const doApprove = () => signDo(approveSign, '승인에 실패했습니다.')
+const doReset = () => signDo(resetSign, '되돌리기에 실패했습니다.')
 
 async function download() {
   try {
@@ -140,6 +158,11 @@ onMounted(load)
 .drp-btn.primary { background: #ff9f1c; border-color: #ff9f1c; color: #0b1d36; font-weight: 700; }
 .drp-btn:disabled { opacity: .5; cursor: default; }
 .drp-muted { color: #6b7a90; font-size: 12.5px; }
+.drp-sign { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.drp-stamp { display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; border: 1px dashed #c9d3e0; border-radius: 6px; font-size: 13px; color: #6b7a90; background: #f7f9fc; }
+.drp-stamp b { color: #4a5872; font-size: 12.5px; }
+.drp-stamp.on { border: 1px solid #1d4ed8; color: #1d4ed8; background: #eef4ff; font-weight: 700; }
+.drp-sign .drp-btn { height: 34px; }
 .drp-msg { margin: 0; color: #c0392b; font-size: 13px; }
 .drp-wrap { background: #fff; border: 1px solid #d5dbe5; border-radius: 10px; overflow: hidden; width: 100%; margin: 0 auto; } /* 26.10.28 표를 화면 폭에 맞춰 넓힘 */
 /* 26.10.28 구분별 합계 카드 */
@@ -175,5 +198,7 @@ onMounted(load)
 .is-dark .drp-btn.primary { background: #ff9f1c; border-color: #ff9f1c; color: #0b1d36; }
 .is-dark .drp-table th, .is-dark .drp-table td { border-bottom-color: #1d3b60; }
 .is-dark .drp-muted { color: #9fb0c6; }
+.is-dark .drp-stamp { background: #0b1d36; border-color: #2a4d76; color: #9fb0c6; }
+.is-dark .drp-stamp.on { background: #12304f; border-color: #6aa3ff; color: #cfe1ff; }
 .is-dark .drp-msg { color: #fca5a5; }
 </style>

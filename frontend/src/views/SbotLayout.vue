@@ -107,19 +107,19 @@ onBeforeUnmount(() => clearInterval(statTimer));
 // 26.10.29 시연: 상단 버튼은 허브 관제 화면(/sbot/hub)으로 가서 그 화면 아래의 "전체 시연"(AMR 장면만)을 눌러 준다.
 //  예전 9단계(대시보드 · 택배 이동 · 물류센터로 이동) 시연은 없앴다. 화재 상황은 앱 · 웹 연동 시연에서 따로 보여 준다
 const demo = ref(-1); // -1 멈춤 · 0 진행 중 (허브 시연 바의 버튼 글자로 판단)
-const hubBtn = (i) => document.querySelectorAll(".tw-demo button")[i];
-const hubDemoRunning = () => /처음부터/.test(hubBtn(0)?.textContent || "");
+const hubBtn = (act) => document.querySelector(`.tw-demo [data-act="${act}"]`); // 26.10.31 순서가 아니라 표시(data-act)로 찾음
+const hubDemoRunning = () => /처음부터/.test(hubBtn("start")?.textContent || "");
 const syncDemo = () => { demo.value = hubDemoRunning() ? 0 : -1; };
 let demoPoll;
 onMounted(() => { demoPoll = setInterval(syncDemo, 800); });
 onBeforeUnmount(() => clearInterval(demoPoll));
 async function startDemo() {
   if (router.currentRoute.value.path !== "/sbot/hub") router.push("/sbot/hub");
-  for (let n = 0; n < 40 && !hubBtn(0); n++) await new Promise((r) => setTimeout(r, 250)); // 허브 화면이 뜰 때까지 최대 10초
-  hubBtn(0)?.click();
+  for (let n = 0; n < 40 && !hubBtn("start"); n++) await new Promise((r) => setTimeout(r, 250)); // 허브 화면이 뜰 때까지 최대 10초
+  hubBtn("start")?.click();
   syncDemo();
 }
-function stopDemo() { hubBtn(2)?.click(); syncDemo(); }
+function stopDemo() { hubBtn("stop")?.click(); syncDemo(); }
 function logout() {
   axios.post(`${API_BASE}/api/accounts/logout`, {}, { withCredentials: true })
     .catch(() => {})

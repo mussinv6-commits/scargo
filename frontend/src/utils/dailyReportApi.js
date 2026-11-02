@@ -11,11 +11,19 @@ const http = axios.create({ baseURL: API_BASE, withCredentials: true })
 export const dailyReport = (date, to) =>
   http.get('/api/reports/daily', { params: { date: date || undefined, to: to && to !== date ? to : undefined } }).then((r) => r.data)
 
+// 26.10.31 확정 도장 (작성 확정 → 승인)
+const sp = (date, to) => ({ date: date || undefined, to: to && to !== date ? to : undefined })
+export const reportSign = (date, to) => http.get('/api/reports/daily/sign', { params: sp(date, to) }).then((r) => r.data)
+export const prepareSign = (date, to) => http.post('/api/reports/daily/sign/prepare', null, { params: sp(date, to) }).then((r) => r.data)
+export const approveSign = (date, to) => http.post('/api/reports/daily/sign/approve', null, { params: sp(date, to) }).then((r) => r.data)
+export const resetSign = (date, to) => http.delete('/api/reports/daily/sign', { params: sp(date, to) }).then((r) => r.data)
+
 const PNAME = { day: '일일', week: '주간', month: '월간', year: '연간' }
 
 export async function downloadDailyReport(date, to, period = 'day') {
   const report = await dailyReport(date, to)
+  const sign = await reportSign(date, to).catch(() => null) // 도장 조회 실패해도 보고서는 받는다
   const day = date || new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10)
   const span = to && to !== day ? `${day}~${to}` : day
-  downloadBlob(buildDailyReportXlsx(report, day, to, period), `${PNAME[period] || '일일'}처리량_${span}.xlsx`)
+  downloadBlob(buildDailyReportXlsx(report, day, to, period, sign), `${PNAME[period] || '일일'}처리량_${span}.xlsx`)
 }

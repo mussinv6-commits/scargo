@@ -541,48 +541,92 @@ const estopTimer = setInterval(async () => {
     }
   }
 
-  /* ── 26.10.29 전체 시연: AMR 허브 장면만 순서대로 (화재는 앱·웹 연동 시연에서 따로 진행) (S-Bot 허브 관제 화면 안에서만 · 조회 전용 화면에서는 숨김) ── */
+  /* ── 26.10.31 AMR 시연: 자동 진행 + 장면 버튼 + 다음 장면 + 일시정지 (화재 · 비상정지는 앱 · 웹 연동 시연에서 따로 진행) ──
+     자동 시연: 장면마다 최소 시간을 보여 준 뒤 끝나면 다음 장면으로. 장면 번호를 누르면 그 장면으로 바로 이동하고 자동 진행은 멈춘다(질문 받을 때).
+     (S-Bot 허브 관제 화면 안에서만 · 조회 전용 화면에서는 숨김) */
   const demo = (() => {
     const bar = document.createElement('div')
     bar.className = 'tw-demo'
-    bar.style.cssText = 'position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:8;display:none;align-items:center;gap:8px;padding:8px 12px;border-radius:10px;background:rgba(8,14,24,.86);border:1px solid rgba(120,170,255,.35);color:#e8eef6;font:600 13px "Malgun Gothic",sans-serif;max-width:94%;width:max-content'
-    const mk = (t, bg) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = t; b.style.cssText = 'white-space:nowrap;flex:none;font:inherit;padding:6px 10px;border-radius:7px;cursor:pointer;color:#fff;border:1px solid rgba(255,255,255,.25);background:' + bg; return b }
-    const bStart = mk('▶ 전체 시연', 'rgba(30,90,170,.92)'), bNext = mk('⏭ 다음 장면', 'rgba(60,70,90,.92)'), bStop = mk('■ 중단', 'rgba(110,30,30,.92)')
-    const cap = document.createElement('span'); cap.style.cssText = 'min-width:0;line-height:1.35'
-    bar.append(bStart, bNext, bStop, cap)
+    bar.style.cssText = 'position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:8;display:none;flex-wrap:wrap;align-items:center;justify-content:center;gap:6px 8px;padding:8px 12px;border-radius:10px;background:rgba(8,14,24,.88);border:1px solid rgba(120,170,255,.35);color:#e8eef6;font:600 13px "Malgun Gothic",sans-serif;max-width:94%;width:max-content'
+    const mk = (t, bg, title) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = t; if (title) b.title = title; b.style.cssText = 'white-space:nowrap;flex:none;font:inherit;padding:6px 10px;border-radius:7px;cursor:pointer;color:#fff;border:1px solid rgba(255,255,255,.25);background:' + bg; return b }
+    const bStart = mk('▶ 자동 시연', 'rgba(30,90,170,.92)'), bPause = mk('⏸ 일시정지', 'rgba(60,70,90,.92)'), bNext = mk('⏭ 다음 장면', 'rgba(60,70,90,.92)'), bStop = mk('■ 중단', 'rgba(110,30,30,.92)')
+    bStart.dataset.act = 'start'; bStop.dataset.act = 'stop'   // 26.10.31 S-Bot 상단 '▶ 시연 / ■ 시연 중지' 가 이 버튼을 찾는 표시 (버튼 순서가 바뀌어도 동작)
+    const chips = document.createElement('span'); chips.style.cssText = 'display:inline-flex;gap:4px'
+    const cap = document.createElement('span'); cap.style.cssText = 'flex-basis:100%;min-width:0;line-height:1.35;text-align:center'
+    bar.append(bStart, bPause, bNext, chips, bStop, cap)
     $('viewport').appendChild(bar)
-    let idx = -1, t0 = 0, sub = 0, timer = 0
-    // 장면: enter(진입) · tick(경과초 → 끝났으면 true) · leave(정리)
+    let idx = -1, t0 = 0, simT0 = 0, timer = 0, auto = false   // 장면 시간은 시뮬레이터 시계(S.sc.t) 기준 — 느린 PC 에서도 장면 안의 동작이 끝난 뒤에 넘어간다 (실제 시간으로는 최대 4배까지만 기다림)
+    const click = (sel) => { try { const e = root.querySelector(sel); if (e && !e.disabled) e.click() } catch { /* 무시 */ } }
+    const view = (p) => click('[data-preset="' + p + '"]')
+    const hold = (on) => { S.holdApprove = !!on }
+    const calm = (on) => { S.holdDegrade = !!on }   // 앞 장면(1~4) 동안 고장이 저절로 시작되지 않게
+    const spare = () => { const t = S.sc.target; for (const i of [3, 1, 0, 2]) { const a = S.amrs[i]; if (i !== t && a && a.role === 'active' && a.state !== 'maint') return a } return null }
+    // 고장 예측 장면 준비: 대상 AMR-03 의 진동을 올려 이상 감지 → AI 예측으로 보낸다
+    const degrade = () => { const sc = S.sc; if (sc.phase === 1) { sc.target = 2; S.amrs[2].deg = Math.max(S.amrs[2].deg, 2.35); sc.degrading = true; sc.start = sc.t - 19 } }
+    // 장면: min(자동일 때 최소 보여 줄 초) · enter(진입) · done(끝났는지) · max(안 끝나도 넘어가는 초) · leave(정리)
     const scenes = [
-      { t: '① 정상 운영', d: 'AMR 5대와 지게차가 입고 · 출고 작업을 처리하는 평상시 화면이에요.', enter() {}, tick: (el) => el > 14, leave() {} },
-      { t: '② 고장 예측', d: '진동 이상 → 남은 수명 예측 → 정비 승인 → 예비기 AMR-05 투입 순서로 진행돼요.',
-        enter() { const sc = S.sc; if (sc.phase === 1) { sc.target = 2; S.amrs[2].deg = Math.max(S.amrs[2].deg, 2.35); sc.degrading = true; sc.start = sc.t - 19 } },
-        tick: (el) => (S.sc.phase >= 4 && S.amrs[S.sc.target].state === 'maint' && el > 20) || el > 90, leave() {} },
-      { t: '③ 비상 정지 · 작업 인계', d: '전체 정지 후 해제, 이어서 AMR-02 한 대만 정지하면 미집품 작업은 다른 장비가 이어받아요.',
-        enter() { sim.setEstop(null, true) }, tick: (el) => { if (el > 8 && sub === 0) { sim.setEstop(null, false); sim.setEstop(1, true); sub = 1 } return el > 16 }, leave() { sim.setEstop(null, false) } },
-      { t: '④ 마무리', d: 'S-Bot 대시보드에서 AMR 운영 결과를 확인하고 일일 보고서를 저장해요.', enter() {}, tick: (el) => el > 10, leave() {} },
+      { t: '정상 운영', d: '평상시 입·출고 작업 중', min: 8, max: 12,
+        enter() { click('#tw-restart'); hold(true); calm(true); click('[data-view="auto"]'); view('overview') }, done: () => true },
+      { t: '차량 입차', d: '번호판 인식 후 입차, 작업 배정', min: 10, max: 14,
+        enter() { hold(true); calm(true); view('gateIn'); S.inDocks.forEach((d) => { if (d.state === 'empty') d.timer = 0 }) }, done: () => true },
+      { t: '적재 작업', d: '도크 → 랙 화물 이송', min: 12, max: 16,
+        enter() { hold(true); calm(true); view('rack') }, done: () => true },
+      { t: '배터리 저하', d: '배터리 부족 AMR 충전소 이동', min: 10, max: 14,
+        enter() { hold(true); calm(true); view('station'); const a = spare(); if (a) { a.batt = Math.max(5, S.cfg.chargeAt - 2); a.needCharge = true } }, done: () => true },
+      { t: '고장 예측', d: '진동 이상 감지 → AI 고장 예측', min: 8, max: 45,
+        enter() { hold(true); calm(false); view('overview'); degrade(); try { select(S.sc.target) } catch { /* 무시 */ } }, done: () => S.sc.phase >= 3 },
+      { t: '정비 승인', d: '정비 승인 → 예비기 투입', min: 8, max: 45,
+        enter() {
+          hold(true); calm(false)
+          if (S.sc.phase < 3 && !S.sc.await) { S.amrs[S.sc.target].deg = 4.0; S.sc.degrading = true; S.sc.start = S.sc.t - 19 }   // 앞 장면을 건너뛰어도 예측 상태까지 맞춤
+          try { select(S.sc.target) } catch { /* 무시 */ }; click('[data-view="follow"]')
+          let n = 0; const w = setInterval(() => { n++; if (S.sc.await) { sim.approve('관리자 (시연)'); clearInterval(w) } else if (n > 40) clearInterval(w) }, 250)
+        }, done: () => S.sc.phase >= 4 || S.amrs[S.sc.target].state === 'maint' },
+      { t: '정비 완료', d: '정비 완료 · 복귀 (4배속)', min: 8, max: 240,
+        enter() { hold(false); click('.spd[data-s="4"]'); click('[data-view="overview"]') }, done: () => S.sc.phase >= 5, leave() { click('.spd[data-s="1"]') } },
+      { t: '결과 요약', d: '', min: 10, max: 12,
+        enter() { hold(false); view('overview'); const k = $('kAct'); const st = $('kStop'); cap.dataset.sum = 'AMR 가동 ' + (k ? k.textContent : '-') + ' · 비계획 정지 ' + (st ? st.textContent : '0') + '건'; show() }, done: () => true },
     ]
-    const show = () => { const c = scenes[idx]; cap.innerHTML = c ? '<b style="color:#ffc857">' + c.t + '</b> (' + (idx + 1) + '/' + scenes.length + ') · ' + c.d : '' ; bStart.textContent = idx >= 0 ? '↺ 처음부터' : '▶ 전체 시연' }
-    function go(n) {
-      if (scenes[idx]) { try { scenes[idx].leave() } catch { /* 정리 실패 무시 */ } }
-      idx = n; sub = 0; t0 = performance.now()
+    chips.append(...scenes.map((c, i) => { const b = mk(String(i + 1), 'rgba(50,60,80,.9)', (i + 1) + '. ' + c.t); b.style.padding = '6px 8px'; b.onclick = () => { if (remoteView()) return; auto = false; clearInterval(timer); timer = 0; go(i, true) }; return b }))
+    const paint = () => {
+      Array.from(chips.children).forEach((b, i) => { b.style.background = i === idx ? 'rgba(30,90,170,.95)' : 'rgba(50,60,80,.9)'; b.style.borderColor = i === idx ? '#ffc857' : 'rgba(255,255,255,.25)' })
+      bStart.textContent = idx >= 0 ? '↺ 처음부터' : '▶ 자동 시연'
+      bPause.textContent = auto ? '⏸ 일시정지' : '▶ 자동 이어가기'; bPause.style.display = idx >= 0 ? '' : 'none'
+    }
+    function show() { const c = scenes[idx]; if (!c) { cap.innerHTML = ''; paint(); return } const d = c.d || cap.dataset.sum || ''; cap.innerHTML = '<b style="color:#ffc857">' + (idx + 1) + '. ' + c.t + '</b> (' + (idx + 1) + '/' + scenes.length + ')' + (auto ? '' : ' · 수동') + ' · ' + d; paint() }
+    function go(n, manual) {
+      if (scenes[idx] && scenes[idx].leave) { try { scenes[idx].leave() } catch { /* 정리 실패 무시 */ } }
+      idx = n
       if (idx >= scenes.length) { stop(true); return }
       try { scenes[idx].enter() } catch { /* 장면 시작 실패 시 다음 장면에서 계속 */ }
+      t0 = performance.now(); simT0 = S.sc.t   // 처음부터(재시작)가 시계를 0 으로 되돌리므로 enter 뒤에 잡는다
       show()
     }
-    function stop(done) {
-      clearInterval(timer); timer = 0
-      if (scenes[idx]) { try { scenes[idx].leave() } catch { /* 무시 */ } }
-      sim.setEstop(null, false); if (S.fire.on) sim.setFire(false); if (S.bfire) sim.clearBatteryFire()
-      idx = -1; cap.innerHTML = done ? '<b style="color:#7be0a4">시연이 끝났어요</b>' : ''; bStart.textContent = '▶ 전체 시연'
+    function tickAll() {
+      if (idx < 0 || !auto) return
+      const c = scenes[idx], el = S.sc.t - simT0, real = (performance.now() - t0) / 1000
+      if ((el >= c.min && c.done()) || el >= c.max || real >= c.max * 4) go(idx + 1)
     }
-    bStart.onclick = () => { if (remoteView()) return; stop(false); go(0); timer = setInterval(() => { if (idx < 0) return; if (scenes[idx].tick((performance.now() - t0) / 1000)) go(idx + 1) }, 250) }
-    bNext.onclick = () => { if (idx >= 0) go(idx + 1) }
+    function stop(done) {
+      clearInterval(timer); timer = 0; auto = false
+      if (scenes[idx] && scenes[idx].leave) { try { scenes[idx].leave() } catch { /* 무시 */ } }
+      hold(false); calm(false); if (S.sc.await) sim.approve('자동 (시연 종료)')
+      sim.setEstop(null, false); if (S.fire.on) sim.setFire(false); if (S.bfire) sim.clearBatteryFire()
+      click('.spd[data-s="1"]'); click('[data-view="auto"]')
+      idx = -1; show(); cap.innerHTML = done ? '<b style="color:#7be0a4">시연이 끝났어요</b>' : ''
+    }
+    const run = () => { clearInterval(timer); timer = setInterval(tickAll, 250) }
+    bStart.onclick = () => { if (remoteView()) return; stop(false); auto = true; go(0); run() }
+    bPause.onclick = () => { if (idx < 0) return; auto = !auto; if (auto) { t0 = performance.now(); simT0 = S.sc.t; run() } else { clearInterval(timer); timer = 0 } show() }
+    bNext.onclick = () => { if (remoteView()) return; if (idx < 0) { auto = false; go(0) } else go(idx + 1); if (auto) run() }
     bStop.onclick = () => stop(false)
-    const vis = () => { const on = !!document.querySelector('.sb-demo.run'); bar.style.display = (on && !remoteView()) ? 'flex' : 'none'
+    let wasOn = false
+    // 26.10.31 시연이 도는 동안에는 '단계 설명' 자막을 자동으로 펼치고, 끝나면 다시 접는다 (평소에는 3D 를 가리지 않게 접힌 상태)
+    const vis = () => { const on = !!document.querySelector('.sb-demo.run, .sb-demo2.run'); bar.style.display = (on && !remoteView()) ? 'flex' : 'none'
+      if (on !== wasOn) { wasOn = on; try { const cb = root.querySelector('.capbar'); if (cb) { cb.classList.toggle('open', on); const t = cb.querySelector('.cap-tg'); if (t) t.setAttribute('aria-expanded', String(on)) } } catch { /* 무시 */ } }
       // 허브 하단 설명문을 가리지 않도록, 그 박스 바로 위에 띄움
-      try { const vp = $('viewport'); const c = $('caption'); const el = c && c.parentElement; let g = el ? vp.getBoundingClientRect().bottom - el.getBoundingClientRect().top : 0; if (!(g > 0 && g < 260)) g = 0; bar.style.bottom = (on && g ? Math.round(g) + 8 : 14) + 'px' } catch { /* 무시 */ } }   // 26.10.29 위쪽 '▶ 시연'이 도는 동안에만 보임 (SbotLayout 의 .sb-demo.run)
-    vis(); const visT = setInterval(vis, 600)
+      try { const vp = $('viewport'); const c = $('caption'); const el = c && c.parentElement; let g = el ? vp.getBoundingClientRect().bottom - el.getBoundingClientRect().top : 0; if (!(g > 0 && g < 260)) g = 0; bar.style.bottom = (on && g ? Math.round(g) + 8 : 14) + 'px' } catch { /* 무시 */ } }   // 위쪽 '▶ 시연'이 도는 동안에만 보임 (SbotLayout 의 .sb-demo.run)
+    paint(); vis(); const visT = setInterval(vis, 600)
     return { destroy() { clearInterval(timer); clearInterval(visT); bar.remove() }, get step() { return idx } }
   })()
 

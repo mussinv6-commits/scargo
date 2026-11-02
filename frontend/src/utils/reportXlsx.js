@@ -29,7 +29,7 @@ export function createReport(cols) {
   const rep = (c0, c1, s) => Array.from({ length: c1 - c0 + 1 }, () => ({ v: '', s }))
 
   // 제목 + 문서 정보(왼쪽) + 결재란(오른쪽)
-  function header(title, meta, approvers = ['담당', '팀장', '센터장']) {
+  function header(title, meta, approvers = ['담당', '팀장', '센터장'], stamps = []) {   // 26.10.31 stamps: 결재란 칸별 [{name, at}] (확정 도장)
     const t = add([{ v: title, s: 19 }, ...rep(1, G - 1, 19)], 38); merge(0, t, G - 1, t)
     const top = rows.length
     const info = meta.slice(0, 4); while (info.length < 4) info.push(['', ''])
@@ -40,6 +40,7 @@ export function createReport(cols) {
       rows[r][G - 4] = { v: i === 0 ? '결\n재' : '', s: 20 }
       for (let k = 0; k < 3; k++) rows[r][G - 3 + k] = i === 0 ? { v: approvers[k], s: 20 } : { v: '', s: 7 }
     }
+    stamps.forEach((st, k) => { if (st && st.name && k < 3) rows[top + 1][G - 3 + k] = { v: st.name + (st.at ? '\n' + st.at : ''), s: 21 } })
     merge(G - 4, top, G - 4, top + 3)
     for (let k = 0; k < 3; k++) merge(G - 3 + k, top + 1, G - 3 + k, top + 3)
     // 결재 도장 칸은 높게

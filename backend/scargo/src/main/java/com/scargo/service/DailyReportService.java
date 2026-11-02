@@ -6,7 +6,9 @@ import com.scargo.util.SimpleXlsx;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.Authentication;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
@@ -147,5 +149,83 @@ public class DailyReportService {
             args.add(hub);
         }
         return count(sql.toString(), args.toArray());
+    }
+
+    // ── 26.10.31 확정 도장: 작성 확정 → 승인 두 단계로 이름 · 시각을 남긴다 (엑셀 결재란에 그대로 찍힘)
+    //  report_signs 테이블은 처음 쓸 때 스스로 만든다. 키 = 보고 범위(전체/허브) + 기간
+    private volatile boolean signReady;
+
+    private void ensureSignTable() {
+        if (signReady) return;
+        jdbc.execute("CREATE TABLE IF NOT EXISTS report_signs (sign_key VARCHAR(120) PRIMARY KEY, prepared_by VARCHAR(60), prepared_at TIMESTAMPTZ, approved_by VARCHAR(60), approved_at TIMESTAMPTZ)");
+        signReady = true;
+    }
+
+    private String signKey(HubScope scope, LocalDate date, LocalDate to) {
+        LocalDate day = date == null ? LocalDate.now(KST) : date;
+        LocalDate last = to == null || to.isBefore(day) ? day : to;
+        return "daily|" + (scope.hubId() == null ? "ALL" : scope.hubId()) + "|" + day + "|" + last;
+    }
+
+    private Map<String, Object> signState(String key, HubScope scope) {
+        List<Map<String, Object>> r = jdbc.queryForList(
+                "SELECT prepared_by, to_char(prepared_at AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD HH24:MI') AS prepared_at, approved_by, "
+                        + "to_char(approved_at AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD HH24:MI') AS approved_at FROM report_signs WHERE sign_key = ?", key);
+        Map<String, Object> m = new LinkedHashMap<>();
+        Map<String, Object> row = r.isEmpty() ? Map.of() : r.get(0);
+        m.put("preparedBy", row.get("prepared_by"));
+        m.put("preparedAt", row.get("prepared_at"));
+        m.put("approvedBy", row.get("approved_by"));
+        m.put("approvedAt", row.get("approved_at"));
+        m.put("locked", row.get("approved_by") != null);
+        m.put("canApprove", scope.userType() == com.scargo.entity.Account.UserType.ADMIN || scope.userType() == com.scargo.entity.Account.UserType.CONTROL);
+        m.put("canReset", scope.userType() == com.scargo.entity.Account.UserType.ADMIN);
+        return m;
+    }
+
+    @Transactional
+    public Map<String, Object> sign(Authentication authentication, LocalDate date, LocalDate to) {
+        HubScope scope = hubScopePolicy.view(authentication);
+        ensureSignTable();
+        return signState(signKey(scope, date, to), scope);
+    }
+
+    /** 작성 확정: 로그인한 사람 이름 · 지금 시각을 작성란에 남긴다. 이미 승인됐으면 막는다 */
+    @Transactional
+    public Map<String, Object> prepare(Authentication authentication, LocalDate date, LocalDate to) {
+        HubScope scope = hubScopePolicy.view(authentication);
+        ensureSignTable();
+        String key = signKey(scope, date, to);
+        if (Boolean.TRUE.equals(signState(key, scope).get("locked"))) throw new ResponseStatusException(HttpStatus.CONFLICT, "이미 승인된 보고서입니다.");
+        String name = hubScopePolicy.currentAccount(authentication).getUserName();
+        jdbc.update("INSERT INTO report_signs(sign_key, prepared_by, prepared_at) VALUES (?, ?, now()) "
+                + "ON CONFLICT (sign_key) DO UPDATE SET prepared_by = EXCLUDED.prepared_by, prepared_at = EXCLUDED.prepared_at", key, name);
+        return signState(key, scope);
+    }
+
+    /** 승인: 관리자(ADMIN) · 관제(CONTROL) 만. 작성 확정이 먼저 있어야 한다 */
+    @Transactional
+    public Map<String, Object> approve(Authentication authentication, LocalDate date, LocalDate to) {
+        HubScope scope = hubScopePolicy.view(authentication);
+        ensureSignTable();
+        String key = signKey(scope, date, to);
+        Map<String, Object> st = signState(key, scope);
+        if (!Boolean.TRUE.equals(st.get("canApprove"))) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "승인은 관리자 · 관제만 할 수 있습니다.");
+        if (st.get("preparedBy") == null) throw new ResponseStatusException(HttpStatus.CONFLICT, "작성 확정이 먼저 필요합니다.");
+        if (Boolean.TRUE.equals(st.get("locked"))) return st;
+        jdbc.update("UPDATE report_signs SET approved_by = ?, approved_at = now() WHERE sign_key = ?",
+                hubScopePolicy.currentAccount(authentication).getUserName(), key);
+        return signState(key, scope);
+    }
+
+    /** 되돌리기 (시연 반복용): 관리자(ADMIN) 만 */
+    @Transactional
+    public Map<String, Object> resetSign(Authentication authentication, LocalDate date, LocalDate to) {
+        HubScope scope = hubScopePolicy.view(authentication);
+        ensureSignTable();
+        if (scope.userType() != com.scargo.entity.Account.UserType.ADMIN) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "되돌리기는 관리자만 할 수 있습니다.");
+        String key = signKey(scope, date, to);
+        jdbc.update("DELETE FROM report_signs WHERE sign_key = ?", key);
+        return signState(key, scope);
     }
 }

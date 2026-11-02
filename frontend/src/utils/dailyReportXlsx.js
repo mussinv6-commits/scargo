@@ -7,7 +7,7 @@ const parseDay = (s) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || 
 
 const PNAME = { day: '일일', week: '주간', month: '월간', year: '연간' }
 
-export function buildDailyReportXlsx(report, date, to, period = 'day') {
+export function buildDailyReportXlsx(report, date, to, period = 'day', sign = null) {
   const now = nowInfo()
   const day = nowInfo(parseDay(date || report?.date))
   const last = to && to !== (date || report?.date) ? nowInfo(parseDay(to)) : null
@@ -17,7 +17,7 @@ export function buildDailyReportXlsx(report, date, to, period = 'day') {
   const scope = report?.scope || '전체 허브'
   const rp = createReport(7) // 7칸: 구분(A) · 항목(B~E 병합) · 건수(F~G 병합)
 
-  rp.header(`${pn} 처리량 보고서`, [['문서번호', now.docNo('SCARGO-RPT')], ['보고일자', last ? `${pn} · ${when}` : day.kor], ['보고 대상', scope], ['출력 일시', now.stamp]])
+  rp.header(`${pn} 처리량 보고서`, [['문서번호', now.docNo('SCARGO-RPT')], ['보고일자', last ? `${pn} · ${when}` : day.kor], ['보고 대상', scope], ['출력 일시', now.stamp]], undefined, [sign && sign.preparedBy ? { name: sign.preparedBy, at: sign.preparedAt } : null, null, sign && sign.approvedBy ? { name: sign.approvedBy, at: sign.approvedAt } : null]) // 26.10.31 확정 도장: 담당=작성 확정, 센터장=승인
   rp.section('1. 보고 개요')
   const sections = [...new Set(rows.map((r) => r.section))]
   rp.paragraph(`${when} 기준 ${scope}의 ${pn} 처리량을 보고함. ${sections.length}개 구분, ${rows.length}개 항목.`, 1)
