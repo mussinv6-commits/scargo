@@ -20,11 +20,13 @@ echo [4/7] DB, AMR, app
 robocopy "%SRC%DB" "%T%\DB" /E /XF *.bak *.log /NFL /NDL /NJH /NJS /NP >nul
 robocopy "%SRC%AMR_업데이트" "%T%\AMR_업데이트" /E /XF *.bak 1_적용하기.bat 3_깃허브_업로드.bat 4_앱_빌드.bat 5_연결키트_만들기.bat /XD 연결키트 문서 /NFL /NDL /NJH /NJS /NP >nul
 robocopy "%SRC%amr-app" "%T%\amr-app" /E /XD node_modules dist android www .gradle build /XF *.bak /NFL /NDL /NJH /NJS /NP >nul
+robocopy "%SRC%driver-app" "%T%\driver-app" /E /XD node_modules dist android www .gradle build /XF *.bak /NFL /NDL /NJH /NJS /NP >nul
+robocopy "%SRC%apk" "%T%\apk" /E /XF *.bak sbot-amr-app_20261101.apk /NFL /NDL /NJH /NJS /NP >nul
 echo [5/7] launcher, toll section control   (ocr.pth 195MB is left out - KakaoTalk size limit)
 robocopy "%SRC%런처" "%T%\런처" /E /XD logs /XF *.bak sp_*.png /NFL /NDL /NJH /NJS /NP >nul
 robocopy "%SRC%toll_demo" "%T%\toll_demo" /E /XD gate_env __pycache__ /XF *.bak *.log recognize_all.bat seed_data.bat ocr.pth /NFL /NDL /NJH /NJS /NP >nul
 mkdir "%T%\bat"
-for %%f in ("새PC_설치.bat" "setup_db.bat" "바로가기_만들기.ps1" "sgroup_run.ico") do if exist "%SRC%bat\%%~f" copy /y "%SRC%bat\%%~f" "%T%\bat\" >nul
+for %%f in ("새PC_설치.bat" "setup_db.bat" "바로가기_만들기.ps1" "바로가기_만들기.bat" "sgroup_run.ico" "demo_ready.bat" "시연용_DB.bat" "db_update_1102.bat" "S그룹_전체실행.bat" "전체_종료.bat") do if exist "%SRC%bat\%%~f" copy /y "%SRC%bat\%%~f" "%T%\bat\" >nul
 echo [6/7] OCR models
 robocopy "%SRC%python\runs" "%T%\python\runs" /E /NFL /NDL /NJH /NJS /NP >nul
 robocopy "%SRC%python\ocr_model_attn" "%T%\python\ocr_model_attn" /E /NFL /NDL /NJH /NJS /NP >nul

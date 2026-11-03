@@ -74,7 +74,7 @@ export function ean13Bits(code) {
 // 번호판 표시: 서울85자6013 → 서울 85자 6013
 export const fmtPlate = (p) => (p ? String(p).replace(/\s/g, '').replace(/^(\D*)(\d{2,3})(\D)(\d{4})$/, (m, a, b, c, d) => (a ? a + ' ' : '') + b + c + ' ' + d) : '')
 
-// 교차로: 통로(가로) × 간선(세로)이 만나는 10곳 — 한 번에 한 대만 지나간다 (예약)
+// 교차로: 통로(가로) × 지선(세로)이 만나는 10곳 — 한 번에 한 대만 지나간다 (예약)
 export const INTER_NODES = [HXL, HXR].flatMap((x) => AISLES.map((y) => ({ x, y, key: x + ':' + y })))
 export const INTER_R = 14 // 교차로 칸 반지름 (px, 0.7m)
 
@@ -176,7 +176,7 @@ export function createSim(hooks = {}) {
     setPhase(1)
   }
 
-  // ── 경로: 통로 → 간선 → 통로 → 목적지 ──
+  // ── 경로: 통로 → 지선 → 통로 → 목적지 ──
   const aisleOf = (p) => (p.kind === 'station' ? 540 : p.y)
   function route(P, Q) {
     let hx
@@ -299,10 +299,10 @@ export function createSim(hooks = {}) {
       return
     }
     if (r.decision === 'BLOCK') {
-      d.ocr = { st: 'block', plate: r.plate, photo: r.photoPlate, conf: r.confidence, kind: r.kind, exit: null }
+      d.ocr = { st: 'block', plate: r.plate, photo: r.photoPlate, conf: r.confidence, kind: r.kind, reason: r.blockReason, exit: null }
       if (side === 'in') d.cargo = []; else d.boxes = []
       d.state = 'leaving'
-      addLog((r.plate ? '미등록 차량 ' + fmtPlate(r.plate) : '번호판 판독 불가') + ' · ' + where + ' 진입 차단', 'crit')
+      addLog((r.plate ? ({ PENDING: '진입 허가 심사대기 차량 ', REJECTED: '진입 불허 차량 ' }[r.blockReason] || '미등록 차량 ') + fmtPlate(r.plate) : '번호판 판독 불가') + ' · ' + where + ' 진입 차단', 'crit')
       return
     }
     d.ocr = { st: 'ok', plate: r.plate, photo: r.photoPlate, conf: r.confidence, kind: r.kind, company: r.company || '', exit: null }

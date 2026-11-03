@@ -1,5 +1,5 @@
 -- add_6_teammate2.sql : 팀원 새 통합본(26.10.26) 코드를 우리 DB 에 맞추는 추가분 (여러 번 실행해도 안전)
--- 1) 간선(LINEHAUL_DRIVER) -> 지선(BRANCH_DRIVER) 이름 통일: 트리거 함수 · 제약 · 계정 데이터
+-- 1) 지선(LINEHAUL_DRIVER) -> 지선(BRANCH_DRIVER) 이름 통일: 트리거 함수 · 제약 · 계정 데이터
 BEGIN;
 CREATE OR REPLACE FUNCTION public.scargo_check_account_role()
  RETURNS trigger

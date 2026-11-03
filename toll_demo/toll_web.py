@@ -314,6 +314,14 @@ def start_trip(scenario, dep=None, route='BASIC'):
                 except Exception as e:
                     print('[DB] 미등록 기록 저장 실패:', e)
             continue
+        if _ < MAX_PICK_TRIES // 2:                              # 항만 게이트(과적 검사)를 통과한 차량을 먼저 출차시킨다 -> 게이트 기록과 구간 관제가 같은 차량
+            try:
+                cleared = {r['vehicle_no'] for r in db_rows("SELECT DISTINCT vehicle_no FROM overload_checks WHERE is_passed AND checked_at > now() - interval '24 hours'", ())}
+            except Exception:
+                cleared = set()
+            if cleared and v['vehicle_no'] not in cleared:
+                skipped.append((f"{path.name} -> {v['vehicle_no']}", '항만 게이트 통과 기록 없음'))
+                continue
         with trips_lock:
             if any(t['status'] == 'RUNNING' and t['plate'] == v['vehicle_no'] for t in trips.values()):
                 skipped.append((path.name, '이미 운행 중인 차량'))
@@ -404,11 +412,31 @@ def _sync_safe(trip):
 sim = dict(playing=False, tick=1.2, pause_on_dev=True, notice=None, seen=set())   # 1.2초/칸: 3대 시연이 약 2분. pause_on_dev: 경로 이탈이 처음 감지되면 재생을 멈추고 안내를 띄운다
 
 
+AVG_KMH_SIM = 60.0          # 평균 속도 가정(km/h): 공용 시계가 흐른 시간만큼만 이동한다 (시계 x배속이면 이동도 x배)
+
+
+def sim_steps():
+    """이번 틱에 옮길 칸 수. 공용 시계가 있으면 60km/h x 흐른 시뮬레이션 시간 / 관측 간격(STEP_KM), 없으면 1칸"""
+    import route_watch
+    now = time.time()
+    last, sim['last'] = sim.get('last'), now
+    c = AUTO.get('clock')
+    if not c or now - c['at'] > 20 or last is None:
+        return 1 if not c or now - c['at'] > 20 else 0
+    dt = min(now - last, sim['tick'] * 3)
+    sim['acc'] = sim.get('acc', 0.0) + AVG_KMH_SIM * float(c['rate']) * dt / route_watch.STEP_KM
+    n = int(sim['acc'])
+    sim['acc'] -= n
+    return min(n, 60)
+
+
 def sim_tick():
+    n = sim_steps()
     with trips_lock:
         live = [t for t in trips.values() if not finished(t)]
         for t in live:
-            move_trip(t, 1)
+            if n:
+                move_trip(t, n)
         if sim['pause_on_dev']:
             for t in live:
                 k = t['trip_key']
@@ -424,6 +452,8 @@ def sim_tick():
 async def sim_loop():
     while True:
         await asyncio.sleep(sim['tick'])
+        if not sim['playing']:
+            sim['last'] = None
         if sim['playing']:
             try:
                 await asyncio.to_thread(sim_tick)

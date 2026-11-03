@@ -1,6 +1,7 @@
 package com.scargo.amr.controller;
 
 import com.scargo.amr.service.SafetyDriverNotifier;
+import com.scargo.amr.service.AmrSafetyAlertService;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -23,9 +24,11 @@ public class SafetyAlertController {
     private static Map<String, Object> active = null;
     private static final Deque<Map<String, Object>> HISTORY = new ArrayDeque<>();
     private final SafetyDriverNotifier drivers; // 26.10.29 기사 앱 알림 (발령 · 종료 때 한 번씩)
+    private final AmrSafetyAlertService history; // 26.11.01 S-Bot AMR 알림 내역
 
-    public SafetyAlertController(SafetyDriverNotifier drivers) {
+    public SafetyAlertController(SafetyDriverNotifier drivers, AmrSafetyAlertService history) {
         this.drivers = drivers;
+        this.history = history;
     }
 
     @GetMapping("/alert")
@@ -50,6 +53,7 @@ public class SafetyAlertController {
             out = new LinkedHashMap<>(a);
         }
         if (fresh) drivers.started(kind, String.valueOf(req.getOrDefault("label", ""))); // 새 경보일 때만
+        try { history.onAlert(req, fresh); } catch (Exception ignored) { /* 알림 내역 실패해도 경보는 유지 */ } // fresh 아니어도 batt stage 기록
         return out;
     }
 
@@ -66,6 +70,7 @@ public class SafetyAlertController {
             active = null;
         }
         if (endedKind != null) drivers.ended(endedKind, endedLabel); // 기사 앱에 화재 종료 알림
+        try { if (endedKind != null) history.onAlertEnd(endedKind, endedLabel); } catch (Exception ignored) { /* 무시 */ }
         return Map.of("active", false);
     }
 
@@ -82,7 +87,9 @@ public class SafetyAlertController {
         List<String> codes = new ArrayList<>();
         Object o = req.get("codes");
         if (o instanceof List<?> l) for (Object x : l) if (x != null) codes.add(String.valueOf(x));
+        List<String> prev = estopCodes;
         estopCodes = List.copyOf(codes);
+        try { history.onEstopChanged(prev, estopCodes); } catch (Exception ignored) { /* 무시 */ }
         return Map.of("codes", estopCodes);
     }
 
@@ -94,7 +101,7 @@ public class SafetyAlertController {
     private static void addHistory(String kind, String label, String type, long sec) {
         Map<String, Object> h = new LinkedHashMap<>();
         h.put("at", System.currentTimeMillis()); h.put("kind", kind); h.put("label", label); h.put("type", type); h.put("secs", sec);
-        h.put("title", "[자동] " + (kind.equals("batt") ? label + " 배터리 화재 " : "허브 화재 경보 ") + type);
+        h.put("title", "[긴급] " + (kind.equals("batt") ? label + " 배터리 화재 " : "허브 화재 경보 ") + type);
         HISTORY.addFirst(h);
         while (HISTORY.size() > 50) HISTORY.removeLast();
     }

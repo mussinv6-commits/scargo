@@ -80,9 +80,9 @@
       </div>
       <div v-if="ended" class="endcard">
         <div class="et">
-          <h2>못먹어도 S카고</h2>
+          <h2>항만에서 물류센터까지 물류 자동화 시스템</h2>
           <i></i>
-          <p>AI 기반 항만 화물차 예지보전 시스템</p>
+          <p>항만·도로·허브 과적 검사부터 AMR 예지보전, 앱 제어까지의 통합 관제 시스템</p>
         </div>
       </div>
     </div>
@@ -103,10 +103,11 @@ import { loadSavedId, storeSavedId } from "@/utils/savedId.js"; // 26.10.24 팀 
 // ===== 회사 연혁(엔딩 크레딧) - 문구는 여기서 수정 =====
 const SLOGAN = "CONNECTING EVERY FLOW OF LOGISTICS";
 const CREDITS = [
-  { title: "ABOUT", lines: [["화물 운송부터 허브 자동화까지, 물류의 모든 흐름을 하나로 잇습니다"], ["창립", "2026년 10월 1일"], ["구성", "S CARGO · S-BOT"]] },
-  { title: "VISION", lines: [["항만에서 집 앞까지, 끊김 없는 스마트 물류"]] },
+  { title: "ABOUT", lines: [["항만에서 물류센터까지 물류 자동화 시스템"], ["항만·도로·허브 과적 검사부터 AMR 예지보전, 앱 제어까지의 통합 관제 시스템"], ["최첨단 AI 태수 · AI 한솔 시스템과 로봇(AMR)으로 이루어진 물류 자동화"], ["창립", "2026년 10월 1일"], ["구성", "S CARGO · S-BOT"]] },
+  { title: "WHAT WE DO", lines: [["항만", "게이트 번호판 인식 · 계량 · 과적 판정"], ["도로", "톨게이트 · 검문소 구간 과적 관제"], ["허브", "AMR 로봇으로 빠른 허브 물류 정리 · 예지보전"], ["앱", "기사 앱 · S-Bot AMR 앱 제어"]] },
+  { title: "VISION", lines: [["항만에서 물류센터까지, 끊김 없는 스마트 물류"]] },
   { title: "CORE VALUES", lines: [["연결", "모든 흐름을 하나로"], ["정확", "데이터로 판정한다"], ["도전", "못 먹어도 고"]] },
-  { title: "HISTORY", lines: [["2026.09", "프로젝트 시작 · 번호판 인식 모델 설계 · 인천신항 방문"], ["2026.10.01", "S Group 창립 · 화물차 번호판 인식 · 게이트 입차"], ["2026.10.07", "1차 발표"], ["2026.10.13", "2차 범위 확정 · 하이패스 방식 결정"], ["2026.10.15", "허브 AMR 관제 도입"], ["2026.10.20", "S Group 메인 출범 · S Cargo / S-Bot 분리"]] },
+  { title: "HISTORY", lines: [["2026.09", "프로젝트 시작 · 번호판 인식 모델 설계 · 인천신항 방문"], ["2026.10.01", "S Group 창립 · 화물차 번호판 인식 · 게이트 입차"], ["2026.10.07", "1차 발표"], ["2026.10.13", "2차 범위 확정 · 하이패스 방식 결정"], ["2026.10.15", "허브 AMR 관제 도입"], ["2026.10.20", "S Group 메인 출범 · S Cargo / S-Bot 분리"], ["2026.10.24", "통합 DB 구축 · 허브 · 센터 · 기사 데이터 연결"], ["2026.10.29", "구간 관제(톨게이트 · 검문소) · 화재 경보 · 허브 입차 연동"], ["2026.10.31", "S-Bot AMR 앱 · 기사 앱 개발"], ["2026.11.02", "팀 작업 통합 · 항만 → 허브 → 물류센터 시연 데이터 연결"], ["2026.11.10", "최종 발표"]] },
   { title: "TEAM", lines: [["CEO", "최길웅"], ["CIO", "김태수"], ["COO", "정예지"], ["CSO", "이한솔"]] },
 ];
 const credits = ref(false);
@@ -187,7 +188,7 @@ function go(p) {
   if (p === "/sbot") {
     const u = authState.user;
     if (!u) {
-      msg.value = "S-Bot 은 로그인 후 이용할 수 있습니다.";
+      msg.value = "S-Bot 은 로그인 후 이용할 수 있습니다. 위에서 S-Bot 관리자 또는 마스터(admin01) 계정으로 로그인해 주세요.";
       return;
     }
     if (u.userType !== "ADMIN") { // 26.10.24: 마스터 관리자도 S-Bot 허용
@@ -203,7 +204,7 @@ function go(p) {
   if (p === "/scargo") {
     const u = authState.user;
     if (u && u.userType === "ADMIN" && u.adminScope === "SBOT" && !isMaster(u)) { // 마스터(admin01)는 S Cargo 도 입장 가능
-      msg.value = "S Cargo 이용 권한이 없는 계정입니다.";
+      msg.value = "S Cargo 는 S Cargo 관리자(admin) 또는 마스터(admin01) 계정으로 로그인해야 합니다. 오른쪽 위 '로그아웃' 후 다시 로그인해 주세요.";
       return;
     }
     if (u) return router.push(u.userType === "ADMIN" ? "/scargo" : homeOf(u)); // 26.10.26 총관리자는 S Cargo 메인(/scargo)으로. 나머지는 아래 권한별 첫 화면 // // v13 (scargo_1): 로그인 계정은 권한별 첫 화면으로 (관제사 → 관제, 기사 → 기사 화면, 승인대기 → 안내)
@@ -264,9 +265,9 @@ function logout() {
 .roll { position: absolute; left: 50%; top: 0; width: min(640px, 90vw); transform: translate(-50%, 100vh); text-align: center; color: #e9d9ad; animation: roll 30s linear forwards; padding-bottom: 40vh; }
 .endcard { position: absolute; inset: 0; z-index: 1; background: rgba(7,15,29,.55); display: flex; align-items: center; justify-content: center; animation: endIn 2s ease forwards; }
 .et { text-align: center; color: #fff; opacity: 0; animation: endIn 2s ease 1.2s forwards; }
-.et h2 { margin: 0; font-size: 44px; font-weight: 700; letter-spacing: .06em; }
+.et h2 { margin: 0 auto; max-width: 92vw; font-size: clamp(24px, 3.2vw, 40px); font-weight: 700; letter-spacing: .04em; line-height: 1.3; }
 .et i { display: block; width: 150px; height: 2px; margin: 14px auto; background: #d8a94e; }
-.et p { margin: 0; font-size: 15px; color: #b9c8dc; letter-spacing: .12em; }
+.et p { margin: 0 auto; max-width: min(92vw, 820px); font-size: 15px; color: #b9c8dc; letter-spacing: .06em; line-height: 1.6; }
 @keyframes endIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes roll { from { transform: translate(-50%, 100vh); } to { transform: translate(-50%, -100%); } }
 .roll h3 { margin: 90px 0 22px; font-family: "Cormorant Garamond", "Times New Roman", serif; font-weight: 500; letter-spacing: .5em; font-size: 20px; color: #d8a94e; }

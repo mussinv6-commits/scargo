@@ -4,12 +4,12 @@
 <div class="card" v-if="role === 'carrier'"><h3>배차 지시 <span class="meta">· 운송사 담당자</span></h3><table class="form two">
 <tbody><tr><td>출발 허브</td><td><select v-model="f.fromCenterId"><option v-for="h in opt.hubs" :key="h.id" :value="h.centerId">{{ h.name }}</option></select></td></tr>
 <tr><td>도착 센터</td><td><select v-model="f.toCenterId"><option v-for="c in opt.centers" :key="c.id" :value="c.id">{{ c.name }}</option></select></td></tr>
-<tr><td>차량 (일반화물차)</td><td><select v-model="f.vehicleNo"><option v-for="v in gVeh" :key="v.vehicleNo" :value="v.vehicleNo">{{ v.vehicleNo }} · {{ v.truckType }}</option></select></td></tr>
-<tr><td>지선기사</td><td><select v-model="f.driverAccountId"><option :value="null">미배정</option><option v-for="d in lDrivers" :key="d.accountId" :value="d.accountId">{{ d.userName }}</option></select></td></tr>
+<tr><td>차량 (일반화물차)</td><td><select v-model="f.vehicleNo"><option v-for="v in gVeh" :key="v.vehicleNo" :value="v.vehicleNo">{{ v.vehicleNo }} · {{ v.truckType }}</option></select><span v-if="!gVeh.length" class="meta"> 진입 허가된 일반화물차가 없습니다</span></td></tr>
+<tr><td>지선기사</td><td><select v-model="f.driverAccountId"><option :value="null" disabled>기사 선택</option><option v-for="d in lDrivers" :key="d.accountId" :value="d.accountId">{{ d.userName }}</option></select></td></tr>
 <tr><td>계획 롤테이너</td><td><input type="number" min="0" v-model.number="f.plannedUnits"></td></tr>
 <tr><td>허브 출고 도크</td><td><select v-model="p.dockId"><option :value="null">나중에</option><option v-for="d in opt.outDocks" :key="d.id" :value="d.id">{{ d.name }}</option></select></td></tr>
 <tr><td>출발 예정</td><td><input type="datetime-local" v-model="p.plannedDepartAt"></td></tr></tbody></table>
-<div class="fbtns cen"><button class="btn y" @click="create">배차 지시</button> <button class="btn o" :disabled="!cur" @click="plan">선택 운행 도크·시각 저장{{ cur ? ' (LH#' + cur.tripId + ')' : '' }}</button> <span v-if="msg" :class="'b ' + (ok ? 'ok' : 'crit')">{{ msg }}</span></div></div></div>
+<div class="fbtns cen"><button class="btn y" :disabled="!f.vehicleNo || !f.driverAccountId" @click="create">배차 지시</button> <button class="btn o" :disabled="!cur" @click="plan">선택 운행 도크·시각 저장{{ cur ? ' (LH#' + cur.tripId + ')' : '' }}</button> <span v-if="msg" :class="'b ' + (ok ? 'ok' : 'crit')">{{ msg }}</span></div></div></div>
 <div class="card" v-if="role === 'carrier'" style="margin-top:14px"><h3>공컨 반납 지시 <span class="meta">· 허브 하역 완료 + 공컨 점검 OK = 반납 가능</span></h3><table :style="pgRd.reset"><thead><tr><th>오더</th><th>컨테이너</th><th>반납 CY</th><th>반납 기한</th><th>반납 가능</th><th>반납 기사</th><th></th></tr></thead>
 <tbody><tr v-for="o in pgRd.rows" :key="o.orderId"><td>{{ o.orderNo }}</td><td>{{ o.containerNo }}</td><td>{{ o.returnCy || '앱에서 선택' }}</td><td>{{ md(o.returnDueAt) }} <span v-if="o.dueSoon" class="b warn">임박</span></td><td>{{ md(o.returnReadyAt) }}</td>
 <td><select v-model="pickD[o.orderId]"><option :value="undefined">기사 선택</option><option v-for="d in cDrivers" :key="d.accountId + d.vehicleNo" :value="d.accountId">{{ d.userName }} · {{ d.vehicleNo }}</option></select></td>
@@ -28,7 +28,8 @@ const props = defineProps(['tick', 'role'])
 // 지선 배차: GET /api/web/branch (권한별 범위). 운송사: POST /api/web/carrier/branch (배차 확정), PUT /api/web/carrier/branch/{id}/plan (출고 도크·출발 예정)
 const rows = ref([]), opt = ref({ hubs: [], centers: [], vehicles: [], drivers: [], outDocks: [] }), cur = ref(null), msg = ref(''), ok = ref(false)
 const f = reactive({ fromCenterId: null, toCenterId: null, vehicleNo: null, driverAccountId: null, plannedUnits: 0 }), p = reactive({ dockId: null, plannedDepartAt: '' })
-const gVeh = computed(() => opt.value.vehicles.filter(v => v.category === 'GENERAL_TRUCK'))
+// 26.11.02 배차는 진입 허가(APPROVED) 차량 + 지선 기사 필수 (서버 POST /api/web/carrier/branch 도 같은 확인)
+const gVeh = computed(() => opt.value.vehicles.filter(v => v.category === 'GENERAL_TRUCK' && v.entryApproval === 'APPROVED'))
 const lDrivers = computed(() => opt.value.drivers.filter(d => d.userType === 'BRANCH_DRIVER'))
 function pick(r) { cur.value = r }
 // v11: 반납 가능 오더 (GET /api/web/orders 중 returnReadyAt 있고 반납 시작 전) → POST /api/web/carrier/orders/{id}/return-instruction

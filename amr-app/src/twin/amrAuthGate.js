@@ -152,7 +152,7 @@ export function mountAuthGate(host, opt = {}) {
       return
     }
     const st = s.data || {}
-    if (st.valid) { hide(); return }
+    if (st.valid) { if (!amrApi.authed && amrApi.adoptExp) amrApi.adoptExp(st.expiresAt); hide(); return }
     show('login')
   }
   q('.otpg-retry').addEventListener('click', () => refresh())

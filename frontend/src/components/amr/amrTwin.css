@@ -365,3 +365,16 @@
   .amr-twin .stages .stage .n{font-size:.66rem;flex:none}
   .amr-twin .stages .stage .t{display:inline;font-size:.82rem;min-width:0}
 }
+
+/* 26.11.02 전체 화면(Fullscreen API) — 3D 와 좌우 패널을 감싼 검정 컨테이너(.amr-twin)가 100vw × 100vh 로 채움. 배치 비율은 그대로 늘어남 */
+.amr-twin:fullscreen{width:100vw;height:100vh!important;min-height:0!important;max-width:none;margin:0;border-radius:0;overflow:auto}
+.amr-twin:fullscreen .wrap{max-width:none;min-height:100%}
+.amr-twin:fullscreen::backdrop{background:#080c11}
+.amr-twin:-webkit-full-screen{width:100vw;height:100vh!important;min-height:0!important;max-width:none;margin:0;border-radius:0;overflow:auto}
+.amr-twin:-webkit-full-screen .wrap{max-width:none;min-height:100%}
+@media (min-width:1200px){
+  .amr-twin:fullscreen{overflow:hidden}
+  .amr-twin:fullscreen .wrap{height:100%}
+  .amr-twin:-webkit-full-screen{overflow:hidden}
+  .amr-twin:-webkit-full-screen .wrap{height:100%}
+}

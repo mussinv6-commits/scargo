@@ -696,11 +696,20 @@ export function createAmrScene(container, sim, opts = {}) {
       const qwG = new THREE.BufferGeometry(); const qwPos = new Float32Array(120 * 3); qwG.setAttribute('position', new THREE.BufferAttribute(qwPos, 3)); disposables.push(qwG); qWater.geometry = qwG
       const qwSeed = Array.from({ length: 120 }, () => ({ u: rnd(), v: rnd(), t: rnd() }))
       // 화면 문구 · 버튼
+      // 26.11.03 배터리 화재 훈련 대상 고르기: 기본은 지금 선택한 AMR(왼쪽 목록 · 3D에서 고른 것), 목록에서 직접 고를 수도 있다 (예전: AMR-02 로 고정)
+      const bsel = document.createElement('select'); bsel.style.cssText = 'font:inherit;padding:5px 6px;border-radius:7px;background:rgba(10,16,24,.7);color:#e8eef6;border:1px solid rgba(255,255,255,.18)'; bsel.title = '배터리 화재를 낼 AMR'
+      ;[['sel', '선택한 AMR'], ...sim.S.amrs.map((r, i) => [String(i), r.name]).filter((_, i) => sim.S.amrs[i].kind !== 'fl')].forEach(([v, n]) => { const o = document.createElement('option'); o.value = v; o.textContent = n; bsel.appendChild(o) })
+      ctl.appendChild(bsel)
       const bb = document.createElement('button'); bb.style.cssText = 'font:inherit;padding:6px 10px;border-radius:7px;cursor:pointer;color:#fff;background:rgba(190,110,10,.9);border:1px solid #ffc070'
       ctl.appendChild(bb)
       const bfSt = () => sim.S.bfire
-      const bfBtn = () => { const B = bfSt(); bb.textContent = !B ? '🔋 배터리 화재 훈련' : B.stage >= 4 ? '관리자 확인 (장비 복귀)' : '훈련 중단'; bb.style.background = !B ? 'rgba(190,110,10,.9)' : B.stage >= 4 ? 'rgba(30,110,60,.9)' : 'rgba(80,80,90,.9)' }
-      bb.onclick = () => { ensureAudio(); const B = bfSt(); if (!B) sim.setBatteryFire(1); else sim.clearBatteryFire(); bfBtn() }
+      const bfBtn = () => { const B = bfSt(); bsel.disabled = !!B; bb.textContent = !B ? '🔋 배터리 화재 훈련' : B.stage >= 4 ? '관리자 확인 (장비 복귀)' : '훈련 중단'; bb.style.background = !B ? 'rgba(190,110,10,.9)' : B.stage >= 4 ? 'rgba(30,110,60,.9)' : 'rgba(80,80,90,.9)' }
+      bb.onclick = () => {
+        ensureAudio(); const B = bfSt()
+        if (!B) { const sa = sim.S.amrs[uiSelected], i = bsel.value === 'sel' ? (sa && sa.kind !== 'fl' ? uiSelected : 1) : +bsel.value; sim.setBatteryFire(i) }
+        else sim.clearBatteryFire()
+        bfBtn()
+      }
       bfBtn()
       // 26.10.29 비상 정지: 대상(전체 / 장비 하나)을 고르고 누르면 멈추고, 다시 누르면 재개
       const eSel = document.createElement('select'); eSel.style.cssText = 'font:inherit;padding:5px 6px;border-radius:7px;background:rgba(10,16,24,.7);color:#e8eef6;border:1px solid rgba(255,255,255,.18)'
@@ -1397,7 +1406,7 @@ export function createAmrScene(container, sim, opts = {}) {
       if (oc.exit === 'scan') { head = '출차 OCR · 인식 중…'; body = fmtPlate(oc.plate) }
       else { head = (oc.exit.ok ? '출차 OCR ✓' : '출차 번호 불일치') + conf(oc.exit.conf); body = fmtPlate(oc.exit.plate) || '판독 불가'; foot = side ? HUBS[d.hub].name + '행 · ' + d.boxes.length + '건 출고 기록' : '하차 완료 · 출차 기록'; if (!oc.exit.ok) cls = ' is-block' }
     } else if (oc.st === 'scan') { cls = ' is-scan'; head = '입차 OCR · 번호판 인식 중…'; body = '· · · · ·' }
-    else if (oc.st === 'block') { cls = ' is-block'; head = '미등록 차량 · 진입 차단' + conf(oc.conf); body = fmtPlate(oc.plate) || '판독 불가'; foot = 'DB 등록 차량 아님 → 회차' }
+    else if (oc.st === 'block') { cls = ' is-block'; head = ({ PENDING: '진입 허가 심사대기', REJECTED: '진입 불허 차량', UNREADABLE: '번호판 판독 불가' }[oc.reason] || '미등록 차량') + ' · 진입 차단' + conf(oc.conf); body = fmtPlate(oc.plate) || '판독 불가'; foot = oc.reason === 'PENDING' || oc.reason === 'REJECTED' ? '진입 허가 차량 아님 → 회차' : 'DB 등록 차량 아님 → 회차' }
     else if (oc.st === 'off') { cls = ' is-off'; head = 'OCR 서버 응답 없음'; body = fmtPlate(oc.plate); foot = '예시 번호 · gate_api.py 확인' }
     else { head = '입차 OCR ✓' + conf(oc.conf); body = fmtPlate(oc.plate); foot = (oc.company ? oc.company + ' · ' : '') + (KIND_KO[oc.kind] || '') + ' · 등록 차량 → ' + where }
     const key = cls + head + body + foot
@@ -1970,7 +1979,9 @@ export function createAmrScene(container, sim, opts = {}) {
     qAcc += dtReal; qN++; qT += dtReal
     if (qT >= 3) { if (qN / qAcc < 20) { setQuality('low'); autoQ = false } qAcc = 0; qN = 0; qT = 0 }
   }
+  let uiSelected = 2 // 26.11.03 지금 선택한 AMR 번호 (배터리 화재 훈련 대상 기본값)
   function update(now, dtSim, dtReal, ui) {
+    uiSelected = ui.selected
     autoQuality(dtReal)
     if (fx.fireFx) fx.fireFx(now, dtReal)
     const t = now / 1000

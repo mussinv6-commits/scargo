@@ -102,7 +102,7 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import InspectionItemsInput from '@/components/common/InspectionItemsInput.vue'
 import InspectionPhotos from '@/components/common/InspectionPhotos.vue'
 import AdminPager from '@/components/admin/AdminPager.vue'
@@ -114,15 +114,18 @@ import {
   cancelInspection, reinspectInspection, inspectionHistory,
 } from '@/utils/containerInspectionApi.js'
 import { friendlyError } from '@/utils/apiHelpers.js'
+import { rowsForViewDate } from '@/components/admin/adminViewDate.js'
 
 const props = defineProps({
   allowCreate: { type: Boolean, default: true },
   dark: { type: Boolean, default: false },
   containerNo: { type: String, default: '' }, // 바깥에서 컨테이너를 정해 줄 때 (허브 화면)
+  useViewDate: { type: Boolean, default: false }, // 26.11.02 상단 기간 툴바로 작성일 필터
 })
 
 const rows = ref([])
-const pg = usePaged(rows, 10)
+const visibleRows = computed(() => (props.useViewDate ? rowsForViewDate(rows.value, 'createdAt') : rows.value))
+const pg = usePaged(visibleRows, 10)
 const loading = ref(false)
 const busy = ref(false)
 const message = ref('')

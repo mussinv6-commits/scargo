@@ -39,6 +39,9 @@ public class HubVehicleLog {
     @Column(name = "decision", length = 10, nullable = false)
     private String decision;
 
+    @Column(name = "block_reason", length = 12)
+    private String blockReason; // 26.11.02 BLOCK 사유: UNREADABLE(판독 불가) / UNREGISTERED(S카고 미등록) / PENDING(진입 허가 심사대기) / REJECTED(진입 불허). 그 외 null
+
     @Column(name = "lane", length = 5)
     private String lane; // IN(입고 도크 쪽 · 화물차 레인) / OUT(출고 도크 쪽 · 지선차량 레인)
 

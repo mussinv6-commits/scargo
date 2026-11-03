@@ -6,14 +6,7 @@
 <title>관제 지도</title>
 <link rel="stylesheet" href="/leaflet.css">
 <style>
-  html.embed .info2,html.embed .lgd{display:none}
   html.embed #err:empty,html.embed #banner:empty{display:none}
-  html.embed .mrow{align-items:stretch!important}
-  html.embed .mrow>section.card{display:flex;flex-direction:column}
-  html.embed #map{flex:1 1 auto;height:auto;min-height:420px}
-  html.embed #evcard{display:none}
-  html.embed .mrow aside{gap:10px!important}
-  html.embed .kv{gap:3px 8px}
   #map{height:420px;border-radius:10px;background:#e4eaf2;z-index:0}
   .lab{background:#fff;border:1px solid #9aa6c4;border-radius:4px;padding:1px 5px;font-size:11px;font-weight:700;color:#1c2540;box-shadow:none}
   .lab.warn{border-color:#c2570c;color:#8a4b00;background:#fff4e0}
@@ -39,6 +32,14 @@
   .ctl button{padding:6px 12px;border:1px solid #9aa6c4;border-radius:6px;background:#fff;color:#1c2540;font-size:12px;cursor:pointer;font-family:inherit}
   .ctl button.on{background:#13203f;color:#fff;border-color:#13203f;font-weight:700}
   .ctl label{display:flex;align-items:center;gap:4px;font-size:12px;color:#475069}
+  /* 26.11.02 범례 띠 · 하단 탭 (이 화면만) */
+  .lgd2{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center;border:1px solid #e3e6ee;border-radius:8px;padding:6px 10px;margin-bottom:10px;font-size:12px;color:#334}
+  .lgd2 b{color:#1c2540}.lgd2 i{display:inline-block;width:14px;height:14px;border-radius:3px;vertical-align:-3px;margin-right:5px}
+  #bt{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 10px}
+  #bt button{border:1px solid #cfd6df;background:#f8fafc;color:#1c2540;border-radius:8px;padding:7px 14px;font-size:13.5px;font-weight:600;cursor:pointer;font-family:inherit}
+  #bt button:hover:not(.on){border-color:#1d4ed8;color:#1d4ed8}
+  #bt button.on{background:#1d4ed8;border-color:#1d4ed8;color:#fff}
+  .bp{display:none}.bp.on{display:block}
 </style>
 </head>
 <body>
@@ -55,26 +56,23 @@
   </div>
   <div id="err" class="sub" style="color:#b42318"></div>
   <div id="banner"></div>
-  <div class="mrow" style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start">
-    <section class="card" style="flex:999 1 560px"><div id="map"></div>
-      <div class="sub lgd" style="margin-top:8px">파란 선 = 기본 경로(79.8km) · 주황 점선 = 대체 경로 · 하늘색 굵은 선 = 대조된 고속도로 구간 · 차량(트럭) 색: 파랑 정상 · 주황 주의 · 빨강 확정 · 흰 바탕 빨간 테두리 경로 이탈. 주황 점 = 이탈 시 안내 대상 검문소 · 빨간 점 = 경로 위 검문소. 검문소는 차량이 경로를 이탈하면 자동으로 표시됩니다.</div></section>
-    <aside style="flex:1 1 320px;display:flex;flex-direction:column;gap:14px;min-width:0">
-      <div class="card" style="padding:10px 0 0"><h3 style="padding:0 16px">운행 중 차량 <span id="vcount" class="sub" style="font-weight:400"></span></h3><div id="vlist"></div></div>
-      <div class="card"><h3>선택 차량 상태</h3><div id="status"></div></div>
-      <div class="card" id="evcard"><h3>이벤트 기록</h3><div id="events"></div></div>
-    </aside>
-  </div>
-  <!-- 26.10.29 좌우 높이 균형: 길이가 긴 고정 안내 카드 2개는 지도 · 차량 아래 한 줄로 -->
-  <div class="info2" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px">
-    <div class="card"><h3>경로 주변 요금소 · 고속도로</h3><div id="roadInfo" class="sub" style="line-height:1.7"></div></div>
-    <div class="card"><h3>이탈 감시 기준</h3><div id="rules" class="sub" style="line-height:1.7"></div></div>
-  </div>
+  <section class="card">
+    <div class="lgd2"><b>범례</b><span><i style="background:#13203f"></i>출발</span><span><i style="background:#1d4ed8"></i>기본 경로</span><span><i style="background:#c2570c"></i>대체 경로</span><span><i style="background:#0e7490"></i>고속도로 구간</span><span><i style="background:#1d4ed8"></i>정상</span><span><i style="background:#f5a300"></i>주의</span><span><i style="background:#b42318"></i>확정 · 이탈</span></div>
+    <div id="map"></div>
+    <div id="bt"><button type="button" data-p="veh" class="on">운행 중 차량 <span id="vcount" style="font-weight:400"></span></button><button type="button" data-p="sel">선택 차량</button><button type="button" data-p="road">경로 위 지점</button><button type="button" data-p="rule">이탈 감시 기준</button></div>
+    <div class="bp on" id="p-veh"><div id="vlist"></div></div>
+    <div class="bp" id="p-sel"><div id="status"></div><h3 style="margin:14px 0 4px;font-size:14px">이벤트 기록</h3><div id="events"></div></div>
+    <div class="bp" id="p-road"><div id="roadInfo" class="sub" style="line-height:1.7"></div></div>
+    <div class="bp" id="p-rule"><div id="rules" class="sub" style="line-height:1.7"></div></div>
+  </section>
 </main>
 <script src="/leaflet.js"></script>
 <script src="/common.js"></script>
 <script>
 setupChrome('map', { refresh: pollAll, selectedPid: () => selKey, onStarted: k => { selKey = k; autoCp = true; } });
 let D = null, map, layers = {}, markers = {}, trails = {}, trailLine = null, warnCircles = {}, W = {}, trips = [], sim = { playing: false, tick_ms: 1200 }, selKey = null, autoCp = true, busy = false, lastOv = 0;
+function setTab(p) { document.querySelectorAll('#bt button').forEach(b => b.classList.toggle('on', b.dataset.p === p)); document.querySelectorAll('.bp').forEach(d => d.classList.toggle('on', d.id === 'p-' + p)); }
+document.querySelectorAll('#bt button').forEach(b => b.onclick = () => { setTab(b.dataset.p); });
 const post = (u) => api(u, { method: 'POST' });
 const tripOf = k => trips.find(t => t.trip_id === k);
 
@@ -115,6 +113,7 @@ async function init() {
   document.getElementById('lyCp').onchange = e => { autoCp = false; setCp(e.target.checked); };
   document.getElementById('lyHw').onchange = e => e.target.checked ? layers.hw.addTo(map) : map.removeLayer(layers.hw);
   document.getElementById('lyDet').onchange = e => e.target.checked ? layers.det.addTo(map) : map.removeLayer(layers.det);
+  document.getElementById('rules').innerHTML = `이탈: 기본 경로에서 <b>100m</b> 이상 벗어난 상태가 <b>2회 연속</b> 관측될 때<br>복귀: 기본 경로 <b>50m</b> 이내로 들어올 때<br>검문소 안내: 이탈 중 안내 대상 검문소 전방 <b>5km</b> 안에 들어오면 표시, 통과하면 해제<br>안내 대상 검문소: 과적검문소 53 · 57 · 65 · 34<br>이탈로 톨게이트를 지나지 못하면 예상 통행료를 다시 계산`;
   await pollAll();
   loop();
   try { new ResizeObserver(() => map.invalidateSize()).observe(document.getElementById('map')); } catch (e) { /* 무시 */ }   // 지도 칸 높이가 바뀌면 지도도 다시 맞춤
@@ -151,7 +150,7 @@ function render() {
     seen.add(key);
     const html = `<div class="veh ${cls}${key === selKey ? ' sel' : ''}"><svg viewBox="0 0 34 22"><rect class="bd" x="1.5" y="3" width="20" height="13" rx="2"/><path class="bd" d="M22 7h5l4 4v5h-9z"/><path d="M24 8.5h2.6l2 2.5H24z" fill="#cfe3ff"/><circle class="bd" cx="8" cy="18" r="3" style="fill:#13203f"/><circle class="bd" cx="26" cy="18" r="3" style="fill:#13203f"/></svg></div>`;
     let m = markers[key];
-    if (!m) { m = markers[key] = L.marker([lat, lng], { icon: L.divIcon({ className: '', html, iconSize: [34, 22], iconAnchor: [17 + (idx % 3 - 1) * 9, 11 + (idx % 3 - 1) * 6] }), zIndexOffset: 500 }).addTo(map); m.on('click', () => { selKey = key; render(); }); m.bindTooltip(label, { direction: 'top', offset: [0, -12], className: 'lab' }); }
+    if (!m) { m = markers[key] = L.marker([lat, lng], { icon: L.divIcon({ className: '', html, iconSize: [34, 22], iconAnchor: [17 + (idx % 3 - 1) * 9, 11 + (idx % 3 - 1) * 6] }), zIndexOffset: 500 }).addTo(map); m.on('click', () => { selKey = key; setTab('sel'); render(); }); m.bindTooltip(label, { direction: 'top', offset: [0, -12], className: 'lab' }); }
     m.setLatLng([lat, lng]); m.getElement().firstChild.className = `veh ${cls}${key === selKey ? ' sel' : ''}`; m.setTooltipContent(label);
     m.setZIndexOffset(key === selKey ? 900 : 500);
   };
@@ -176,7 +175,7 @@ function render() {
 function banner(list) {
   const dev = list.filter(v => v.status === 'DEVIATING');
   document.getElementById('banner').innerHTML = dev.length ? `<div class="banner"><b>⚠ 경로 이탈 ${dev.length}대</b> — ` + dev.map(v => `<a href="#" data-k="${v.trip_id}" class="jump">${esc(v.plate)}</a> (${v.vehicle.km}km 부근${v.alerts.length ? ', ' + esc(v.alerts[0].name) + ' 접근 중' : ''})`).join(' · ') + ' <span style="margin-left:8px;color:#0b6b3a;font-weight:700">▶ 운행은 멈추지 않고 계속 진행됩니다 · 관제 안내만 표시</span></div>' : '';
-  document.querySelectorAll('.jump').forEach(a => a.onclick = e => { e.preventDefault(); selKey = Number(a.dataset.k); render(); });
+  document.querySelectorAll('.jump').forEach(a => a.onclick = e => { e.preventDefault(); selKey = Number(a.dataset.k); setTab('sel'); render(); });
 }
 function vlist(list) {
   const rank = v => v.status === 'DEVIATING' ? 0 : v.status === 'STOPPED' ? 1 : v.done ? 3 : 2;
@@ -186,7 +185,7 @@ function vlist(list) {
     const st = v.status === 'DEVIATING' ? ['red', '경로 이탈'] : v.status === 'STOPPED' ? ['red', '정차'] : v.done ? ['gry', '도착'] : ['grn', '주행'];
     return `<button class="vl ${v.trip_id === selKey ? 'sel' : ''}" data-k="${v.trip_id}"><span class="plate" style="font-size:11px;padding:0 6px">${esc(v.plate)}</span>${pill(st[0], st[1])}${lvPill(v.level)}<span class="sub" style="margin-left:auto">${v.vehicle ? v.vehicle.km + 'km' : ''}</span></button>`;
   }).join('') : '<div class="empty" style="padding:16px">운행 중인 차량이 없습니다.</div>';
-  document.querySelectorAll('#vlist .vl').forEach(b => b.onclick = () => { selKey = Number(b.dataset.k); render(); });
+  document.querySelectorAll('#vlist .vl').forEach(b => b.onclick = () => { selKey = Number(b.dataset.k); setTab('sel'); render(); });
 }
 
 function tripCard(t) {
@@ -228,8 +227,7 @@ function selected(s) {
   document.querySelectorAll('.sendrr').forEach(b => b.onclick = () => { b.disabled = true; doAct('REROUTE_ADVISE'); });
   document.querySelectorAll('.sendcp').forEach(b => b.onclick = () => { b.disabled = true; doAct('CHECKPOINT_NOTICE', { no: Number(b.dataset.no) }); });
   document.getElementById('events').innerHTML = eventsHtml(s.events);
-  const r = s.rules;
-  document.getElementById('rules').innerHTML = `이탈: 기본 경로에서 <b>${r.deviate_m}m</b> 이상 벗어난 상태가 <b>${r.deviate_samples}회 연속</b> 관측될 때<br>복귀: 기본 경로 <b>${r.return_m}m</b> 이내로 들어올 때<br>검문소 안내: 이탈 중 안내 대상 검문소 전방 <b>${r.warn_km}km</b> 안에 들어오면 표시, 통과하면 해제<br>안내 대상 검문소: 과적검문소 53 · 57 · 65 · 34<br>이탈로 톨게이트를 지나지 못하면 예상 통행료를 다시 계산`;
+
 }
 init().catch(e => { err('지도 데이터를 불러오지 못했습니다: ' + e.message); });
 </script>

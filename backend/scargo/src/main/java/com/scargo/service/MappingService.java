@@ -35,6 +35,7 @@ public class MappingService {
     private final AccountRepository accountRepository;
     private final LoadingRecordRepository loadingRecordRepository;
     private final DriverAlertService driverAlertService;
+    private final com.scargo.ops.VehicleUsePolicy vehiclePolicy; // 26.11.02 매핑(차량 배정) 전 진입 허가 · 전담 기사 확인
 
     // 1. 배정 가능한 컨테이너 목록 조회
     public List<ContainerOptionResponse> getAvailableContainers(Authentication authentication) {
@@ -71,6 +72,7 @@ public class MappingService {
         requirePair(companyId, container, truck);
         // 26.10.22 추가: DB 트리거 · NOT NULL 제약에 걸려 500 이 나기 전에 업무 규칙으로 거부 (400)
         requireSemiTrailer(truck);
+        requireUsable(truck);
         requireLoadingLocation(container);
 
         // 3-2. 이미 배정 여부 검증
@@ -99,6 +101,11 @@ public class MappingService {
 
         loadingRecordRepository.save(loadingRecord);
         driverAlertService.notifyContainerMapped(truck, container);
+    }
+
+    // 26.11.02 컨테이너에 차량을 배정(생성 · 변경)하는 것도 배차: 진입 허가(APPROVED) 차량 + 그 차량 전담 기사(trucks.assigned_account_id)가 유효해야 한다
+    private void requireUsable(Truck truck) {
+        vehiclePolicy.requireDispatchable(truck.getVehicleNo(), truck.getAssignedDriver() == null ? null : truck.getAssignedDriver().getAccountId(), null, null);
     }
 
     // 4. 매핑 해제/취소
@@ -130,6 +137,7 @@ public class MappingService {
         // 소속 업체 보안 검증
         requirePair(companyId, container, newTruck);
         requireSemiTrailer(newTruck);
+        requireUsable(newTruck);
 
         String oldVehicleNo = container.getAssignedVehicleNo();
         if (oldVehicleNo == null) {

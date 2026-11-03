@@ -17,6 +17,8 @@ public class AppBranchController {
     private final BranchService svc;
 
     @GetMapping("/current") public Map<String, Object> current() { return svc.current(); }
+    /** 완료된 지선 운행 이력 (RECEIVED, range=today|week|month) */
+    @GetMapping("/history") public Map<String, Object> history(@RequestParam(value = "range", defaultValue = "today") String range) { return svc.history(range); }
     /** 허브 도착 → hub_arrived_at (phase AT_HUB) */
     @PostMapping("/{id}/hub-arrive") public Map<String, Object> hubArrive(@PathVariable("id") Long id) { return svc.hubArrive(id); }
     @PostMapping("/{id}/scan") public Map<String, Object> scan(@PathVariable("id") Long id, @RequestBody Map<String, String> b) {

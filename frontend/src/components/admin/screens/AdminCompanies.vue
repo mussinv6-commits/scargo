@@ -24,7 +24,7 @@
       title="업체"
       id-key="companyId"
       :columns="columns"
-      :rows="visibleRows"
+      :rows="rows"
       :loading="loading"
       :form-fields="formFields"
       :page-size="10"
@@ -38,7 +38,6 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
-import { rowsForViewDate } from '@/components/admin/adminViewDate.js'
 import CrudTable from '@/components/admin/CrudTable.vue'
 import AdminPageHeader from '@/components/admin/AdminPageHeader.vue'
 import { adminApi, pickErrorMessage } from '@/utils/adminApi'
@@ -63,7 +62,6 @@ async function rejectCo(c) {
   catch (err) { pok.value = false; pmsg.value = pickErrorMessage(err, '반려하지 못했습니다.') } finally { busy.value = null }
 }
 const loading = ref(true)
-const visibleRows = computed(() => rowsForViewDate(rows.value, 'createdAt'))
 
 const columns = [
   { key: 'companyId', label: '번호', width: '60px', align: 'center', type: 'seq' },

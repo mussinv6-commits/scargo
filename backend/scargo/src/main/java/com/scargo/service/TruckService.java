@@ -194,7 +194,7 @@ public class TruckService {
         if (userType != Account.UserType.CONTAINER_DRIVER
                 && userType != Account.UserType.BRANCH_DRIVER) {
             throw new IllegalArgumentException(
-                    "컨테이너 운송기사 또는 간선 운송기사 계정만 배정할 수 있습니다."
+                    "컨테이너 운송기사 또는 지선 운송기사 계정만 배정할 수 있습니다."
             );
         }
 
@@ -231,7 +231,7 @@ public class TruckService {
         } else if ("GENERAL_TRUCK".equals(category)) {
             if (userType != Account.UserType.BRANCH_DRIVER) {
                 throw new IllegalArgumentException(
-                        "일반 화물차에는 간선 운송기사만 배정할 수 있습니다."
+                        "일반 화물차에는 지선 운송기사만 배정할 수 있습니다."
                 );
             }
         } else {

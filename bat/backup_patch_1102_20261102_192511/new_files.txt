@@ -1,0 +1,6 @@
+backend\scargo\src\main\java\com\scargo\ops\VehicleUsePolicy.java
+backend\scargo\src\test\java\com\scargo\amr\service\HubGateEntryExitTests.java
+backend\scargo\src\test\java\com\scargo\ops\DriverApprovalVehicleIndependenceTests.java
+backend\scargo\src\test\java\com\scargo\ops\OrderDispatchValidationTests.java
+backend\scargo\src\test\java\com\scargo\ops\VehicleUsePolicyTests.java
+DB\add_14_게이트_진입허가.sql

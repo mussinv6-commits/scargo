@@ -87,7 +87,7 @@ function setupChrome(active, opts) {
   if (!QS.get('dev')) { autoChrome(active); return; }   // 26.10.29 기본은 자동 운행 (시연·재생 버튼 없음). 주소 끝에 ?dev=1 을 붙이면 예전 시연 컨트롤
   const full = active === 'map';
   const sc = { A: '정상', B: '톨게이트 확정', C: '검문소 운행 중지', D: '축하중 확정', E: '재측정 후 통과', F: '주의 통과' };
-  const DEPARTS = [['now', '지금'], ['14:00', '14:00 낮 (할인 없음)'], ['22:30', '22:30 (청계TG만 50%)'], ['23:00', '23:00 (모두 50%)'], ['04:40', '04:40 (남인천TG만 50%)']];
+  const DEPARTS = [['now', '지금'], ['14:00', '14:00 주간 (할인 없음)'], ['22:30', '22:30 (청계TG만 50%)'], ['23:00', '23:00 (모두 50%)'], ['04:40', '04:40 (남인천TG만 50%)']];
   let scen = 'A';
   el.style.flexDirection = 'column'; el.style.alignItems = 'stretch';
   el.innerHTML = `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px"><b style="font-size:12px;color:#475069">시연</b>` +
@@ -151,7 +151,7 @@ function setupChrome(active, opts) {
 //  공용 시계 = 택배 이동 · 물류센터 관제와 같은 하루 시계(sbot_clock). 이 화면은 다른 주소(8002)라 저장소를 같이 못 쓰므로
 //  S카고 웹 화면(부모 창)이 1초마다 postMessage({type:'sbot-clock', tod, rate}) 로 보내 준다. 부모가 없으면(직접 열었을 때) PC 시각.
 //  이 시각을 서버(/api/clock)에도 알려 새 차량의 출차 시각 · 심야할인 판정이 택배 이동과 같은 시각을 따른다.
-function todText(t) { const h = Math.floor(t) % 24, m = Math.floor((t % 1) * 60); return `${p2(h)}:${p2(m)} · ${h >= 6 && h < 18 ? '낮' : '밤'}`; }
+function todText(t) { const h = Math.floor(t) % 24, m = Math.floor((t % 1) * 60); return `${p2(h)}:${p2(m)} · ${h >= 6 && h < 18 ? '주간' : '야간'}`; }
 // 자동 운행 표시줄: 서버가 알려 준 상태를 그대로 보여 준다 (원인을 알 수 없는 '준비 중' 같은 말은 쓰지 않는다)
 function paintAuto() {
   const ac = document.getElementById('autoChip'), am = document.getElementById('autoMsg'); if (!ac) return;

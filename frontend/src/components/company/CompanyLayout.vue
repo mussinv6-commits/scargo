@@ -3,6 +3,7 @@
     <div class="admin-shell" :class="{ 'is-collapsed': collapsed }">
       <CompanySidebar />
       <div class="admin-main">
+        <!-- 26.11.02 기간 툴바: 시간 기반 메뉴만 표시. 순서는 일간~연간 → 날짜 → 오늘 → 시계 -->
         <header class="admin-topbar" :class="{ 'is-dash': isDash }">
           <button type="button" class="admin-burger" aria-label="메뉴" @click="collapsed = !collapsed">
             <i class="bi bi-list"></i>
@@ -15,23 +16,41 @@
             <h1>{{ pageTitle }}</h1>
           </div>
           <div class="admin-topbar-right">
-            <div class="ops-clock-wrap" :class="{ 'is-locked': !dateEnabled }">
-              <span class="ops-clock">
-                <i class="bi bi-calendar3"></i>
-                <span>{{ companyDateLabel }}</span>
-              </span>
-              <input
-                v-if="dateEnabled"
-                class="ops-clock-native"
-                type="date"
-                v-model="viewDateInput"
-                :min="minDateInput"
-                :max="maxDateInput"
-                aria-label="조회 날짜 선택"
-                @click="openDatePicker"
-              />
-            </div>
-            <span class="ops-day-chip" :class="{ 'is-today': isViewToday }">{{ viewDateRelativeLabel }}</span>
+            <template v-if="dateEnabled">
+              <div class="ops-period" role="group" aria-label="보고 구분">
+                <button v-for="p in PERIODS" :key="p.key" type="button" :class="{ on: viewPeriod === p.key }" @click="viewPeriod = p.key">{{ p.label }}</button>
+              </div>
+              <div class="ops-clock-wrap">
+                <span class="ops-clock">
+                  <i class="bi bi-calendar3"></i>
+                  <span>{{ companyDateLabel }}</span>
+                </span>
+                <input
+                  class="ops-clock-native"
+                  type="date"
+                  v-model="viewDateInput"
+                  :min="minDateInput"
+                  :max="maxDateInput"
+                  aria-label="조회 날짜 선택"
+                  @click="openDatePicker"
+                />
+              </div>
+              <button
+                v-if="viewPeriod !== 'day'"
+                type="button"
+                class="ops-day-chip"
+                title="오늘로 돌아가기"
+                @click="resetViewDateToday"
+              >{{ viewRangeLabel }}</button>
+              <button
+                v-else
+                type="button"
+                class="ops-day-chip"
+                :class="{ 'is-today': isViewToday }"
+                title="오늘로 돌아가기"
+                @click="resetViewDateToday"
+              >{{ viewDateRelativeLabel }}</button>
+            </template>
             <LiveClock />
           </div>
         </header>
@@ -46,15 +65,21 @@ import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import CompanySidebar from './CompanySidebar.vue'
 import LiveClock from '@/components/common/LiveClock.vue'
-import { viewDate, viewDateInput, minDateInput, maxDateInput, isViewToday, viewDateRelativeLabel, resetViewDateToday } from '@/components/admin/adminViewDate.js'
+import { viewDate, viewDateInput, minDateInput, maxDateInput, isViewToday, viewDateRelativeLabel, resetViewDateToday, PERIODS, viewPeriod, viewRangeLabel } from '@/components/admin/adminViewDate.js'
 import { COMPANY_MENU } from './companyMenu.js'
 
 const route = useRoute()
 const collapsed = ref(false)
 
 const isDash = computed(() => route.path === '/company')
-const DATE_LOCKED = ['/company/mapping', '/company/trucks', '/company/drivers', '/company/info']
-const dateEnabled = computed(() => !DATE_LOCKED.some((p) => route.path === p || route.path.startsWith(`${p}/`)))
+// 26.11.02 대시보드 · 컨테이너 위치 · 점검표만 기간 툴바 (인수·예약은 화면 안 날짜 필터 사용)
+const DATE_ENABLED_EXACT = ['/company']
+const DATE_ENABLED_PREFIX = ['/company/container-locations', '/company/inspections']
+const dateEnabled = computed(() => {
+  const p = route.path
+  if (DATE_ENABLED_EXACT.includes(p)) return true
+  return DATE_ENABLED_PREFIX.some((x) => p === x || p.startsWith(`${x}/`))
+})
 watch(dateEnabled, (on) => { if (!on) resetViewDateToday() }, { immediate: true })
 const pageTitle = computed(() => COMPANY_MENU.find((m) => m.to !== '/company' && (route.path === m.to || route.path.startsWith(`${m.to}/`)))?.label || '사업자')
 

@@ -37,6 +37,7 @@ public class V9WebController {
     private final org.springframework.security.crypto.password.PasswordEncoder encoder;
     private final com.scargo.ops.service.ReturnDueService returnDue;
     private final com.scargo.ops.service.BranchService branch; // fix_1300: 지선 도착 봉인 확인
+    private final com.scargo.ops.VehicleUsePolicy vehiclePolicy; // 26.11.02 배차 차량 진입 허가 · 기사 확인
 
     private static final String W02 = "hasAnyRole('ADMIN','CONTROL','HUB_OP','CENTER_OP','CARRIER')";
     private static final String W03 = "hasAnyRole('ADMIN','CONTROL')";
@@ -284,8 +285,8 @@ public class V9WebController {
     public Map<String, Object> formOptions() {
         Long co = me().getCompanyId();
         Map<String, Object> m = new LinkedHashMap<>();
-        m.put("drivers", jdbc.queryForList("SELECT DISTINCT ON (a.account_id) a.account_id AS \"accountId\", a.user_name AS \"userName\", a.user_type AS \"userType\", t.vehicle_no AS \"vehicleNo\" FROM accounts a LEFT JOIN trucks t ON t.assigned_account_id = a.account_id AND t.company_id = a.company_id WHERE a.company_id = ? AND a.user_type IN ('CONTAINER_DRIVER','BRANCH_DRIVER') AND a.approval_status = 'APPROVED' ORDER BY a.account_id, t.vehicle_no", co));
-        m.put("vehicles", jdbc.queryForList("SELECT vehicle_no AS \"vehicleNo\", truck_type AS \"truckType\", max_load_ton AS \"maxLoadTon\", assigned_account_id AS \"driverId\", vehicle_category AS \"category\" FROM trucks WHERE company_id = ? ORDER BY vehicle_no", co));
+        m.put("drivers", jdbc.queryForList("SELECT DISTINCT ON (a.account_id) a.account_id AS \"accountId\", a.user_name AS \"userName\", a.user_type AS \"userType\", t.vehicle_no AS \"vehicleNo\", t.entry_approval AS \"vehicleApproval\" FROM accounts a LEFT JOIN trucks t ON t.assigned_account_id = a.account_id AND t.company_id = a.company_id WHERE a.company_id = ? AND a.user_type IN ('CONTAINER_DRIVER','BRANCH_DRIVER') AND a.approval_status = 'APPROVED' ORDER BY a.account_id, t.vehicle_no", co));
+        m.put("vehicles", jdbc.queryForList("SELECT vehicle_no AS \"vehicleNo\", truck_type AS \"truckType\", max_load_ton AS \"maxLoadTon\", assigned_account_id AS \"driverId\", vehicle_category AS \"category\", entry_approval AS \"entryApproval\" FROM trucks WHERE company_id = ? ORDER BY vehicle_no", co)); // 26.11.02 배차 후보는 화면에서 APPROVED 만 (서버도 다시 확인)
         m.put("terminals", jdbc.queryForList("SELECT terminal_id AS \"id\", terminal_name AS \"name\" FROM terminals WHERE is_active IS NOT FALSE ORDER BY terminal_id"));
         m.put("hubs", jdbc.queryForList("SELECT hub_id AS \"id\", hub_name AS \"name\", center_id AS \"centerId\" FROM hubs ORDER BY hub_id"));
         m.put("centers", jdbc.queryForList("SELECT center_id AS \"id\", center_name AS \"name\" FROM logistics_centers WHERE center_type = 'DISTRIBUTION_CENTER' ORDER BY center_id"));
@@ -328,10 +329,12 @@ public class V9WebController {
         boolean dueDefaulted = due == null;
         if (dueDefaulted) due = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Seoul")).plusDays(setting("RETURN_DUE_DEFAULT_DAYS", 7)).atTime(18, 0).atOffset(java.time.ZoneOffset.ofHours(9));
         Long leg = null; String status = "CREATED";
-        if (driver != null && vehicle != null && !vehicle.isBlank()) {
-            Integer okD = jdbc.queryForObject("SELECT count(*) FROM accounts WHERE account_id = ? AND company_id = ? AND user_type = 'CONTAINER_DRIVER' AND approval_status = 'APPROVED'", Integer.class, driver, co);
-            Integer okV = jdbc.queryForObject("SELECT count(*) FROM trucks WHERE vehicle_no = ? AND company_id = ?", Integer.class, vehicle, co);
-            if (okD == 0 || okV == 0) throw new AccessDeniedException("우리 운송사의 승인된 컨테이너 기사·차량만 배차할 수 있습니다.");
+        if (vehicle != null && vehicle.isBlank()) vehicle = null;
+        // 26.11.02 기사·차량을 하나라도 지정하면 배차: 진입 허가(APPROVED) 차량 + 같은 운송사의 승인된 컨테이너 기사가 둘 다 있어야 한다
+        //  (예전: 둘 중 하나만 오면 조용히 버리고 CREATED, 허가 상태는 확인하지 않음). 둘 다 없으면 '나중에 배차' (CREATED)
+        if (driver != null || vehicle != null) {
+            if (vehicle == null) throw new IllegalArgumentException("배차할 차량을 지정하세요.");
+            vehiclePolicy.requireDispatchable(vehicle, driver, co, "CONTAINER_DRIVER");
             leg = jdbc.queryForObject("INSERT INTO shipment_legs(shipment_id, vehicle_no, from_center_id, to_center_id, leg_sequence, leg_type, status, driver_account_id) VALUES (?,?,?,?,1,'PORT_TO_HUB','ASSIGNED',?) RETURNING assignment_id",
                     Long.class, sid, vehicle, portCenter, hubCenter, driver);
             status = "ASSIGNED";
@@ -757,8 +760,8 @@ public class V9WebController {
         String st = action.equals("approve") ? "APPROVED" : "REJECTED";
         jdbc.update("UPDATE accounts SET approval_status = ?, approved_at = now(), approved_by_account_id = ?, reject_reason = ? WHERE account_id = ?",
                 st, a.getAccountId(), action.equals("reject") ? reason : null, id);
-        if (st.equals("APPROVED")) jdbc.update("UPDATE trucks SET entry_approval = 'APPROVED' WHERE assigned_account_id = ? AND entry_approval IN ('PENDING','REJECTED')", id);
-        else jdbc.update("UPDATE trucks SET entry_approval = 'REJECTED' WHERE assigned_account_id = ? AND entry_approval = 'PENDING'", id); // fix_1027
+        // 26.11.02 기사 가입 승인 · 반려는 차량 진입 허가(trucks.entry_approval)를 바꾸지 않는다. 차량은 차량 관리 → 진입 허가 심사에서 따로
+        //  (예전: 승인하면 배정 차량을 APPROVED, 반려하면 PENDING 차량을 REJECTED 로 같이 바꿨음)
         // fix_1027: 처리된 가입 요청 알림은 운송사·총관리자 모두 읽음 처리 (종 숫자에 계속 남지 않게)
         jdbc.update("UPDATE notifications SET is_read = true, read_at = now() WHERE notification_type = 'DRIVER_APPROVAL_REQUEST' AND reference_id = ? AND NOT is_read", id);
         jdbc.update("INSERT INTO notifications(account_id, title, message, notification_type, reference_id) VALUES (?,?,?,?,?)",

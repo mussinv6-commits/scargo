@@ -7,7 +7,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.util.*;
 
 /** 26.10.20 지선 운행 = shipment_legs (leg_type HUB_TO_CENTER). 지선 운송기사 앱 P-01 ~ P-06.
@@ -243,5 +245,43 @@ public class BranchService {
         ShipmentLeg t = mine(id);
         if (!status.equals(t.getStatus())) throw new IllegalStateException("현재 상태(" + phase(t) + ")에서는 할 수 없습니다.");
         return t;
+    }
+    /** 완료된 지선 운행 이력 (status RECEIVED, received_at 기준). range=today|week|month */
+    @Transactional(readOnly = true)
+    public Map<String, Object> history(String range) {
+        String r = range == null || range.isBlank() ? "today" : range.trim().toLowerCase();
+        ZoneId kst = ZoneId.of("Asia/Seoul");
+        LocalDate today = LocalDate.now(kst);
+        LocalDate fromDate = switch (r) {
+            case "week" -> today.minusDays(today.getDayOfWeek().getValue() - 1L);
+            case "month" -> today.withDayOfMonth(1);
+            default -> today;
+        };
+        OffsetDateTime from = fromDate.atStartOfDay(kst).toOffsetDateTime();
+        OffsetDateTime to = today.plusDays(1).atStartOfDay(kst).toOffsetDateTime();
+        Long driverId = CurrentAccount.id();
+        List<Map<String, Object>> items = jdbc.queryForList("""
+            SELECT l.assignment_id AS "assignmentId", l.vehicle_no AS "vehicleNo",
+                   l.from_center_id AS "fromCenterId", fc.center_name AS "fromCenterName",
+                   l.to_center_id AS "toCenterId", tc.center_name AS "toCenterName",
+                   l.status, l.planned_units AS "plannedUnits", l.domestic_seal_no AS "domesticSealNo",
+                   l.departed_at AS "departedAt", l.arrived_at AS "arrivedAt", l.received_at AS "receivedAt",
+                   (SELECT count(*) FROM branch_units u WHERE u.assignment_id = l.assignment_id) AS "unitCount"
+              FROM shipment_legs l
+              JOIN logistics_centers fc ON fc.center_id = l.from_center_id
+              JOIN logistics_centers tc ON tc.center_id = l.to_center_id
+             WHERE l.leg_type = 'HUB_TO_CENTER'
+               AND l.driver_account_id = ?
+               AND l.status = 'RECEIVED'
+               AND l.received_at >= ? AND l.received_at < ?
+             ORDER BY l.received_at DESC, l.assignment_id DESC
+            """, driverId, from, to);
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("count", items.size());
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("range", r.equals("week") || r.equals("month") ? r : "today");
+        out.put("summary", summary);
+        out.put("items", items);
+        return out;
     }
 }

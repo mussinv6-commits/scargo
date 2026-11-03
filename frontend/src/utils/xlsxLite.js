@@ -1,3 +1,4 @@
+import { reactive } from 'vue'
 // 26.10.25 외부 라이브러리 없이 .xlsx 를 만든다 (zip 무압축 + 최소 XML). 시트 여러 장 · 서식 · 수식(계산된 값 같이 저장) 지원
 const enc = new TextEncoder()
 const CRC = (() => { const t = []; for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0 } return t })()
@@ -38,7 +39,19 @@ function sheetXml(sh) {
   const cols = (sh.widths || []).map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join('')
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><sheetViews><sheetView workbookViewId="0" showGridLines="0"/></sheetViews><sheetFormatPr defaultRowHeight="18"/>${cols ? `<cols>${cols}</cols>` : ''}<sheetData>${rows}</sheetData>${sh.merges && sh.merges.length ? `<mergeCells count="${sh.merges.length}">${sh.merges.map((m) => `<mergeCell ref="${m}"/>`).join('')}</mergeCells>` : ''}<pageMargins left="0.5" right="0.5" top="0.6" bottom="0.6" header="0.3" footer="0.3"/><pageSetup paperSize="9" orientation="${sh.landscape ? 'landscape' : 'portrait'}" fitToWidth="1" fitToHeight="0"/></worksheet>`
 }
+// 26.11.02 보고서 미리보기: previewReport(내보내기 함수) 로 부르면 파일을 내려받는 대신 미리보기 창(PDF 다운로드 · 인쇄 · 닫기)에 같은 내용을 띄운다
+export const reportView = reactive({ open: false, sheets: [], name: '' })
+let previewing = 0
+export function previewReport(run) {
+  previewing++
+  let r
+  try { r = run() } catch (e) { previewing--; throw e }
+  if (r && typeof r.finally === 'function') return r.finally(() => { previewing-- })
+  previewing--
+  return r
+}
 export function buildXlsx(sheets) {
+  if (previewing) { reportView.sheets = sheets; reportView.name = ''; reportView.open = true; return null }
   const f = (name, text) => ({ name, data: enc.encode(text) })
   const n = sheets.length
   return zip([
@@ -51,6 +64,7 @@ export function buildXlsx(sheets) {
   ])
 }
 export function downloadBlob(blob, name) {
+  if (!blob) { if (reportView.open && !reportView.name) reportView.name = String(name || '').replace(/\.xlsx$/i, ''); return } // 26.11.02 미리보기 중에는 내려받지 않음
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 3000)
 }

@@ -57,6 +57,8 @@ import { resolveTarget, toDate, NOTIF_TYPE } from '@/utils/notificationTarget.js
 import AdminPageHeader from '@/components/admin/AdminPageHeader.vue'
 import AdminPager from '@/components/admin/AdminPager.vue'
 import { usePaged } from '@/utils/usePaged.js'
+import { isSameViewDay, isViewToday, viewPeriod, viewDate } from '@/components/admin/adminViewDate.js'
+import { API_BASE } from '@/utils/apiBase.js'
 
 defineProps({ standalone: { type: Boolean, default: false } })
 
@@ -80,13 +82,16 @@ function countOf(k) {
 }
 const filtered = computed(() => {
   const kw = keyword.value.toLowerCase()
+  // 26.11.02 상단 기간 툴바와 연동: 오늘·일간은 전체, 그 외·다른 날짜는 선택 기간만
+  const dateOk = (n) => (viewPeriod.value === 'day' && isViewToday.value) || isSameViewDay(n.createdAt)
   return rows.value
     .filter((n) => (readTab.value === 'unread' ? !n.read : readTab.value === 'read' ? n.read : true))
     .filter((n) => !typeFilter.value || n.notificationType === typeFilter.value)
     .filter((n) => !kw || `${n.title || ''} ${n.message || ''}`.toLowerCase().includes(kw))
+    .filter((n) => dateOk(n))
 })
 const pg = usePaged(filtered, 10)
-watch([readTab, typeFilter, keyword], () => { pg.page = 1 })
+watch([readTab, typeFilter, keyword, viewDate, viewPeriod], () => { pg.page = 1 })
 // 26.10.28 ?id= 로 들어오면 그 알림을 위에 크게 보여 주고, 목록에서도 그 줄이 있는 쪽으로 이동
 const focusId = computed(() => (route.query.id != null ? String(route.query.id) : ''))
 const focused = computed(() => (focusId.value ? rows.value.find((n) => String(n.notificationId) === focusId.value) || null : null))
@@ -101,6 +106,58 @@ watch(focused, showFocus)
 
 const fmt = (d) => (d ? toDate(d).toLocaleString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-')
 
+/** 26.11.01 서버 메모리 화재 이력 → 알림 내역 행 모양 */
+function safetyRows(live, history) {
+  const out = []
+  const hm = (ms) => {
+    const d = new Date(ms)
+    return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  }
+  if (live && live.active) {
+    const batt = live.kind === 'batt'
+    out.push({
+      notificationId: 'sf-live',
+      sf: true,
+      read: false,
+      notificationType: 'SYSTEM',
+      title: batt ? '[긴급] 허브 AMR 배터리 화재' : '[긴급] 허브 화재 발생',
+      message: (live.label ? live.label + ' · ' : '') + (batt ? '화재 구역 접근 금지 · 경보 진행 중' : '허브 진입 금지 · 경보 진행 중'),
+      createdAt: live.since || Date.now(),
+    })
+  }
+  for (const h of history || []) {
+    const at = h.at || Date.now()
+    const batt = h.kind === 'batt'
+    const end = h.type === '해제'
+    out.push({
+      notificationId: `sf-h-${at}-${h.type || 'x'}`,
+      sf: true,
+      read: true,
+      notificationType: 'SYSTEM',
+      title: h.title || (end
+        ? (batt ? '허브 AMR 배터리 화재 종료' : '허브 화재 종료')
+        : (batt ? '[긴급] 허브 AMR 배터리 화재' : '[긴급] 허브 화재 발생')),
+      message: [h.label, end ? `경보 해제 · 지속 ${h.secs || 0}초` : '경보 발령', hm(at)].filter(Boolean).join(' · '),
+      createdAt: at,
+    })
+  }
+  return out
+}
+
+function mergeFire(dbList, sfList) {
+  const db = Array.isArray(dbList) ? dbList.slice() : []
+  // 이미 DB(기사·스태프 알림)에 같은 시각대 화재 알림이 있으면 메모리 이력 중복 제외
+  const dbFireTs = db
+    .filter((n) => /화재/.test(n.title || ''))
+    .map((n) => new Date(n.createdAt).getTime())
+  const extra = (sfList || []).filter((s) => {
+    if (s.notificationId === 'sf-live') return true
+    const t = new Date(s.createdAt).getTime()
+    return !dbFireTs.some((x) => Math.abs(x - t) < 180000)
+  })
+  return [...extra, ...db].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+}
+
 async function load() {
   const id = authState.user?.accountId
   if (!id) { error.value = '로그인 정보가 없습니다.'; return }
@@ -110,7 +167,18 @@ async function load() {
     // 지난 알림까지 한 번에 받아 화면에서 나눠 보여 준다 (서버는 최신순)
     const res = await adminApi.get(`/api/notifications/account/${id}`, { params: { page: 0, size: 1000 } })
     const list = res.data?.content ?? res.data
-    rows.value = Array.isArray(list) ? list : []
+    const db = Array.isArray(list) ? list : []
+    // 26.11.01: 화재는 메모리 이력에도 남김 → 웹 알림 내역에 발령·종료가 보이도록 합침
+    // (백엔드가 스태프 계정에도 SYSTEM 알림을 넣기 전·서버 재시작 전 이력을 보완)
+    let live = null, history = []
+    try {
+      const [c, h] = await Promise.all([
+        fetch(`${API_BASE}/api/amr/safety/alert`, { credentials: 'include' }).then((r) => (r.ok ? r.json() : null)),
+        fetch(`${API_BASE}/api/amr/safety/history`, { credentials: 'include' }).then((r) => (r.ok ? r.json() : [])),
+      ])
+      live = c; history = Array.isArray(h) ? h : []
+    } catch { /* 안전 API 실패해도 DB 알림은 표시 */ }
+    rows.value = mergeFire(db, safetyRows(live, history))
   } catch (err) {
     rows.value = []
     error.value = pickErrorMessage(err, '알림 내역을 불러오지 못했습니다.')
@@ -120,9 +188,9 @@ async function load() {
 }
 
 async function open(n) {
-  if (!n.read) {
+  if (!n.read && !n.sf) {
     try { await adminApi.patch(`/api/notifications/${n.notificationId}/read`); n.read = true } catch { /* 읽음 처리 실패해도 이동은 한다 */ }
-  }
+  } else if (n.sf) { n.read = true }
   const target = resolveTarget(n)
   // 따로 갈 화면이 없는 알림(알림 내역 자신)은 이 화면 위쪽에 내용을 보여 준다
   const self = typeof target === 'object' && target && /notifications$/.test(target.path)

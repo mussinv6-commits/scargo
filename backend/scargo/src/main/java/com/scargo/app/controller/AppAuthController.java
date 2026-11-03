@@ -16,6 +16,7 @@ import java.util.Map;
  *  POST /api/app/auth/login   (공개)   → { token, expiresAt, me }
  *  POST /api/app/auth/logout
  *  GET  /api/app/me
+ *  POST /api/app/me/password  body: { currentPassword, newPassword }
  *  GET  /api/app/health       (공개)   → 앱의 "서버 연결 확인" 버튼용
  */
 @RestController
@@ -44,5 +45,12 @@ public class AppAuthController {
     @GetMapping("/me")
     public MeResponse me() {
         return appAuthService.me(CurrentAccount.id());
+    }
+
+    /** body: { currentPassword, newPassword } */
+    @PostMapping("/me/password")
+    public ResponseEntity<Map<String, Object>> changePassword(@RequestBody Map<String, String> body) {
+        appAuthService.changePassword(CurrentAccount.id(), body.get("currentPassword"), body.get("newPassword"));
+        return ResponseEntity.ok(Map.of("ok", true));
     }
 }

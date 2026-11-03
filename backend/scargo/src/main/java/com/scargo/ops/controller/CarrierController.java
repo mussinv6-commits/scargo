@@ -1,16 +1,15 @@
 package com.scargo.ops.controller;
 
-import com.scargo.Enum.NotificationType;
 import com.scargo.app.entity.TransportOrder;
 import com.scargo.app.repository.TransportOrderRepository;
 import com.scargo.entity.Account;
 import com.scargo.entity.Notification;
 import com.scargo.entity.Truck;
 import com.scargo.ops.CarrierGuard;
+import com.scargo.ops.VehicleUsePolicy;
 import com.scargo.ops.entity.ShipmentLeg;
 import com.scargo.ops.repository.ShipmentLegRepository;
 import com.scargo.ops.service.BranchService;
-import com.scargo.ops.service.OpsNotifier;
 import com.scargo.repository.AccountRepository;
 import com.scargo.repository.NotificationRepository;
 import com.scargo.repository.TruckRepository;
@@ -35,8 +34,8 @@ public class CarrierController {
     private final TruckRepository trucks;
     private final AccountRepository accounts;
     private final NotificationRepository notifications;
-    private final OpsNotifier notifier;
     private final BranchService branch;
+    private final VehicleUsePolicy vehiclePolicy;
 
     @GetMapping("/orders")
     public List<TransportOrder> orders() { return orders.findByCompanyIdOrderByOrderIdDesc(guard.myCompany()); }
@@ -77,27 +76,23 @@ public class CarrierController {
         return legs.findByLegTypeAndVehicleNoInOrderByAssignmentIdDesc(BranchService.LEG_TYPE, mine).stream().map(this::legView).toList();
     }
 
-    /** body: { vehicleNo, fromCenterId, toCenterId, plannedUnits, driverAccountId? } — 기사 없이 만들면 BRANCH_DRIVER_UNASSIGNED */
+    /** body: { vehicleNo, fromCenterId, toCenterId, plannedUnits, driverAccountId }
+     *  26.11.02 진입 허가(APPROVED) 차량 + 지선 기사가 있어야 배차 (예전: 기사 없이 만들고 BRANCH_DRIVER_UNASSIGNED 알림) */
     @PostMapping("/branch")
     @Transactional
     public Map<String, Object> create(@RequestBody Map<String, Object> b) {
         Long c = guard.myCompany();
         String vehicleNo = (String) b.get("vehicleNo");
         if (!myVehicles(c).contains(vehicleNo)) throw new AccessDeniedException("우리 운송사 차량이 아닙니다.");
+        Long d = num(b.get("driverAccountId"));
+        vehiclePolicy.requireDispatchable(vehicleNo, d, c, "BRANCH_DRIVER");
         ShipmentLeg l = new ShipmentLeg();
         l.setLegType(BranchService.LEG_TYPE); l.setVehicleNo(vehicleNo);
         l.setFromCenterId(num(b.get("fromCenterId"))); l.setToCenterId(num(b.get("toCenterId")));
         if (l.getFromCenterId() == null || l.getToCenterId() == null) throw new IllegalArgumentException("출발 허브·도착 센터를 지정하세요.");
         Long pu = num(b.get("plannedUnits")); l.setPlannedUnits(pu == null ? null : pu.intValue());
-        Long d = num(b.get("driverAccountId"));
-        if (d != null) { requireMyDriver(c, d); l.setDriverAccountId(d); }
-        l = legs.save(l);
-        if (d == null) {
-            String msg = "지선 운행 " + l.getAssignmentId() + " (" + vehicleNo + ") 기사 미배정";
-            notifier.toCompany(c, NotificationType.BRANCH_DRIVER_UNASSIGNED, "[기사 미배정] 운행 " + l.getAssignmentId(), msg, l.getAssignmentId());
-            notifier.toOps(l.getFromCenterId(), NotificationType.BRANCH_DRIVER_UNASSIGNED, "[기사 미배정] 운행 " + l.getAssignmentId(), msg, l.getAssignmentId());
-        }
-        return legView(l);
+        l.setDriverAccountId(d);
+        return legView(legs.save(l));
     }
 
     @PutMapping("/branch/{id}/driver")
@@ -109,7 +104,7 @@ public class CarrierController {
         if (!myVehicles(c).contains(l.getVehicleNo())) throw new AccessDeniedException("다른 운송사의 운행입니다.");
         if (!"ASSIGNED".equals(l.getStatus())) throw new IllegalStateException("출발 전 운행만 기사를 바꿀 수 있습니다.");
         Long d = num(b.get("driverAccountId"));
-        requireMyDriver(c, d);
+        vehiclePolicy.requireDispatchable(l.getVehicleNo(), d, c, "BRANCH_DRIVER"); // 26.11.02 기사 변경도 배차와 같은 확인 (그사이 허가가 취소된 차량 포함)
         l.setDriverAccountId(d);
         return legView(l);
     }
@@ -117,12 +112,6 @@ public class CarrierController {
     /** 운송사 알림: company_id 대상만 (웹 목록 전용, 푸시 없음) */
     @GetMapping("/notifications")
     public List<Notification> notifications() { return notifications.findByCompanyIdOrderByCreatedAtDesc(guard.myCompany()); }
-
-    private void requireMyDriver(Long c, Long d) {
-        Account a = d == null ? null : accounts.findById(d).orElse(null);
-        if (a == null || a.getUserType() != Account.UserType.BRANCH_DRIVER) throw new IllegalArgumentException("지선 운송기사 계정이 아닙니다.");
-        if (!Objects.equals(a.getCompanyId(), c)) throw new AccessDeniedException("다른 운송사 기사입니다.");
-    }
 
     private Set<String> myVehicles(Long c) {
         Set<String> s = new HashSet<>();

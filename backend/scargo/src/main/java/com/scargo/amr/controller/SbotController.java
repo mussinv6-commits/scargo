@@ -32,6 +32,17 @@ public class SbotController {
     @PersistenceContext
     private EntityManager em;
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private org.springframework.security.crypto.password.PasswordEncoder enc; // 시연용 기사 계정 비밀번호
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.scargo.ops.VehicleUsePolicy vehiclePolicy; // 26.11.02 배차 차량 진입 허가 · 기사 확인
+
+    // 26.11.02 배차 가능한 차량(t): 진입 허가 + 그 운송사에 지금 운행 중이 아닌 승인 지선 기사가 있음
+    private static final String DISPATCHABLE = " AND t.entry_approval = 'APPROVED' AND EXISTS (SELECT 1 FROM accounts a WHERE a.company_id = t.company_id"
+            + " AND a.user_type = 'BRANCH_DRIVER' AND a.approval_status = 'APPROVED'"
+            + " AND NOT EXISTS (SELECT 1 FROM shipment_legs l WHERE l.driver_account_id = a.account_id AND l.status IN ('ASSIGNED','IN_TRANSIT')))";
+
     // DB 서버가 UTC 여도 "오늘"과 시간대는 한국 시간(KST) 기준으로 센다
     private static final String TODAY = "d.departed_at >= (date_trunc('day', now() AT TIME ZONE 'Asia/Seoul') AT TIME ZONE 'Asia/Seoul')";
     private static final String[] CATS = {"전자제품", "의류", "식품"};
@@ -148,11 +159,14 @@ public class SbotController {
         // 5-2) 심야할인액: 통과 시각(KST)이 21~24시면 30%, 0~6시면 50%, 낮에는 0 (차량마다 따로 계산 · 일괄 반값이 아님)
         String hourSql = hasFareWon() ? "EXTRACT(HOUR FROM p.passed_at AT TIME ZONE 'Asia/Seoul')" : "EXTRACT(HOUR FROM tp.passed_at AT TIME ZONE 'Asia/Seoul')";
         String rate = "(CASE WHEN " + hourSql + " >= 21 THEN 0.3 WHEN " + hourSql + " < 6 THEN 0.5 ELSE 0 END)";
+        // 26.11.02 QA: 할인 후 요금을 건마다 10원 단위로 반올림하고, 할인액 = 기본 - 할인 후 (30% 할인이 1원 단위로 나오던 문제)
+        String discP = "(p.fare_won - ROUND(p.fare_won * (1 - " + rate + ") / 10) * 10)";
+        String discT = "(tp.amount - ROUND(tp.amount * (1 - " + rate + ") / 10) * 10)";
         String discSql = hasFareWon()
-                ? "SELECT r.region_code, COALESCE(SUM(p.fare_won * " + rate + "), 0) FROM toll_passages p JOIN hub_dispatches d ON d.assignment_id = p.assignment_id"
+                ? "SELECT r.region_code, COALESCE(SUM(" + discP + "), 0) FROM toll_passages p JOIN hub_dispatches d ON d.assignment_id = p.assignment_id"
                   + " JOIN delivery_regions r ON r.region_id = d.region_id"
                   + " WHERE p.passage_status = 'PASSED' AND p.fare_won IS NOT NULL AND p.passed_at IS NOT NULL AND " + TODAY_ + " GROUP BY 1"
-                : "SELECT r.region_code, COALESCE(SUM(tp.amount * " + rate + "), 0)"
+                : "SELECT r.region_code, COALESCE(SUM(" + discT + "), 0)"
                   + " FROM toll_payments tp JOIN hub_dispatches d ON d.assignment_id = tp.assignment_id"
                   + " JOIN delivery_regions r ON r.region_id = d.region_id"
                   + " WHERE tp.payment_status IN ('PAID','PENDING') AND tp.passed_at IS NOT NULL AND " + TODAY_ + " GROUP BY 1";
@@ -260,6 +274,7 @@ public class SbotController {
     // ────────────────────────────────────────────────────────────────
     // 테스트용 택배차(일반화물차) 30대: 서버가 처음 출발 요청을 받을 때 한 번 등록한다(이미 있으면 건너뜀) → 번호가 겹치지 않고 돌아간다
     private static volatile boolean testTrucksReady = false;
+    private static volatile boolean simDriversReady = false;
 
     private void ensureTestTrucks() {
         if (testTrucksReady) return;
@@ -272,6 +287,18 @@ public class SbotController {
                 + " ON CONFLICT (vehicle_no) DO NOTHING; EXCEPTION WHEN OTHERS THEN RAISE NOTICE 'test truck skipped %', SQLERRM; END;"
                 + " END LOOP; END $$").executeUpdate();
         testTrucksReady = true;
+    }
+
+    // 26.11.02 시연용 지선 기사: 일반화물차를 가진 운송사마다 승인된 BRANCH_DRIVER 6명(simlh{회사}_{1~6}, 비밀번호 demo1234)
+    //  세 권역이 동시에 출발해도 기사가 모자라 '미배정'으로 남지 않게 한다. 이미 있으면 건너뛴다(실패해도 출발은 계속)
+    private void ensureSimDrivers() {
+        if (simDriversReady) return;
+        String pw = enc.encode("demo1234"); // bcrypt 해시에는 ' 와 $$ 가 없어 DO 블록 안에 그대로 넣을 수 있다
+        em.createNativeQuery("DO $$ BEGIN INSERT INTO accounts (user_id, user_name, user_pw, user_type, company_id)"
+                + " SELECT 'simlh' || c.company_id || '_' || g, '시연기사' || g, '" + pw + "', 'BRANCH_DRIVER', c.company_id"
+                + " FROM (SELECT DISTINCT company_id FROM trucks WHERE vehicle_category = 'GENERAL_TRUCK' AND company_id IS NOT NULL) c CROSS JOIN generate_series(1, 6) g"
+                + " ON CONFLICT (user_id) DO NOTHING; EXCEPTION WHEN OTHERS THEN RAISE NOTICE 'sim driver skipped %', SQLERRM; END $$").executeUpdate();
+        simDriversReady = true;
     }
 
     // 대시보드 배속: AMR 백그라운드 시뮬레이터를 n배 빠르게 (1·2·4·8·16)
@@ -293,6 +320,7 @@ public class SbotController {
         if (items < 1) items = 1;
 
         ensureTestTrucks();
+        ensureSimDrivers();
 
         // 세 권역이 동시에 출발 요청하면 같은 차량을 고르다 '차량당 운송 중 1건' 제약에 걸려 500 이 나므로, 출발 처리는 한 번에 하나씩 직렬화한다
         em.createNativeQuery("SELECT 1 FROM (SELECT pg_advisory_xact_lock(77700123)) x").getResultList();
@@ -329,12 +357,9 @@ public class SbotController {
                 + " ORDER BY h.created_at LIMIT 1").setParameter("code", region).getResultList();
         if (!ocr.isEmpty()) {
             String plate = String.valueOf(ocr.get(0)[0]);
-            String pq = plate.replace("'", "''");
-            // 운송 구간은 trucks 에 등록된 일반화물차만 쓸 수 있으므로, OCR 로 인식된 택배차가 없으면 등록한다 (실패해도 아래에서 걸러진다)
-            em.createNativeQuery("DO $$ BEGIN INSERT INTO trucks (vehicle_no, company_id, is_semi_trailer, truck_type, status, vehicle_category, entry_approval)"
-                    + " SELECT '" + pq + "', (SELECT company_id FROM companies ORDER BY company_id LIMIT 1), FALSE, '택배차', 'OUTSIDE', 'GENERAL_TRUCK', 'APPROVED'"
-                    + " ON CONFLICT (vehicle_no) DO NOTHING; EXCEPTION WHEN OTHERS THEN RAISE NOTICE 'truck register skipped %', SQLERRM; END $$").executeUpdate();
-            List<?> ok = em.createNativeQuery("SELECT 1 FROM trucks WHERE vehicle_no = :p AND vehicle_category = 'GENERAL_TRUCK'")
+            // 26.11.02 OCR 로 인식된 차량도 S카고 등록 · 진입 허가된 일반화물차이고 배차할 기사가 있을 때만 쓴다
+            //  (예전: trucks 에 없으면 APPROVED 로 바로 등록 → 진입 허가 심사를 건너뜀. 이제 등록하지 않고 2순위로 넘어간다)
+            List<?> ok = em.createNativeQuery("SELECT 1 FROM trucks t WHERE t.vehicle_no = :p AND t.vehicle_category = 'GENERAL_TRUCK'" + DISPATCHABLE)
                     .setParameter("p", plate).getResultList();
             if (!ok.isEmpty()) {
                 vehicle = plate;
@@ -344,18 +369,30 @@ public class SbotController {
             }
         }
 
-        // 2순위(OCR 기록이 없을 때만): 운송 중인 구간이 없는 등록 일반화물차 1대
+        // 2순위(OCR 기록이 없을 때만): 운송 중인 구간이 없고 진입 허가된 등록 일반화물차 1대 (그 운송사에 쉬는 지선 기사가 있어야 함)
         if (vehicle == null) {
-            List<?> tr = em.createNativeQuery("SELECT t.vehicle_no FROM trucks t WHERE t.vehicle_category = 'GENERAL_TRUCK'"
+            List<?> tr = em.createNativeQuery("SELECT t.vehicle_no FROM trucks t WHERE t.vehicle_category = 'GENERAL_TRUCK'" + DISPATCHABLE
                     + " AND NOT EXISTS (SELECT 1 FROM shipment_legs l WHERE l.vehicle_no = t.vehicle_no AND l.status IN ('ASSIGNED','IN_TRANSIT'))"
                     + " ORDER BY (SELECT max(d.departed_at) FROM hub_dispatches d WHERE d.delivery_vehicle_no = t.vehicle_no) NULLS FIRST, random() LIMIT 1").getResultList(); // 가장 오래 안 나간 차량부터 → 같은 차량이 겹쳐 반복되지 않는다
-            if (tr.isEmpty()) throw new ResponseStatusException(HttpStatus.CONFLICT, "배정 가능한 일반화물차가 없습니다");
+            if (tr.isEmpty()) throw new ResponseStatusException(HttpStatus.CONFLICT, "배차 가능한 일반화물차가 없습니다 (진입 허가 차량 · 쉬는 지선 기사 필요)");
             vehicle = String.valueOf(tr.get(0));
         }
 
-        Object asg = em.createNativeQuery("INSERT INTO shipment_legs (vehicle_no, from_center_id, to_center_id, leg_sequence, leg_type, status, departed_at)"
-                + " VALUES (:v, :f, :t, 1, 'HUB_TO_CENTER', 'IN_TRANSIT', now()) RETURNING assignment_id")
-                .setParameter("v", vehicle).setParameter("f", hubCenter).setParameter("t", centerId).getSingleResult();
+        // 26.11.02 기사 배정: 차량 운송사의 승인된 지선 운송기사(BRANCH_DRIVER) 중 지금 운행 중이 아닌 1명. 차량 전담 기사(trucks.assigned_account_id) → 가장 오래 쉰 기사 순
+        //  기사 없는 배차는 만들지 않는다 (W-08 '미배정 · 운행 중' 방지). 위 차량 조건(DISPATCHABLE)에서 쉬는 기사가 있는 운송사만 골랐다
+        List<?> drv = em.createNativeQuery("SELECT a.account_id FROM trucks t JOIN accounts a ON a.company_id = t.company_id"
+                + " WHERE t.vehicle_no = :v AND a.user_type = 'BRANCH_DRIVER' AND a.approval_status = 'APPROVED'"
+                + " AND NOT EXISTS (SELECT 1 FROM shipment_legs l WHERE l.driver_account_id = a.account_id AND l.status IN ('ASSIGNED','IN_TRANSIT'))"
+                + " ORDER BY (a.account_id = t.assigned_account_id) DESC,"
+                + " (SELECT max(l.departed_at) FROM shipment_legs l WHERE l.driver_account_id = a.account_id) NULLS FIRST, random() LIMIT 1")
+                .setParameter("v", vehicle).getResultList();
+        if (drv.isEmpty()) throw new ResponseStatusException(HttpStatus.CONFLICT, "배정 가능한 지선 기사가 없습니다 (" + vehicle + ")");
+        long driverId = n(drv.get(0));
+        vehiclePolicy.requireDispatchable(vehicle, driverId, null, "BRANCH_DRIVER"); // 운송사 화면 배차와 같은 확인
+
+        Object asg = em.createNativeQuery("INSERT INTO shipment_legs (vehicle_no, driver_account_id, from_center_id, to_center_id, leg_sequence, leg_type, status, departed_at)"
+                + " VALUES (:v, :drv, :f, :t, 1, 'HUB_TO_CENTER', 'IN_TRANSIT', now()) RETURNING assignment_id")
+                .setParameter("v", vehicle).setParameter("drv", driverId).setParameter("f", hubCenter).setParameter("t", centerId).getSingleResult();
         long assignmentId = n(asg);
 
         em.createNativeQuery("INSERT INTO hub_dispatches (assignment_id, hub_id, dock_id, region_id, delivery_vehicle_no, parcel_count, total_weight_kg, departed_at)"
@@ -367,6 +404,7 @@ public class SbotController {
         Map<String, Object> res = new LinkedHashMap<>();
         res.put("assignmentId", assignmentId);
         res.put("vehicleNo", vehicle);
+        res.put("driverAccountId", driverId);
         res.put("items", items);
         res.put("fromOcr", fromOcr);
         res.put("logId", photoLogId);

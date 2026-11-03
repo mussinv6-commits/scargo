@@ -7,7 +7,7 @@
 <tr><td>목적지</td><td><select v-model="f.hubId"><option v-for="h in opt.hubs" :key="h.id" :value="h.id">{{ h.name }}</option></select></td></tr>
 <tr><td>반납 CY (D/O)</td><td><select v-model="f.returnCyId"><option :value="null">선택</option><option v-for="c in cys" :key="c.id" :value="c.id">{{ c.name }}{{ c.isDemo ? ' (데모)' : '' }}</option></select></td></tr>
 <tr><td>반납 기한 (선사별)</td><td><input type="datetime-local" v-model="f.returnDueAt"><div v-if="!f.returnDueAt" class="meta" style="color:#B45309">⚠ 비워 두면 {{ dueDays }}일 후 18:00 으로 자동 지정됩니다 (운영 기준 설정)</div></td></tr>
-<tr><td>배차 기사</td><td><select v-model="drv"><option :value="null">나중에 배차</option><option v-for="d in cDrivers" :key="d.accountId + d.vehicleNo" :value="d">{{ d.userName }} · {{ d.vehicleNo }}</option></select></td></tr></tbody></table>
+<tr><td>배차 기사</td><td><select v-model="drv"><option :value="null">나중에 배차</option><option v-for="d in dDrivers" :key="d.accountId + d.vehicleNo" :value="d">{{ d.userName }} · {{ d.vehicleNo }}</option></select></td></tr></tbody></table>
 <br><button class="btn" @click="save">저장</button> <span v-if="msg" :class="'b ' + (ok ? 'ok' : 'crit')">{{ msg }}</span></div>
 <div class="card"><h3>포장명세서 · 배분지시 CSV 업로드</h3>
 <div class="frow"><label>대상 오더</label><select v-model="sel"><option v-for="o in rows" :key="o.orderId" :value="o.orderId">{{ o.orderNo }} · {{ o.containerNo }}</option></select></div>
@@ -117,6 +117,8 @@ async function instruct() {
   pok.value = r.ok; pmsg.value = r.ok ? '반납 지시 · 기사 알림 보냄' : r.msg; if (r.ok) load()
 }
 const cDrivers = computed(() => opt.value.drivers.filter(d => d.userType === 'CONTAINER_DRIVER' && d.vehicleNo))
+// 26.11.02 배차 후보: 기사 차량이 진입 허가(APPROVED)인 경우만 (서버 POST /api/web/carrier/orders 도 같은 확인). 반납 지시는 차량을 배정하지 않아 cDrivers 그대로
+const dDrivers = computed(() => cDrivers.value.filter(d => d.vehicleApproval === 'APPROVED'))
 async function save() {
   if (!f.containerNo) { ok.value = false; msg.value = '운송 컨테이너를 선택하세요.'; return }
   if (!(f.sealNo || '').trim()) { ok.value = false; msg.value = '씰 번호를 입력하세요.'; return }

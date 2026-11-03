@@ -75,7 +75,7 @@ export const NOTIF_TYPE = {
   DRIVER_APPROVAL_REQUEST: '기사 가입',
   OVERLOAD_WARNING: '과적 경고',
   NOTICE: '안내',
-  SYSTEM: '시스템',
+  SYSTEM: '시스템', // 26.11.01 화재 경보·종료도 SYSTEM 으로 저장됨 (제목에 '화재')
 }
 
 // 전체 알림 내역 화면 주소 (관리자는 관리자 화면 안, 그 밖의 계정은 단독 화면)

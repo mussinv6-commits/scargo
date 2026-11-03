@@ -11,6 +11,17 @@
   .rec button.go{padding:8px 14px;border:0;border-radius:8px;background:#13203f;color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
   .rec button.go:disabled{background:#9aa6c4;cursor:default}
   .msgbox{background:#fff;border:1px solid #e3e6ee;border-radius:8px;padding:8px 10px;margin:8px 0;font-size:12px;color:#334}
+  /* 26.11.02 필터 탭: 명세 모양 (이 화면만 · 공통 .tab 은 그대로) */
+  #tabs .tab{border:1px solid #cfd6df;background:#f8fafc;color:#1c2540;border-radius:8px;padding:7px 14px;font-size:13.5px;font-weight:600}
+  #tabs .tab:hover:not(.on){border-color:#1d4ed8;color:#1d4ed8}
+  #tabs .tab.on{background:#1d4ed8;border-color:#1d4ed8;color:#fff}
+  /* 26.11.02 차량 상세는 모달: 행을 누르면 열리고, 닫기 · 바깥 클릭 · Esc 로 닫는다 */
+  .mk{position:fixed;inset:0;background:rgba(16,38,68,.45);display:none;align-items:flex-start;justify-content:center;z-index:50;padding:16px}
+  .mk.on{display:flex}
+  .md{width:860px;max-width:100%;max-height:min(88vh,820px);background:#f4f5f9;border-radius:12px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 18px 50px rgba(0,0,0,.35)}
+  .mh{background:#102644;color:#fff;display:flex;align-items:center;justify-content:space-between;padding:14px 20px;font-weight:700;font-size:16px;flex:none}
+  .mh button{background:none;border:0;color:#fff;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit}
+  .mb{overflow:auto;padding:14px;display:flex;flex-direction:column;gap:12px}
 </style>
 </head>
 <body>
@@ -24,21 +35,19 @@
     <span id="sum" style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap"></span>
   </div>
   <div id="err" class="sub" style="color:#b42318"></div>
-  <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start">
-    <section class="card" style="flex:999 1 620px;min-width:0;align-self:stretch;display:flex;flex-direction:column">
-      <h3>관제 대상 차량 <span id="shown" class="sub" style="font-weight:400"></span> <span class="sub" title="톨게이트·검문소는 도로공사 등 외부 기관 시설입니다. 이 화면의 계측 결과·과태료·운행 중지는 도로공사 연계로 통보받은 내용이고, SCARGO 는 단속하거나 차량을 막지 않습니다. 확정 판정이 나오면 진출 권고를 만들고, 관제자가 지시를 보내면 기록이 남습니다. 표는 DB 조회 결과로 3초마다 새로고침됩니다.판정: 정상 기준 이내 · 주의 기준 초과, 허용 오차(10%) 이내 · 확정 허용 오차 초과 (재측정이 있으면 재측정 결과 기준)" style="cursor:help;border:1px solid #9aa6c4;border-radius:99px;padding:0 6px;margin-left:6px">ⓘ 안내</span></h3>
+    <section class="card" style="display:flex;flex-direction:column">
+      <h3>관제 대상 차량 <span id="shown" class="sub" style="font-weight:400"></span> <span class="sub" title="톨게이트·검문소는 도로공사 등 외부 기관 시설입니다. 이 화면의 계측 결과·과태료·운행 중지는 도로공사 연계로 통보받은 내용이고, SCARGO 는 단속하거나 차단하지 않습니다. 확정 판정이 나오면 진출 권고를 만들고, 관제자가 지시를 보내면 기록이 남습니다. 표는 DB 조회 결과로 3초마다 새로고침됩니다." style="cursor:help;border:1px solid #9aa6c4;border-radius:99px;padding:0 6px;margin-left:6px">ⓘ 안내</span></h3>
       <div class="scroll"><div id="list"></div></div>
       <div id="pager" style="display:flex;gap:10px;align-items:center;justify-content:center;margin-top:auto;padding-top:10px"></div>
     </section>
-    <aside style="flex:1 1 340px;display:flex;flex-direction:column;gap:14px;min-width:0" id="side"></aside>
-  </div>
 </main>
+<div class="mk" id="mk"><div class="md" role="dialog" aria-modal="true"><div class="mh"><span id="mt"></span><button type="button" id="mx">닫기</button></div><div class="mb" id="mbody"></div></div></div>
 <script src="/common.js"></script>
 <script>
 const COLS = 'minmax(160px,1fr) minmax(150px,1.2fr) repeat(3,minmax(70px,1fr)) 52px 74px';
 const PAGE = 10;
 const pendOf = t => isDone(t) ? 0 : t.pending;      // 운행 완료 차량은 권고할 일이 없다
-let tab = 'run', page = 1, selId = null, busy = false, again = false, data = { trips: [], issues: [] };
+let tab = 'run', page = 1, selId = null, openId = null, busy = false, again = false, data = { trips: [], issues: [] };
 
 function cell(t, p) {
   if (p.skipped) return '<span class="sub">미통과(우회)</span>';
@@ -69,7 +78,6 @@ function render() {
   const full = order.filter(f[tab]), pages = Math.max(1, Math.ceil(full.length / PAGE)); if (page > pages) page = pages;
   const list = full.slice((page - 1) * PAGE, page * PAGE);
   document.getElementById('shown').textContent = `· 권고 대기 → 확정 → 주의 → 정상 순 (${full.length}대)`;
-  if (!full.some(t => t.trip_id === selId)) selId = full.length ? full[0].trip_id : null;
   document.getElementById('list').innerHTML = `<div class="row h" style="grid-template-columns:${COLS}"><span>차량</span><span>현재 위치</span><span>인천 과적검문소</span><span>남인천TG</span><span>청계TG</span><span>판정</span><span>관제 권고</span></div>` +
     (list.length ? list.map(t => {
       const pos = posOf(t), bad = pos.status === 'DEVIATING' || pos.status === 'STOPPED';
@@ -78,13 +86,14 @@ function render() {
       <span><span style="display:block;margin-bottom:4px">${pill(pos.state[0], isDone(t) ? '운행 완료' : pos.state[1])}</span><span class="sub" style="display:block;white-space:nowrap">${isDone(t) ? `곤지암 허브 ${hms(arrivedAt(t))} 도착` : isHalted(t) ? `${pos.km.toFixed(1)}km 지점에서 중지` : `${pos.km.toFixed(1)} / ${ROUTE_KM_TOTAL}km`}</span><span style="display:block;height:4px;background:#eceff5;border-radius:2px;margin-top:2px"><i style="display:block;height:4px;border-radius:2px;width:${Math.min(100, pos.km / ROUTE_KM_TOTAL * 100).toFixed(0)}%;background:${bad ? '#b42318' : '#6b7ba8'}"></i></span></span>
       ${t.point_list.map(p => `<span>${cell(t, p)}</span>`).join('')}<span>${lvPill(t.level)}</span><span>${actCell(t)}</span></button>`;
     }).join('') : `<div class="empty">${tab === 'halt' ? '검문소 조치로 운행이 중지된 차량이 없습니다.' : tab === 'done' ? '아직 운행을 완료한 차량이 없습니다. 곤지암 허브에 도착하면 여기로 넘어옵니다.' : '관제 대상 차량이 없습니다. 관제 지도에서 차량을 출차시키면 여기에 표시됩니다.'}</div>`);
-  document.querySelectorAll('#list button.row').forEach(b => b.onclick = () => { selId = Number(b.dataset.id); render(); });
+  document.querySelectorAll('#list button.row').forEach(b => b.onclick = () => { selId = openId = Number(b.dataset.id); render(); const mb = document.getElementById('mbody'); if (mb) mb.scrollTop = 0; });
   document.getElementById('pager').innerHTML = full.length <= PAGE ? '' :
     `<button class="tab" id="pgP" ${page <= 1 ? 'disabled' : ''}>‹ 이전</button><span class="sub">${page} / ${pages} 쪽 · 총 ${full.length}대</span><button class="tab" id="pgN" ${page >= pages ? 'disabled' : ''}>다음 ›</button>`;
   const pp = document.getElementById('pgP'), pn = document.getElementById('pgN');
   if (pp) pp.onclick = () => { page--; render(); }; if (pn) pn.onclick = () => { page++; render(); };
-  side(T.find(t => t.trip_id === selId));
+  side(openId == null ? null : T.find(t => t.trip_id === openId));
 }
+function closeModal() { openId = null; selId = null; render(); }
 
 function doneCard(t) {
   const x = tollOf(t), dev = t.route_events.filter(e => e.kind === 'DEVIATE').length, fine = Number(t.fine_manwon || 0);
@@ -106,8 +115,12 @@ function recCard(t, r) {
 }
 
 function side(t) {
-  const el = document.getElementById('side');
-  if (!t) { el.innerHTML = '<div class="card"><h3>선택 차량 상세</h3><div class="empty">차량을 선택하세요</div></div>'; return; }
+  const el = document.getElementById('mbody'), mk = document.getElementById('mk');
+  const embed = document.documentElement.classList.contains('embed'), mainEl = document.querySelector('main');
+  if (!t) { openId = null; mk.classList.remove('on'); mainEl.style.minHeight = ''; return; }
+  mk.classList.add('on'); document.getElementById('mt').textContent = t.vehicle_no + ' 상세';
+  if (embed) mainEl.style.minHeight = '900px'; // 안쪽 화면(iframe) 높이를 모달이 들어갈 만큼 확보
+  const scTop = el.scrollTop;
   const pos = posOf(t), x = tollOf(t);
   const bars = t.point_list.map(p => p.final ? { v: p.final.total_weight_kg, bad: p.level === 'CONFIRMED', cau: p.level === 'CAUTION' } : null);
   const dev = t.route_events.filter(e => e.kind === 'DEVIATE' || e.kind === 'RETURN').length;
@@ -126,7 +139,7 @@ function side(t) {
   ev.sort((a, b) => b.at - a.at);
   const evh = ev.map(e => `<div style="display:flex;gap:10px;font-size:12px;padding:5px 0;border-bottom:1px solid #eceff5;${e.warn ? 'color:#8a4b00' : ''}"><span class="sub" style="flex:0 0 56px">${hms(e.at.toISOString())}</span><span class="sub" style="flex:0 0 28px">${e.k}</span><span>${e.k === '권고' ? e.txt : esc(e.txt)}</span></div>`).join('');
   const notified = t.paid_won, fine = Number(t.fine_manwon || 0);
-  el.innerHTML = `<div class="card"><h3>선택 차량 상세</h3>
+  el.innerHTML = `<div class="card">
     <div style="display:flex;gap:12px;align-items:center;margin-bottom:10px">
       <div style="flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:4px;background:#f4f5f9;border-radius:8px;padding:8px 12px">
         <span class="sub">출차 OCR</span>${t.plate_crop_url ? `<img class="crop" src="${esc(t.plate_crop_url)}" alt="번호판 크롭">` : ''}<span class="plate" style="font-size:15px">${esc(t.vehicle_no)}</span></div>
@@ -145,6 +158,7 @@ function side(t) {
       <dt>과태료</dt><dd>${fine ? `<b>${fine}만원</b> ${pill('red', '도로공사 통보')}` : '없음'}</dd></dl></div>`}
     ${dev ? `<div class="card" style="padding:10px 14px"><span class="sub">경로 이탈 기록 ${dev}건 — 자세한 위치는 </span><a href="/${SUFFIX}">관제 지도</a></div>` : ''}
     <div class="card"><h3>이벤트 기록</h3><div style="max-height:200px;overflow:auto">${evh || '<div class="empty">기록 없음</div>'}</div></div>`;
+  el.scrollTop = scTop; // 3초 새로고침에도 모달 스크롤 위치 유지
   el.querySelectorAll('button.go').forEach(b => b.onclick = async () => {
     b.disabled = true; b.textContent = '발송 중…';
     try { await api(`/api/trip/${b.dataset.t}/action`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: b.dataset.type }) }); } catch (e) { document.getElementById('err').textContent = '권고 발송 실패: ' + e.message; }
@@ -164,6 +178,9 @@ async function load() {
   busy = false;
   if (again) { again = false; load(); }
 }
+document.getElementById('mx').onclick = closeModal;
+document.getElementById('mk').onclick = e => { if (e.target.id === 'mk') closeModal(); };
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && openId != null) closeModal(); });
 setupChrome('ck', { refresh: load, selectedPid: () => selId, onStarted: k => { selId = k; } });
 mountRange(document.getElementById('rangeBar'), () => { page = 1; load(); });
 load(); setInterval(load, 3000);

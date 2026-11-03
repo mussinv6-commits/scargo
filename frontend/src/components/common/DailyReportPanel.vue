@@ -34,7 +34,7 @@
       </label>
       <span v-if="period !== 'day'" class="drp-muted">{{ range.from }} ~ {{ range.to }}</span>
       <button class="drp-btn" :disabled="loading" @click="load">조회</button>
-      <button class="drp-btn primary" :disabled="loading || !report" @click="download">Excel 내려받기</button>
+      <button class="drp-btn primary" :disabled="loading || !report" @click="previewReport(download)"><i class="bi bi-file-earmark-pdf"></i> 보고서 보기 (PDF · 인쇄)</button>
       <span v-if="report" class="drp-muted">{{ report.scope }}</span>
     </div>
     <!-- 26.10.31 확정 도장: 작성 확정 → 승인. 엑셀 결재란에 이름 · 시각이 찍힌다 -->
@@ -70,6 +70,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { dailyReport, downloadDailyReport, reportSign, prepareSign, approveSign, resetSign } from '@/utils/dailyReportApi.js'
 import { friendlyError } from '@/utils/apiHelpers.js'
+import { previewReport } from '@/utils/xlsxLite.js' // 26.11.02 보고서 미리보기 (PDF 다운로드 · 인쇄 · 닫기)
 
 defineProps({ dark: { type: Boolean, default: false } })
 
@@ -140,7 +141,7 @@ async function download() {
   try {
     await downloadDailyReport(range.value.from, range.value.to, period.value)
   } catch (err) {
-    message.value = friendlyError(err, 'Excel 파일을 받지 못했습니다.')
+    message.value = friendlyError(err, '보고서를 만들지 못했습니다.')
   }
 }
 

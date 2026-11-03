@@ -7,7 +7,8 @@
 //  - 웹 시뮬레이터는 기본 허브(simulated)에서만 돌고 DB에 기록한다. 조회 전용이거나 다른 허브를 보면
 //    시뮬레이터를 멈추고 로봇 · 이벤트 · 진동을 DB 값으로 보여 준다 (remoteView)
 // ─────────────────────────────────────────────────────────────
-import { recordFire } from '@/utils/fireLog.js'
+import { recordFire, readFire, snapshotFire, settleActiveFire } from '@/utils/fireLog.js'
+import { pokeSafety } from '@/utils/fireSignal.js' // 26.11.03 경보 시작 · 종료 직후 다른 화면이 바로 다시 조회
 import { createSim, HUBS, ZONES, STATE_KO, PHASE_T, CAPTIONS, PIPE_ON, PH_COL, COLORS, status, lvCol, tons, zoneRow, captionOf, fmtPlate, ean13Bits } from './amrSim.js'
 // ZONES: 0 D 냉장 창고 · 1 A 인천 · 2 B 서울 · 3 C 경기
 import { createAmrScene } from './amrScene3d.js'
@@ -82,20 +83,40 @@ export function mountAmrTwin(root, access = { canView: true, canManage: true, al
   let alertSent = false // 26.10.30 처음 열 때 종료하지 않음: 앱에서 낸 경보가 남아 있으면 아래 syncTimer 가 이 화면에도 똑같이 띄운다
   const alertTimer = setInterval(() => { if (alertSent && !S.fire.on && !S.bfire && !remoteView()) amrApi.safetyEnd().then((r) => { if (r) alertSent = false }) }, 3000)
   // 26.10.30 앱 ↔ 웹 화재 연동: 앱에서 누른 화재도 서버 경보를 거쳐 이 화면의 시뮬레이터에 똑같이 켜고, 앱에서 끄면 같이 끈다 (웹 → 앱은 기존 safetyAlert)
-  let remoteBorn = false, localEndAt = 0
-  const syncTimer = setInterval(async () => {
-    if (remoteView()) return
-    const a = await amrApi.safetyNow(); if (!a) return
+  let remoteBorn = false, localEndAt = 0, restoreSince = 0
+  const poke = () => { try { pokeSafety() } catch { /* 무시 */ } }
+  // 26.11.03 화면을 다시 열었을 때: 서버에 진행 중인 경보가 있으면 처음부터 다시 시작하지 않고 그 시각부터 이어서 보여 준다
+  //  (예전: 대시보드에 다녀오면 시뮬레이터가 새로 만들어져 훈련이 사라지거나 0초부터 다시 시작, 종료 기록도 남지 않았다)
+  async function syncOnce() {
+    if (destroyed || remoteView()) return
+    const a = await amrApi.safetyNow(); if (!a || destroyed) return
     const localOn = S.fire.on || !!S.bfire
     if (a.active) {
       if (!localOn && Date.now() - localEndAt > 8000) {
-        remoteBorn = true
-        if (a.kind === 'hub') sim.setFire(true, a.zone == null ? undefined : +a.zone)
-        else { const bi = S.amrs.findIndex((r) => r.name === (a.code || a.label)); sim.setBatteryFire(bi >= 0 ? bi : undefined) }
+        remoteBorn = true; restoreSince = a.since || 0
+        if (a.kind === 'hub') {
+          sim.setFire(true, a.zone == null ? undefined : +a.zone)
+          const el = a.since ? Math.max(0, (Date.now() - a.since) / 1000) : 0
+          if (el > 0 && S.fire.on) { S.fire.t = el; if (el > 4) S.fire.stage = 2 } // 경과 시간 이어받기
+        } else { const bi = S.amrs.findIndex((r) => r.name === (a.code || a.label)); sim.setBatteryFire(bi >= 0 ? bi : undefined) }
+        restoreSince = 0
       }
-    } else if (remoteBorn && localOn) { remoteBorn = false; if (S.fire.on) sim.setFire(false); if (S.bfire) sim.clearBatteryFire() }
-    else if (!localOn) remoteBorn = false
-  }, 2000)
+    } else {
+      // 서버는 경보가 없는데 이 브라우저에 진행 중 기록이 남아 있으면(종료 신호를 놓침) 기록으로 확정한다
+      if (!localOn) { try { if (readFire().active) settleActiveFire('경보 종료 후 자동 기록 (관리자 종료 신호를 받지 못함)') } catch { /* 무시 */ } }
+      if (remoteBorn && localOn) { remoteBorn = false; if (S.fire.on) sim.setFire(false); if (S.bfire) sim.clearBatteryFire() }
+      else if (!localOn) remoteBorn = false
+    }
+  }
+  const syncTimer = setInterval(syncOnce, 1500)
+  syncOnce() // 처음 열 때 2초 기다리지 않고 바로
+  // 26.11.03 진행 중인 화재의 대피 수 · 단계를 3초마다 저장 → 종료 전에 화면을 떠나도 대시보드 · 보고서에 남는다
+  const snapTimer = setInterval(() => {
+    if (destroyed || remoteView()) return
+    const F = S.fire
+    if (F.on) snapshotFire({ evac: F.evac, total: F.total, stage: F.total && F.evac >= F.total ? '대피 완료' : '대피 중' })
+  }, 3000)
+
 // 26.10.30 비상 정지 동기화: 웹 ↔ 앱이 서버의 정지 목록을 같이 본다. 이쪽이 바뀌면 서버에 올리고, 서버가 바뀌었으면 이쪽 시뮬레이터에 반영
 let estopSynced = ''
 const estopTimer = setInterval(async () => {
@@ -111,11 +132,11 @@ const estopTimer = setInterval(async () => {
 
   function onSimEvent(type, p) {
     if (remoteView()) return // 26.10.22 조회 전용 · 다른 허브: 시뮬레이터 기록을 보내지 않음
-    if (type === 'fire' || type === 'bfire') { try { recordFire(type, p) } catch { /* 기록 실패는 화면에 영향 없음 */ }
+    if (type === 'fire' || type === 'bfire') { try { const rs = restoreSince && (p.on || p.stage === 1); recordFire(type, rs ? { ...p, since: restoreSince } : p); if (rs) restoreSince = 0 } catch { /* 기록 실패는 화면에 영향 없음 */ }
       // 26.10.29 긴급 경보를 서버에 알림 → 폰 앱 · S Cargo 화면이 붉게. 종료는 3D 화면의 "화재 종료" 버튼(= 이 이벤트의 on:false / stage 0)
-      if (type === 'fire') { if (p.on) { alertSent = true; amrApi.safetyAlert({ kind: 'hub', label: p.label, zone: p.zone, evac: 0, total: 0 }) } else { localEndAt = Date.now(); amrApi.safetyEnd() } }
-      else if (p.stage >= 2 && p.stage <= 4) { alertSent = true; amrApi.safetyAlert({ kind: 'batt', label: p.code, code: p.code, stage: p.stage, temp: p.temp || 0 }) }
-      else if (p.stage === 0) { localEndAt = Date.now(); amrApi.safetyEnd() }
+      if (type === 'fire') { if (p.on) { alertSent = true; Promise.resolve(amrApi.safetyAlert({ kind: 'hub', label: p.label, zone: p.zone, evac: 0, total: 0 })).then(poke, poke) } else { localEndAt = Date.now(); Promise.resolve(amrApi.safetyEnd()).then(poke, poke) } }
+      else if (p.stage >= 2 && p.stage <= 4) { alertSent = true; Promise.resolve(amrApi.safetyAlert({ kind: 'batt', label: p.code, code: p.code, stage: p.stage, temp: p.temp || 0 })).then(poke, poke) }
+      else if (p.stage === 0) { localEndAt = Date.now(); Promise.resolve(amrApi.safetyEnd()).then(poke, poke) }
       if (type === 'bfire') { const M = { 0: ['INFO', '관리자 확인 · 배터리 교체 후 복귀'], 1: ['WARN', '배터리 온도 이상 · 작업 중단'], 2: ['CRIT', '배터리 위험 ' + (p.temp || '') + '℃ · 격리 구역 이동'], 3: ['CRIT', '배터리 화재 · 소화 설비 작동'], 4: ['WARN', '화재 진압 · 접근 금지'] }[p.stage]; if (M) amrApi.event(p.code, M[0], S.sc.phase, p.code + ' ' + M[1]) } // 서버 이력(events)에도 남김
       return } // 26.10.29 화재 기록 → 대시보드
     if (type === 'vehicle') { onVehicle(p); return }
@@ -550,7 +571,8 @@ const estopTimer = setInterval(async () => {
     bar.style.cssText = 'position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:8;display:none;flex-wrap:wrap;align-items:center;justify-content:center;gap:6px 8px;padding:8px 12px;border-radius:10px;background:rgba(8,14,24,.88);border:1px solid rgba(120,170,255,.35);color:#e8eef6;font:600 13px "Malgun Gothic",sans-serif;max-width:94%;width:max-content'
     const mk = (t, bg, title) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = t; if (title) b.title = title; b.style.cssText = 'white-space:nowrap;flex:none;font:inherit;padding:6px 10px;border-radius:7px;cursor:pointer;color:#fff;border:1px solid rgba(255,255,255,.25);background:' + bg; return b }
     const bStart = mk('▶ 자동 시연', 'rgba(30,90,170,.92)'), bPause = mk('⏸ 일시정지', 'rgba(60,70,90,.92)'), bNext = mk('⏭ 다음 장면', 'rgba(60,70,90,.92)'), bStop = mk('■ 중단', 'rgba(110,30,30,.92)')
-    bStart.dataset.act = 'start'; bStop.dataset.act = 'stop'   // 26.10.31 S-Bot 상단 '▶ 시연 / ■ 시연 중지' 가 이 버튼을 찾는 표시 (버튼 순서가 바뀌어도 동작)
+    bStart.dataset.act = 'start'; bStop.dataset.act = 'stop'; bStop.style.display = 'none'   // 26.11.02 '■ 중단' 버튼은 화면에서 숨김 (S-Bot 상단 '■ 시연 중지' 가 이 버튼을 눌러 중단 — 요소는 남김)
+       // 26.10.31 S-Bot 상단 '▶ 시연 / ■ 시연 중지' 가 이 버튼을 찾는 표시 (버튼 순서가 바뀌어도 동작)
     const chips = document.createElement('span'); chips.style.cssText = 'display:inline-flex;gap:4px'
     const cap = document.createElement('span'); cap.style.cssText = 'flex-basis:100%;min-width:0;line-height:1.35;text-align:center'
     bar.append(bStart, bPause, bNext, chips, bStop, cap)
@@ -623,7 +645,8 @@ const estopTimer = setInterval(async () => {
     let wasOn = false
     // 26.10.31 시연이 도는 동안에는 '단계 설명' 자막을 자동으로 펼치고, 끝나면 다시 접는다 (평소에는 3D 를 가리지 않게 접힌 상태)
     const vis = () => { const on = !!document.querySelector('.sb-demo.run, .sb-demo2.run'); bar.style.display = (on && !remoteView()) ? 'flex' : 'none'
-      if (on !== wasOn) { wasOn = on; try { const cb = root.querySelector('.capbar'); if (cb) { cb.classList.toggle('open', on); const t = cb.querySelector('.cap-tg'); if (t) t.setAttribute('aria-expanded', String(on)) } } catch { /* 무시 */ } }
+      if (on !== wasOn) { wasOn = on; if (!on) { try { if (document.fullscreenElement === root) document.exitFullscreen().catch(() => {}) } catch { /* 무시 */ } }   // 26.11.02 시연이 끝나면 전체 화면도 해제
+        try { const cb = root.querySelector('.capbar'); if (cb) { cb.classList.toggle('open', on); const t = cb.querySelector('.cap-tg'); if (t) t.setAttribute('aria-expanded', String(on)) } } catch { /* 무시 */ } }
       // 허브 하단 설명문을 가리지 않도록, 그 박스 바로 위에 띄움
       try { const vp = $('viewport'); const c = $('caption'); const el = c && c.parentElement; let g = el ? vp.getBoundingClientRect().bottom - el.getBoundingClientRect().top : 0; if (!(g > 0 && g < 260)) g = 0; bar.style.bottom = (on && g ? Math.round(g) + 8 : 14) + 'px' } catch { /* 무시 */ } }   // 위쪽 '▶ 시연'이 도는 동안에만 보임 (SbotLayout 의 .sb-demo.run)
     paint(); vis(); const visT = setInterval(vis, 600)
@@ -705,6 +728,14 @@ const estopTimer = setInterval(async () => {
   }
   fitHeight()
   window.addEventListener('resize', fitHeight)
+  // 26.11.02 전체 화면(Fullscreen API): 이 화면 전체(3D + 좌우 패널을 감싼 검정 컨테이너)를 전체 화면으로 — 들어가고 나올 때 3D 렌더러 · 카메라 크기를 다시 계산
+  const onFs = () => {
+    root.classList.toggle('is-fs', document.fullscreenElement === root)
+    const rs = () => { try { if (scene) scene.resize() } catch { /* 무시 */ } }   // renderer.setSize · camera.aspect · updateProjectionMatrix
+    rs(); [60, 200, 500, 1000].forEach((t) => setTimeout(rs, t))
+    try { window.dispatchEvent(new Event('resize')) } catch { /* 무시 */ }
+  }
+  document.addEventListener('fullscreenchange', onFs)
   const fitTimer = setTimeout(fitHeight, 300) // 관리자 레이아웃이 자리 잡은 뒤 한 번 더
 
   /* ── 설명 창 ── */
@@ -747,7 +778,7 @@ const estopTimer = setInterval(async () => {
   }
   if (btn2d) btn2d.addEventListener('click', () => set2D(!(scene && scene.is2D), true))
   if (btnTheme) btnTheme.addEventListener('click', () => setTheme(root.classList.contains('light') ? 'dark' : 'light', true))
-  set2D(store.get(VIEW2D_KEY) === '1', false)
+  set2D(true, false) // 26.11.02 허브 관제는 항상 2D 로 시작 (3D 는 '3D' 버튼으로 전환)
   setTheme(store.get(THEME_KEY) === 'light' ? 'light' : 'dark', false)
 
   function notice(text, col) {
@@ -867,7 +898,9 @@ const estopTimer = setInterval(async () => {
     sim,
     get scene() { return scene },
     destroy() {
-      clearInterval(alertTimer); clearInterval(syncTimer); clearInterval(estopTimer)
+      // 26.11.03 화재 중에 화면을 떠나도 종료하지 않는다(서버 경보 유지) — 마지막 대피 수만 저장하고, 다시 열면 이어서 보여 준다
+      try { if (!remoteView() && S.fire.on) snapshotFire({ evac: S.fire.evac, total: S.fire.total, stage: S.fire.total && S.fire.evac >= S.fire.total ? '대피 완료' : '대피 중' }) } catch { /* 무시 */ }
+      clearInterval(alertTimer); clearInterval(syncTimer); clearInterval(estopTimer); clearInterval(snapTimer)
       destroyed = true
       demo.destroy()
       offDb()
@@ -879,6 +912,8 @@ const estopTimer = setInterval(async () => {
       chartRO.disconnect()
       root.removeEventListener('pointerdown', resumeOnGesture)
       window.removeEventListener('resize', fitHeight)
+      document.removeEventListener('fullscreenchange', onFs)
+      try { if (document.fullscreenElement === root) document.exitFullscreen().catch(() => {}) } catch { /* 무시 */ }
       window.removeEventListener('keydown', onKey)
       clearTimeout(fitTimer)
       sound.dispose()

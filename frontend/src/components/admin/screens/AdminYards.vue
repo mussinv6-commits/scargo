@@ -12,7 +12,7 @@
       title="야드"
       id-key="yardId"
       :columns="columns"
-      :rows="visibleRows"
+      :rows="rows"
       :loading="loading"
       :form-fields="formFields"
       :page-size="10"
@@ -24,7 +24,7 @@
 
     <YardMapModal
       :show="isMapOpen"
-      :yards="visibleRows"
+      :yards="rows"
       :selected-yard="selectedYard"
       @close="isMapOpen = false"
     />
@@ -33,7 +33,6 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { rowsForViewDate } from '@/components/admin/adminViewDate.js'
 import CrudTable from '@/components/admin/CrudTable.vue'
 import AdminPageHeader from '@/components/admin/AdminPageHeader.vue'
 import YardMapModal from '@/components/admin/YardMapModal.vue'
@@ -41,7 +40,6 @@ import { adminApi, pickErrorMessage } from '@/utils/adminApi'
 import { normalizeRows, withBoolAliases, toNum, updateWithFallback , deleteError } from '@/utils/apiHelpers'
 
 const rows = ref([])
-const visibleRows = computed(() => rowsForViewDate(rows.value, 'createdAt'))
 const loading = ref(true)
 const isMapOpen = ref(false)
 const selectedYard = ref(null)

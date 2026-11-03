@@ -245,7 +245,7 @@ function tick(now){var dt=Math.min((now-last)/1000,.1);last=now;updBlimp(dt,now)
  if(!paused){ROUTES.forEach(function(r,i){
   if(r.hold>0){r.hold-=dt*Math.min(speed,2);r.state='입고 완료';if(r.hold<=0){r.t=0;r.state='이동 중';if(window.SBOT&&r.curNo&&!r.asg)SBOT.depart(SB_KEY[r.id],r.curNo);sbStart(r)}}
   else{var prev=r.t;r.t+=dt*speed/60;
-   if(prev<r.gt&&r.t>=r.gt){popRoute=r;r.pr=rateAt(tod);r.pt=hhmm(tod);r.est=r.fin=Math.round(r.base*(1-r.pr));r.laps=(r.laps||0)+1;var over=(r.id==='T3'&&r.laps%2===1);var w=over?'축중 11.4t':'축중 '+(7+Math.random()*1.5).toFixed(1)+'t';
+   if(prev<r.gt&&r.t>=r.gt){popRoute=r;r.pr=rateAt(tod);r.pt=hhmm(tod);r.est=r.fin=Math.round(r.base*(1-r.pr)/10)*10;r.laps=(r.laps||0)+1;var over=(r.id==='T3'&&r.laps%2===1);var w=over?'축중 11.4t':'축중 '+(7+Math.random()*1.5).toFixed(1)+'t';
     pop.innerHTML='<b>'+r.id+' 톨게이트 통과</b>'+(r.curNo?'<br><span class="plt">'+r.curNo+'</span>':'')+'<br>'+w+(over?'<br><span style="color:#ef6b6b">과적 적발 · 과태료 부과 후 통과</span>':' · 과적 정상');pop.style.borderColor=over?'#ef6b6b':r.css;popUntil=now+(over?3400:2600)}
    r.state=(r.t>r.gt-.025&&r.t<r.gt+.03)?'톨게이트 통과':'이동 중';
    if(r.t>=1){r.t=1;r.hold=6/(window.SBOT&&SBOT.flow?SBOT.flow():1);r.at=hhmm(tod);if(window.SBOT)r.curNo=SBOT.arrive(SB_KEY[r.id],{items:r.nItems||8,base:r.base,fin:r.fin,asg:r.asg,no:r.curNo})}}
@@ -262,7 +262,7 @@ function clkRead(){try{var c=JSON.parse(localStorage.getItem('sbot_clock')||'nul
 function clkTod(){var c=clkRead();return c?(((c.tod+(Date.now()-c.at)/1000*c.rate)%24)+24)%24:null}
 function clkRebase(){try{var t=clkTod();localStorage.setItem('sbot_clock',JSON.stringify({tod:t==null?tod:t,at:Date.now(),rate:paused?0:speed*.1}))}catch(e){}} // 속도·일시정지가 바뀔 때만 기준점을 다시 잡는다 (물류센터 화면도 이 값 하나를 따른다)
 function updEnv(dt,force){var ct=clkTod();if(ct==null){clkRebase();ct=tod}tod=ct;var n=nightF(tod);
- document.getElementById('clk').textContent='시각 '+pad(Math.floor(tod))+':'+pad(Math.floor(tod%1*60))+(n>.5?' · 밤':' · 낮');
+ document.getElementById('clk').textContent='시각 '+pad(Math.floor(tod))+':'+pad(Math.floor(tod%1*60))+(n>.5?' · 야간':' · 주간');
  if(!force&&Math.abs(n-lastN)<.01)return;lastN=n;
  var g=skg,gr=g.createLinearGradient(0,0,0,256);gr.addColorStop(0,mixc('#4f8fe0','#04070f',n).getStyle());gr.addColorStop(.5,mixc('#8bbcf0','#0c1834',n).getStyle());gr.addColorStop(1,mixc('#dbe9f7','#26406e',n).getStyle());g.fillStyle=gr;g.fillRect(0,0,2,256);bgTex.needsUpdate=true;
  scene.fog.color.copy(mixc('#cfe0f2','#1c2f58',n));ground.material.color.copy(mixc('#ffffff','#262d4c',n));hillMat.color.copy(mixc('#6f8d66','#16203a',n));treeMats.forEach(function(m){m.color.copy(mixc('#ffffff','#4a5578',n))});lineWhite.color.copy(mixc('#ececec','#7d8494',n));

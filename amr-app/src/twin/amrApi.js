@@ -31,7 +31,15 @@ function denied(method, path) { deniedListeners.forEach((f) => f({ method, path 
 function hp(path) { return hubId == null ? path : path + (path.includes('?') ? '&' : '?') + 'hubId=' + encodeURIComponent(hubId) }
 let cookieAuth = false // 웹: 팀 관리자 로그인 쿠키로 인증 (토큰 대신)
 const authListeners = new Set()
-function setToken(t, exp) { token = t || null; if (token) needAuth = false; tokenExp = t ? new Date(exp).getTime() : 0; ls.set(TOKEN_KEY, token); ls.set(EXP_KEY, token ? String(tokenExp) : null); authListeners.forEach((f) => f(!!token)) }
+// 서버가 주는 만료 시각을 안전하게 읽는다 (문자열 소수점 자리수 · 숫자 · 배열 형식이 달라도 읽고, 못 읽으면 24시간으로 본다)
+function parseExp(exp) {
+  let ms = NaN
+  if (typeof exp === 'number') ms = exp < 1e11 ? exp * 1000 : exp
+  else if (Array.isArray(exp) && exp.length >= 6) ms = new Date(exp[0], exp[1] - 1, exp[2], exp[3], exp[4], exp[5]).getTime()
+  else if (exp != null) { ms = new Date(exp).getTime(); if (Number.isNaN(ms)) ms = new Date(String(exp).replace(/(\.\d{3})\d+/, '$1')).getTime() }
+  return Number.isNaN(ms) || ms <= Date.now() ? Date.now() + 24 * 3600 * 1000 : ms
+}
+function setToken(t, exp) { token = t || null; if (token) needAuth = false; tokenExp = t ? parseExp(exp) : 0; ls.set(TOKEN_KEY, token); ls.set(EXP_KEY, token ? String(tokenExp) : null); authListeners.forEach((f) => f(!!token)) }
 function locked() { if (cookieAuth) { authListeners.forEach((f) => f(false)); return } needAuth = true; if (token) setToken(null); else authListeners.forEach((f) => f(false)) } // 서버가 401 → 다시 6자리 입력
 function headers(body) { const h = {}; if (body) h['Content-Type'] = 'application/json'; if (token) h['X-AMR-Token'] = token; return h }
 
@@ -94,6 +102,7 @@ export const amrApi = {
   settings() { return req('GET', hp('/api/amr/settings')) },
   saveSettings(rulThresholdHours, chargeAtPct, by) { return req('PUT', hp('/api/amr/settings'), { rulThresholdHours, chargeAtPct, by }) },
   history(code, minutes = 5) { return req('GET', hp('/api/amr/robots/' + encodeURIComponent(code) + '/telemetry?minutes=' + minutes)) },
+  predictiveSummary() { return req('GET', hp('/api/amr/predictive-summary')) }, // 26.11.02 예지보전 성과 · 이번 달 (관제 홈)
   maintenanceList(limit = 10) { return req('GET', hp('/api/amr/maintenance?limit=' + limit)) },
   // 26.10.15 입구 · 출구 번호판 OCR: 서버가 gate_api.py(YOLO + CRNN)를 불러 인식하고 DB로 차종 판정
   //  인식에 몇 초 걸릴 수 있어 따로 기다리고, OCR 서버만 꺼져 있어도 DB 연결 표시는 바꾸지 않는다
@@ -121,6 +130,8 @@ export const amrApi = {
   // ── 26.10.16 AMR 관리자 인증 (웹 = 팀 관리자 로그인 · 앱 = 웹에 뜬 6자리 / QR) ──
   useCookieAuth() { cookieAuth = true },
   get authed() { return !!token && tokenExp > Date.now() },
+  // 서버는 출입증이 유효하다는데 기기에 저장된 만료 시각이 깨져 있으면(예전 버전이 저장한 값) 서버 값으로 바로잡는다
+  adoptExp(exp) { if (!token) return; tokenExp = parseExp(exp); ls.set(EXP_KEY, String(tokenExp)); authListeners.forEach((f) => f(true)) },
   get tokenExpiresAt() { return tokenExp },
   onAuth(fn) { authListeners.add(fn); return () => authListeners.delete(fn) },
   authStatus() { return auth('GET', '/status') },

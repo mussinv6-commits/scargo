@@ -8,6 +8,7 @@
           <div class="admin-nav-group-label sb-grp"><span>S-Bot</span></div>
           <RouterLink v-if="sbotAdminView" to="/sbot" class="admin-nav-item admin-nav-home" :class="{ active: route.path === '/sbot' }"><i class="bi bi-speedometer2"></i> 대시보드</RouterLink>
           <RouterLink to="/sbot/hub" class="admin-nav-item admin-nav-home" :class="{ active: route.path.startsWith('/sbot/hub') }"><i class="bi bi-diagram-3"></i> 허브 관제</RouterLink>
+          <RouterLink v-if="sbotAdminView || canAudit" to="/sbot/alerts" class="admin-nav-item admin-nav-home" :class="{ active: route.path.startsWith('/sbot/alerts') }"><i class="bi bi-bell"></i> AMR 알림 내역</RouterLink>
           <div class="admin-side-foot"><p>멈추지 않는 허브,<br />AMR 예지보전</p></div><!-- 26.10.28 S-Bot(AMR 전용) 문구 -->
         </div>
       </aside>
@@ -15,7 +16,7 @@
         <header class="admin-topbar">
           <button type="button" class="admin-burger" :aria-label="collapsed ? '메뉴 펼치기' : '메뉴 숨기기'" @click="collapsed = !collapsed"><i class="bi bi-list"></i></button>
           <div v-if="route.path === '/sbot'" class="ops-head-copy"><h1>S-Bot 대시보드</h1><p>허브 AMR 운영 현황을 한눈에 확인하세요.</p></div>
-          <h1 v-else class="admin-page-title">{{ route.path.startsWith('/sbot/hub') ? '허브 관제' : 'S-Bot' }}</h1>
+          <h1 v-else class="admin-page-title">{{ route.path.startsWith('/sbot/hub') ? '허브 관제' : route.path.startsWith('/sbot/alerts') ? 'AMR 알림 내역' : 'S-Bot' }}</h1>
           <div class="admin-topbar-right">
             <span class="sb-stat" :class="stat" :title="statTip"><i></i>{{ statText }}</span>
             <a v-if="sbotAdminView" href="#" class="sb-demo2" :class="{ run: demo >= 0 }" @click.prevent="demo >= 0 ? stopDemo() : startDemo()">{{ demo >= 0 ? "■ 시연 중지" : "▶ 시연" }}</a>
@@ -34,6 +35,7 @@
         <!-- 26.10.22 통합: 대시보드 · 택배 이동 · 물류센터는 S-Bot 관리자만, 관제사(CONTROL · HUB_OP)는 허브 관제만 -->
         <RouterLink v-if="sbotAdmin" to="/sbot">대시보드</RouterLink>
         <RouterLink to="/sbot/hub">허브 관제</RouterLink>
+        <RouterLink v-if="sbotAdmin" to="/sbot/alerts">AMR 알림 내역</RouterLink>
         <!-- 26.10.25 상단 메뉴에서 숨김: 출입증 감사(/sbot/amr-audit) 화면과 경로는 그대로 남겨 둠
         <RouterLink v-if="canAudit" to="/sbot/amr-audit">출입증 감사</RouterLink> -->
         <RouterLink v-if="canScargo" to="/admin" class="sb-sw">S CARGO</RouterLink><!-- 26.10.28 총관리자 첫 화면(/admin)으로 --><!-- fix_1105 (scargo_1): S Cargo 관리자는 S Cargo 로 전환 -->
@@ -117,9 +119,18 @@ async function startDemo() {
   if (router.currentRoute.value.path !== "/sbot/hub") router.push("/sbot/hub");
   for (let n = 0; n < 40 && !hubBtn("start"); n++) await new Promise((r) => setTimeout(r, 250)); // 허브 화면이 뜰 때까지 최대 10초
   hubBtn("start")?.click();
+  enterFs(); // 26.11.02 시연을 시작하면 허브 관제(3D + 좌우 패널)를 전체 화면으로
   syncDemo();
 }
-function stopDemo() { hubBtn("stop")?.click(); syncDemo(); }
+function stopDemo() { hubBtn("stop")?.click(); exitFs(); syncDemo(); }
+// 26.11.02 전체 화면: 3D 와 좌우 패널을 감싼 컨테이너(.amr-twin)에 Fullscreen API 적용. Esc 로 나와도 시연은 계속, '시연 중지'를 누르면 전체 화면도 해제
+function enterFs() {
+  const el = document.querySelector(".amr-twin");
+  if (el && document.fullscreenElement !== el && el.requestFullscreen) el.requestFullscreen().catch(() => {});
+}
+function exitFs() {
+  if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
+}
 function logout() {
   axios.post(`${API_BASE}/api/accounts/logout`, {}, { withCredentials: true })
     .catch(() => {})

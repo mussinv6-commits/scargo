@@ -12,9 +12,10 @@
         </button>
         <span class="gate-live-scan-hint">{{ scanGuideText }}</span>
         <p v-if="liveScanError" class="gate-live-scan-error">⚠ {{ liveScanError }}</p>
-        <div v-if="yardVehicles.length" class="gate-yard">
-          <div v-for="v in yardVehicles" :key="v" class="gate-yard-row">
+        <div v-if="yardShown.length" class="gate-yard">
+          <div v-for="v in yardShown" :key="v" class="gate-yard-row">
             <strong class="gate-yard-no">{{ v }}</strong>
+            <span v-if="yardStatus[v]?.container" class="gate-yard-ct">📦 {{ yardStatus[v].container }}</span>
             <span class="gate-yard-state">{{ yardStateText(v) }}</span>
             <button
               class="gate-live-scan-btn gate-yard-exit"
@@ -231,6 +232,13 @@ function removeYard(vno, byUser = false) {
   yardEntryAt.value = at
   saveYard()
 }
+// 26.11.02 항만 게이트는 컨테이너 연동 화물차만 보여 준다: 적재 기록(컨테이너 번호)이 없는 차량(택배차 등)은 목록에서 뺀다. 적재 기록을 못 불러오면 거르지 않는다
+const yardShown = computed(() =>
+  yardVehicles.value.filter((v) => {
+    const st = yardStatus.value[v]
+    return !!st && (!st.loadingKnown || !!st.container)
+  }),
+)
 function canExit(vno) {
   const st = yardStatus.value[vno]
   return !!st && st.loading === 'COMPLETED' && st.overload === 'pass'
@@ -240,7 +248,7 @@ function yardStateText(vno) {
   if (!st) return '상태 확인 중...'
   if (st.overload === 'fail') return `⛔ 과적(검사 #${st.checkId}) - 재계량 통과 필요`
   if (st.overload === 'none') return '⏳ 검사소 대기'
-  if (st.loading !== 'COMPLETED') return `⏳ 상하차 ${st.loading || '대기'}`
+  if (st.loading !== 'COMPLETED') return `⏳ 상하차 ${{ PENDING: '대기', IN_PROGRESS: '진행 중', CANCELED: '취소' }[st.loading] || st.loading || '대기'}`
   if (st.overload === 'pass') return '✅ 출차 가능'
   if (st.overload === 'unknown') return '⚠ 과적 판정 조회 실패(로그인/백엔드 확인)'
   return '확인 중...'
@@ -258,7 +266,7 @@ async function fetchLoadingMap() {
     for (const r of res.data?.content ?? []) {
       if (!r.vehicleNo) continue
       const prev = map[r.vehicleNo]
-      if (!prev || Number(r.recordId || 0) > prev.id) map[r.vehicleNo] = { id: Number(r.recordId || 0), status: r.status }
+      if (!prev || Number(r.recordId || 0) > prev.id) map[r.vehicleNo] = { id: Number(r.recordId || 0), status: r.status, container: r.containerNo || '' }
     }
     totalPages = Math.max(1, Number(res.data?.totalPages || 1))
     p += 1
@@ -340,15 +348,17 @@ async function refreshYardStatus() {
   await syncYardFromLogs()
   if (!yardVehicles.value.length) return
   let loadingMap = {}
+  let loadingKnown = false
   try {
     loadingMap = await fetchLoadingMap()
+    loadingKnown = true
   } catch (err) {
     console.error('상하차 상태 조회 실패:', err)
   }
   const next = {}
   await Promise.all(
     yardVehicles.value.map(async (vno) => {
-      next[vno] = { loading: loadingMap[vno]?.status || '', ...(await fetchOverload(vno)) }
+      next[vno] = { loading: loadingMap[vno]?.status || '', container: loadingMap[vno]?.container || '', loadingKnown, ...(await fetchOverload(vno)) }
     }),
   )
   yardStatus.value = next
@@ -363,7 +373,7 @@ function reset() {
 // ---- 실시간 게이트 버튼 (gate_api.py, localhost:8001, POST /scan) ----
 const liveScanBusy = ref(false)
 const liveScanError = ref('')
-const scanGuideText = '게이트인은 항상 가능합니다. 게이트아웃은 아래 구내 차량 중 상하차 완료 + 과적 통과 차량만 가능합니다.'
+const scanGuideText = '컨테이너 연동 화물차만 표시됩니다. 게이트인은 항상 가능합니다. 게이트아웃은 아래 구내 차량 중 상하차 완료 + 과적 통과 차량만 가능합니다.'
 const idleStatusText = computed(() =>
   yardVehicles.value.length ? `구내 차량 ${yardVehicles.value.length}대 · 게이트인/아웃 버튼을 눌러주세요` : '게이트인 버튼을 눌러주세요',
 )
@@ -544,6 +554,15 @@ onBeforeUnmount(() => {
 .gate-yard-no {
   min-width: 110px;
   font-size: 14px;
+}
+.gate-yard-ct {
+  font-size: 12px;
+  font-weight: 700;
+  color: #35507a;
+  background: #e8eef8;
+  border-radius: 999px;
+  padding: 2px 9px;
+  white-space: nowrap;
 }
 .gate-yard-state {
   flex: 1;

@@ -1288,7 +1288,7 @@ export function createAmrScene(container, sim, opts = {}) {
       if (oc.exit === 'scan') { head = '출차 OCR · 인식 중…'; body = fmtPlate(oc.plate) }
       else { head = (oc.exit.ok ? '출차 OCR ✓' : '출차 번호 불일치') + conf(oc.exit.conf); body = fmtPlate(oc.exit.plate) || '판독 불가'; foot = side ? HUBS[d.hub].name + '행 · ' + d.boxes.length + '건 출고 기록' : '하차 완료 · 출차 기록'; if (!oc.exit.ok) cls = ' is-block' }
     } else if (oc.st === 'scan') { cls = ' is-scan'; head = '입차 OCR · 번호판 인식 중…'; body = '· · · · ·' }
-    else if (oc.st === 'block') { cls = ' is-block'; head = '미등록 차량 · 진입 차단' + conf(oc.conf); body = fmtPlate(oc.plate) || '판독 불가'; foot = 'DB 등록 차량 아님 → 회차' }
+    else if (oc.st === 'block') { cls = ' is-block'; head = ({ PENDING: '진입 허가 심사대기', REJECTED: '진입 불허 차량', UNREADABLE: '번호판 판독 불가' }[oc.reason] || '미등록 차량') + ' · 진입 차단' + conf(oc.conf); body = fmtPlate(oc.plate) || '판독 불가'; foot = oc.reason === 'PENDING' || oc.reason === 'REJECTED' ? '진입 허가 차량 아님 → 회차' : 'DB 등록 차량 아님 → 회차' }
     else if (oc.st === 'off') { cls = ' is-off'; head = 'OCR 서버 응답 없음'; body = fmtPlate(oc.plate); foot = '예시 번호 · gate_api.py 확인' }
     else { head = '입차 OCR ✓' + conf(oc.conf); body = fmtPlate(oc.plate); foot = (oc.company ? oc.company + ' · ' : '') + (KIND_KO[oc.kind] || '') + ' · 등록 차량 → ' + where }
     const key = cls + head + body + foot

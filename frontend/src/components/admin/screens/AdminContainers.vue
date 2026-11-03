@@ -13,7 +13,7 @@
       title="컨테이너"
       id-key="containerNo"
       :columns="columns"
-      :rows="visibleRows"
+      :rows="rows"
       :loading="loading"
       :form-fields="formFields"
       :page-size="10"
@@ -38,12 +38,10 @@ import { onMounted, ref, computed } from 'vue'
 import CrudTable from '@/components/admin/CrudTable.vue'
 import AdminPageHeader from '@/components/admin/AdminPageHeader.vue'
 import ContainerMapModal from '@/components/admin/ContainerMapModal.vue'
-import { rowsForViewDate } from '@/components/admin/adminViewDate.js'
 import { adminApi, pickErrorMessage } from '@/utils/adminApi'
 import { normalizeRows, withBoolAliases, toNum, seg, updateWithFallback , deleteError } from '@/utils/apiHelpers'
 
 const rows = ref([])
-const visibleRows = computed(() => rowsForViewDate(rows.value, 'createdAt'))
 const locations = ref([])
 const loading = ref(true)
 const companyOptions = ref([])

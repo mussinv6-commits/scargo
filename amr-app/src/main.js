@@ -12,6 +12,7 @@ import { amrApi } from './twin/amrApi.js'   // DB 연동: 웹 관제 화면과 �
 import { LocalNotifications } from '@capacitor/local-notifications' // 휴대폰 알림 (차단 · 정비)
 import { mountAuthGate, hoursLeft } from './twin/amrAuthGate.js' // 26.10.16 관리자 잠금 화면 (웹의 앱 연결 QR · 6자리)
 import { BarcodeScanner, BarcodeFormat } from '@capacitor-mlkit/barcode-scanning' // QR 찍기 (구글 ML Kit)
+import { ScreenOrientation } from '@capacitor/screen-orientation' // 26.11.02 휴대폰은 세로 고정 · 태블릿은 가로 · 세로 자유
 
 const $ = (id) => document.getElementById(id)
 const PH_COL = { 1: COLORS.cyan, 2: COLORS.amber, 3: COLORS.amber, 4: COLORS.red, 5: COLORS.green }
@@ -112,7 +113,7 @@ try {
 }
 let coldView = ''
 
-// 3D 화면을 홈 미니 칸 ↔ 3D 탭으로 옮긴다 (렌더러는 하나만 쓴다)
+// 3D 화면은 3D 탭에만 붙인다 (렌더러는 하나만 쓴다)
 // 훈련 버튼 묶음은 장면이 만들어 host 안에 두므로, 설정 팝업 안으로 옮긴다 (시계 · 안내 띠는 새 HUD 로 대체)
 function dockBar() {
   const ctl = host.querySelector('.twin-fire-ctl')
@@ -121,7 +122,7 @@ function dockBar() {
 setInterval(dockBar, 1500) // 훈련 버튼이 늦게 만들어져도 띠로 옮김
 function placeHost() {
   dockBar()
-  const slot = tab === '3d' ? $('full-slot') : tab === 'home' ? $('mini-slot') : null
+  const slot = tab === '3d' ? $('full-slot') : null // 26.11.02 홈에는 3D 미리보기를 두지 않는다
   if (slot && host.parentElement !== slot) slot.appendChild(host)
   if (!slot && host.parentElement !== $('app')) $('app').appendChild(host)
   if (scene) scene.resize()
@@ -155,24 +156,32 @@ function robotStateText(a) {
   if (a.box && a.task) s += a.task.type === 'out' ? ' · → D' + (a.box.hub + 4) + ' ' + HUBS[a.box.hub].name : ' · → 랙 ' + ZONES[a.task.slot.r].tag
   return s
 }
+// 26.11.02 관제 홈: 운영 단계 · 지금 확인할 일 · 예지보전 성과 · 운영 기준 (타일 4개)
+const STEP_N = ['정상 운영', '진동 감지', 'AI 예측 · 승인', '정비', '복귀']
+let stepSig = '', pfCache = null
+// 26.11.02 아래 값들은 처음 화면을 그릴 때(setTab('home')) 바로 쓰이므로 반드시 그보다 위에서 선언한다 (뒤에 두면 앱이 처음부터 멈춤)
+const ackBlock = new Set(), seenAt = new Map()
+let holdKey = '', todoSig = null, cfgChangedAt = null
+const maintKey = () => 'm' + S.sc.target + ':' + (phaseAt[3] ? phaseAt[3].getTime() : 0)
 function renderHome() {
-  const p = S.sc.phase, col = PH_COL[p]
-  const st = $('h-step'); st.style.setProperty('--c', col); st.style.setProperty('--cb', PH_BG[p])
-  st.querySelector('b').textContent = 'STEP 0' + p; st.querySelector('span').textContent = PHASE_T[p]
-  st.querySelectorAll('.dots i').forEach((d, i) => { d.className = i + 1 < p ? 'd' : i + 1 === p ? 'n' : '' })
-  $('h-cap').textContent = captionOf(S)
-  const amrs = S.amrs.filter((a) => a.kind !== 'fl')
-  $('h-act').textContent = amrs.filter((a) => a.role === 'active' && !a.maintFlag && a.state !== 'maint').length + '/' + amrs.length
-  // 오늘 처리 · 입출차 · 차단: DB 집계(KPI)가 있으면 그 값, 없으면 이 휴대폰 시뮬레이션 값
-  $('h-thru').textContent = kpiCache ? kpiCache.today : S.thru
-  $('h-gate').textContent = kpiCache ? kpiCache.entries + kpiCache.exits : vehCache.length
-  const blk = kpiCache ? kpiCache.blocks : vehCache.filter((v) => v.decision === 'BLOCK').length
-  const hb = $('h-block'); hb.textContent = blk; hb.className = blk ? 'crit' : 'good'
-  const T = S.amrs[S.sc.target]
-  // 지금 확인할 일 (조치가 필요한 것만 · 누르면 해당 화면으로)
+  const p = S.sc.phase, T = S.amrs[S.sc.target], wait = p === 3 && S.sc.await
+  const sig = [p, wait, ...[1, 2, 3, 4, 5].map((k) => (phaseAt[k] ? clock(phaseAt[k]) : ''))].join('|')
+  if (sig !== stepSig) {
+    stepSig = sig
+    const el = $('t-steps'); el.style.setProperty('--sc', PH_COL[p]); el.style.setProperty('--scb', PH_BG[p])
+    el.innerHTML = STEP_N.map((n, i) => {
+      const k = i + 1, cls = k < p ? 'd' : k === p ? 'n' : ''
+      const t = k === 3 && wait ? '승인 대기' : k <= p ? (phaseAt[k] ? clock(phaseAt[k]) : '완료') : '예정'
+      return `<li class="${cls}${k === 3 && wait ? ' wait' : ''}"><span class="c">${k < p ? '✓' : k}</span><b>${n}</b><em>${t}</em></li>`
+    }).join('')
+    $('t-n').textContent = '0' + p
+  }
+  $('t-sub').textContent = wait ? T.name + ' · 관리자 승인 대기 중' : p === 1 ? '이상 없음 · ' + (phaseAt[1] ? clock(phaseAt[1]) : '') + '부터 정상 운영' : T.name + ' · ' + PHASE_T[p]
   renderTodo(T)
-  // 최근 알림 3줄
-  $('h-recent').innerHTML = events.slice(0, 3).map((e) => { const [, , col] = EV_STYLE[e.lv] || EV_STYLE['']; return `<div class="rc"><i style="background:${col}"></i><span>${e.text}</span><em>${clock(e.time)}</em></div>` }).join('') || '<div class="hint">알림이 없습니다</div>'
+  $('pf-pre').textContent = pfCache ? pfCache.preemptive : '-'
+  $('pf-save').textContent = pfCache && pfCache.savedHours != null ? pfCache.savedHours : '-'
+  $('pf-un').textContent = pfCache ? pfCache.unplanned : '-'
+  renderCfg()
 }
 function renderFleet() {
   $('h-fleet').innerHTML = S.amrs.map((a, i) => {
@@ -445,8 +454,8 @@ function frame(now) {
   let simDt = 0
   if (playing && !document.hidden) { let t = dt * speed; simDt = t; while (t > 0) { const s = Math.min(0.025, t); sim.step(s); t -= s } }
   if (linked()) overlayRemote()
-  // 3D는 화면에 보일 때(홈 · 3D 탭)만 그린다 → 배터리 절약
-  if (scene && (tab === 'home' || tab === '3d') && !document.hidden) {
+  // 3D는 3D 탭일 때만 그린다 (홈에서는 렌더링을 멈춤) → 발열 · 배터리 절약
+  if (scene && tab === '3d' && !document.hidden) {
     const T = S.amrs[S.sc.target], p = S.sc.phase
     const callout = p >= 2 && p <= 4 ? (T.state === 'maint' ? { title: '정비 중', line: '예비기 AMR-05가 작업 대체', col: COLORS.red } : T.maintFlag ? { title: '고장 예측 · 약 ' + S.sc.rul + '시간', line: '누적 ' + tons(T) + 't · 작업 후 정비 이동', col: COLORS.red } : { title: '진동 이상 ' + T.vib.toFixed(1) + ' mm/s ▲', line: '누적 운반 ' + tons(T) + 't', col: COLORS.amber }) : null
     scene.update(now, simDt, dt, { selected, cargo: S.amrs[selected].box || null, callout, phase: p })
@@ -525,7 +534,7 @@ function applyVehicles(list) {
     const out = v.lane ? v.lane === 'OUT' : v.kind === 'COURIER'
     const d = (out ? S.outDocks : S.inDocks)[v.dock]; if (!d) return
     if (v.direction === 'EXIT') d.ocr = { st: 'ok', plate: v.plate, photo: v.photoPlate, conf: v.confidence, kind: v.kind, exit: null }
-    else d.ocr = { st: v.decision === 'BLOCK' || v.decision === 'HOLD' ? 'block' : 'ok', plate: v.plate, photo: v.photoPlate, conf: v.confidence, kind: v.kind, exit: null }
+    else d.ocr = { st: v.decision === 'BLOCK' || v.decision === 'HOLD' ? 'block' : 'ok', plate: v.plate, photo: v.photoPlate, conf: v.confidence, kind: v.kind, reason: v.blockReason, exit: null }
   })
   lastVehicleId = Math.max(lastVehicleId, ...list.map((v) => v.id))
   vehCache = list
@@ -543,7 +552,7 @@ function renderVehicles() {
     let [dl, c] = VDEC[v.decision] || [v.decision, 'a']
     if (v.sealStatus === 'OK') { dl = '씰일치'; c = 'g' } else if (v.sealStatus === 'PENDING') { dl = '대조대기'; c = 'a' } // 26.10.20 도크 씰 확인 상태
     const t = v.createdAt ? clock(new Date(v.createdAt)) : ''
-    const to = v.sealStatus === 'MISSING' ? '씰 미등록 · 게이트 대기' : v.sealStatus === 'MISMATCH' ? '씰 불일치 · 하차 보류' : v.decision === 'BLOCK' ? '미등록 · 진입 차단' : v.direction === 'EXIT' ? (VKIND[v.kind] || '') + (v.destHub ? ' · ' + v.destHub + '행' : '') + (v.boxCount ? ' ' + v.boxCount + '건' : '') : (VKIND[v.kind] || '') + ' → ' + (v.lane === 'OUT' ? '출고 D' + (v.dock + 4) : '입고 D' + (v.dock + 1))
+    const to = v.sealStatus === 'MISSING' ? '씰 미등록 · 게이트 대기' : v.sealStatus === 'MISMATCH' ? '씰 불일치 · 하차 보류' : v.decision === 'BLOCK' ? ({ PENDING: '심사대기', REJECTED: '진입 불허', UNREADABLE: '판독 불가' }[v.blockReason] || '미등록') + ' · 진입 차단' : v.direction === 'EXIT' ? (VKIND[v.kind] || '') + (v.destHub ? ' · ' + v.destHub + '행' : '') + (v.boxCount ? ' ' + v.boxCount + '건' : '') : (VKIND[v.kind] || '') + ' → ' + (v.lane === 'OUT' ? '출고 D' + (v.dock + 4) : '입고 D' + (v.dock + 1))
     return `<li data-id="${v.id}" class="${vPick === v.id ? 'on' : ''}"><b class="vp">${fmtPlate(v.plate) || '판독불가'}</b><span><strong>${to}</strong>${t}${v.confidence != null ? ' · 인식 ' + v.confidence + '%' : ''}</span><i class="vd ${c}">${v.direction === 'EXIT' ? (v.decision === 'EXIT_OK' ? '출차' : dl) : dl}</i></li>`
   }).join('') : '<li><span>해당 기록이 없습니다</span></li>'
 }
@@ -583,24 +592,57 @@ $('c-seg').addEventListener('click', (e) => {
   $('c-gate').hidden = b.dataset.s !== 'gate'; $('c-box').hidden = b.dataset.s !== 'box'
 })
 
-/* ── 지금 확인할 일: 차단 차량 · 정비 · 배터리 부족 ── */
-const ackBlock = new Set()
-function renderTodo(T) {
+/* ── 지금 확인할 일: 관리자가 결정할 것만 (정비 승인 · 차량 판정 · 충전 지시) ── */
+function todoItems(T) {
   const items = []
-  const [lv] = status(T)
-  if (T.state === 'maint') items.push({ lv: 'a', title: T.name + ' 정비 중 · 베어링 교체', body: '예비기 AMR-05 가 작업을 대신하는 중', robot: S.sc.target, btn: '로봇 보기' })
-  else if (T.maintFlag) items.push({ lv: 'a', title: T.name + ' 자동 정비 예약됨', body: '남은 수명 약 ' + S.sc.rul + '시간 · 기준 ' + S.cfg.rulAt + '시간 · 예비기 투입', robot: S.sc.target, btn: '로봇 보기' })
-  else if (S.sc.phase === 2 && S.sc.rul != null) items.push({ lv: 'a', title: T.name + ' 진동 이상 · 남은 수명 약 ' + S.sc.rul + '시간', body: '정비 기준 ' + S.cfg.rulAt + '시간 이하가 되면 자동 정비', robot: S.sc.target, btn: '로봇 보기' })
-  else if (lv === 'warn' || lv === 'crit') items.push({ lv: 'a', title: T.name + ' 진동 ' + T.vib.toFixed(1) + ' mm/s', body: 'AI 가 추세를 계산하는 중', robot: S.sc.target, btn: '로봇 보기' })
-  S.amrs.forEach((a, i) => { if (a.kind !== 'fl' && a.role === 'active' && a.batt < Math.min(25, S.cfg.chargeAt) && a.state !== 'charge') items.push({ lv: 'a', title: a.name + ' 배터리 ' + Math.round(a.batt) + '%', body: '작업이 끝나면 충전소로 이동', robot: i, btn: '로봇 보기' }) })
+  if (S.sc.await && holdKey !== maintKey()) items.push({ key: maintKey(), lv: 'r', label: '정비 승인', title: T.name + ' · 구동모터 베어링 교체', body: '남은 수명 약 ' + (S.sc.rul != null ? S.sc.rul : '-') + '시간 · 승인하면 예비기 AMR-05 가 투입됩니다', since: phaseAt[3] || null, acts: [['hold', '보류', ''], ['approve', '정비 승인', 'p']] })
+  const now = Date.now()
+  vehCache.filter((v) => (v.decision === 'BLOCK' || v.decision === 'HOLD') && !ackBlock.has(v.id) && v.createdAt && now - new Date(v.createdAt).getTime() < 3600e3).slice(0, 3).forEach((v) => items.push({ key: 'v' + v.id, lv: 'r', label: '차량 판정', plate: v.plate, title: v.decision === 'BLOCK' ? '미등록 차량 · 진입 차단' : '입차 대기 · 확인 필요', body: '물류 탭에서 번호판 · 씰을 확인하세요', since: new Date(v.createdAt), acts: [['veh', '물류에서 확인', '', v.id]] }))
+  S.amrs.forEach((a, i) => { if (a.kind !== 'fl' && a.role === 'active' && a.batt < Math.min(25, S.cfg.chargeAt) && a.state !== 'charge' && !a.needCharge) items.push({ key: 'c' + a.name, lv: 'a', label: '충전 지시', title: a.name + ' 배터리 ' + Math.round(a.batt) + '%', body: '충전 기준 ' + S.cfg.chargeAt + '% · 작업 중이면 끝난 뒤 충전소로 이동', acts: [['chg', '지금 충전', 'c', i]] }) })
+  items.forEach((it) => { if (!seenAt.has(it.key)) seenAt.set(it.key, it.since || new Date()); it.at = seenAt.get(it.key) })
+  return items
+}
+// 26.11.03 할 일이 없을 때도 "지금 무슨 일이 일어나는지"를 보여 준다 (상단 단계 표시와 같은 내용을 풀어서)
+function nowCard(T) {
+  const p = S.sc.phase, sp = S.amrs.find((a) => a.role === 'spare'), spn = sp ? sp.name : '예비기'
+  const T0 = {
+    1: ['정상 운영 중', 'AI가 모든 AMR의 진동을 계속 지켜보고 있습니다.<br>남은 수명이 ' + S.cfg.rulAt + '시간 이하가 되면 자동으로 정비를 예약하고 ' + spn + '를 투입합니다.'],
+    2: [T.name + ' 진동 이상 감지', 'AI가 진동 추세를 분석해 남은 수명을 계산하는 중입니다.<br>정비 기준(' + S.cfg.rulAt + '시간)에 닿으면 자동으로 정비가 예약됩니다.'],
+    3: [T.name + ' 정비 예약됨', '정비 승인이 자동으로 처리됐고 ' + spn + ' 투입을 준비하고 있습니다.'],
+    4: [T.name + ' 정비 중', spn + '가 작업을 대신하고 있습니다.<br>정비가 끝나면 자동으로 복귀하고, 관리자가 할 일은 없습니다.'],
+    5: [T.name + ' 복귀 완료', '정비를 마치고 정상 작업으로 돌아왔습니다.<br>다음 이상이 감지될 때까지 계속 지켜봅니다.'],
+  }[p] || ['정상 운영 중', '']
+  const steps = STEP_N.map((n, i) => `<span class="${i + 1 < p ? 'd' : i + 1 === p ? 'c' : ''}">${i + 1 < p ? '✓ ' : ''}${n}</span>`).join('')
+  return `<div class="td-okline"><i>✓</i><b>관리자가 처리할 일 없음</b><span>승인 · 차량 판정 · 충전 지시가 필요하면 여기에 먼저 뜹니다</span></div>` +
+    `<div class="td-now" style="--c:${PH_COL[p]}"><span class="k">STEP 0${p} · ${STEP_N[p - 1]}</span><b>${T0[0]}</b><p>${T0[1]}</p><div class="td-stp">${steps}</div></div>`
+}
+function renderTodo(T) {
+  const items = todoItems(T)
+  $('t-todo').classList.toggle('alert', items.length > 0)
+  $('td-sub').textContent = items.length ? '가장 오래된 것 ' + clock(items.reduce((m, i) => (i.at < m ? i.at : m), items[0].at)) : clock(new Date()) + ' 확인'
+  const sig = items.length ? items.map((i) => i.key + '|' + i.title + '|' + i.body).join('~') : 'ok|' + S.sc.phase + '|' + T.name
+  if (sig === todoSig) return
+  todoSig = sig
   const el = $('h-todo')
-  if (!items.length) { el.innerHTML = '<div class="todo-ok"><i></i>지금 확인할 일이 없습니다</div>'; return }
-  el.innerHTML = `<div class="lbl" style="margin:0 2px 6px">지금 확인할 일 · ${items.length}</div>` + items.slice(0, 3).map((it) => `<div class="tcard ${it.lv}"><div><b>${it.title}</b><p>${it.body}</p></div><button type="button" class="btn sm" ${it.go ? `data-todo-gate="${it.id}"` : `data-go-robot="${it.robot}"`}>${it.btn}</button></div>`).join('')
+  if (!items.length) { el.innerHTML = nowCard(T); return }
+  el.innerHTML = `<div class="td-cnt"><b>${items.length}</b> 건 <span>· 관리자 조치 필요</span></div><div class="td-list">` + items.map((it) => `<div class="tdc ${it.lv}"><div class="tx"><span class="k">${it.label}</span><b>${it.plate ? `<span class="vp">${fmtPlate(it.plate)}</span> ` : ''}${it.title}</b><p>${it.body}</p></div><div class="ac">${it.acts.map(([a, t, c, arg]) => `<button type="button" class="btn sm ${c}" data-td="${a}"${arg != null ? ` data-arg="${arg}"` : ''}>${t}</button>`).join('')}</div></div>`).join('') + '</div>'
+}
+// 정비 승인: 서버(DB)에 승인 대기 건이 있으면 서버에 먼저 남기고, 이 앱의 시뮬레이션도 같이 승인한다 (기존 sim.approve 그대로)
+async function approveMaint() {
+  const pend = remote && remote.pending
+  if (pend && amrApi.online) { const r = await amrApi.approve(pend.id, '앱 · 관리자'); if (!r) toast('서버에 승인을 남기지 못했습니다 · 앱에서는 승인됨', 'amber') }
+  if (sim.approve('앱 · 관리자')) toast('정비 승인 · 예비기 AMR-05 투입', 'ok')
+  todoSig = ''; renderAll()
 }
 $('h-todo').addEventListener('click', (e) => {
-  const b = e.target.closest('[data-todo-gate]'); if (!b) return
-  ackBlock.add(+b.dataset.todoGate)
-  setTab('cargo'); vFilter = 'BLOCK'; $('v-filter').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x.dataset.f === 'BLOCK')); renderVehicles()
+  const b = e.target.closest('[data-td]'); if (!b) return
+  const a = b.dataset.td, arg = b.dataset.arg
+  if (a === 'approve') { approveMaint(); return }
+  if (a === 'hold') { holdKey = maintKey(); todoSig = ''; renderTodo(S.amrs[S.sc.target]); toast('보류함 · 승인 대기 상태는 그대로 유지됩니다', 'amber'); return }
+  if (a === 'chg') { if (sim.chargeNow(+arg)) toast(S.amrs[+arg].name + ' 충전소로 이동 지시', 'ok'); todoSig = ''; renderAll(); return }
+  if (a === 'veh') { // 기존 흐름 그대로: 물류 탭의 차단 · 대기 목록으로
+    ackBlock.add(+arg); setTab('cargo'); vFilter = 'BLOCK'; $('v-filter').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x.dataset.f === 'BLOCK')); renderVehicles()
+  }
 })
 
 /* ── 3D 바로가기 시점 · 게이트 자동 따라가기 ── */
@@ -659,19 +701,20 @@ setInterval(pollKpi, 10000); setTimeout(pollKpi, 1200)
 
 /* ── 관리자 운영 기준 (정비 · 충전): 앱에서 바꾸면 DB → 웹 관제 3D 로봇이 바로 그 기준으로 움직인다 ── */
 let cfgTimer = 0, cfgLocalT = 0
-$('cfg-toggle').addEventListener('click', () => { const b = $('cfg-body'); b.hidden = !b.hidden; $('cfg-toggle').textContent = b.hidden ? '변경' : '닫기' })
+function setGauge(id, pct) { const el = $(id); if (el) el.setAttribute('stroke-dasharray', Math.max(0, Math.min(100, pct)).toFixed(1) + ' 100') }
 function renderCfg() {
-  $('cfg-sum-rul').textContent = S.cfg.rulAt; $('cfg-sum-chg').textContent = S.cfg.chargeAt
   $('cfg-rul').textContent = S.cfg.rulAt
   $('cfg-chg').textContent = S.cfg.chargeAt
+  setGauge('g-rul', (S.cfg.rulAt / 72) * 100); setGauge('g-chg', S.cfg.chargeAt) // 게이지 범위: 정비 0~72시간 · 충전 0~100%
   const st = remote && remote.settings
-  $('cfg-by').textContent = st && st.updatedBy ? '최근 변경: ' + st.updatedBy : linked() ? 'DB 연동' : '앱 단독'
+  const t = cfgChangedAt || (st && st.updatedAt ? new Date(st.updatedAt) : null)
+  $('cfg-by').textContent = t && !isNaN(t) ? '최근 변경 ' + clock(t) : linked() ? 'DB 연동' : '앱 단독'
 }
 document.getElementById('cfg-card').addEventListener('click', (e) => {
   const b = e.target.closest('button[data-k]'); if (!b) return
   const d = +b.dataset.d
   if (b.dataset.k === 'rul') sim.setCfg({ rulAt: S.cfg.rulAt + d }); else sim.setCfg({ chargeAt: S.cfg.chargeAt + d })
-  cfgLocalT = Date.now(); renderCfg(); renderAll()
+  cfgLocalT = Date.now(); cfgChangedAt = new Date(); renderCfg(); renderAll()
   clearTimeout(cfgTimer)
   cfgTimer = setTimeout(async () => {
     if (!amrApi.online) { toast('앱 단독 모드 · 이 휴대폰에만 적용', 'amber'); return }
@@ -779,3 +822,19 @@ setInterval(async () => {
   S.amrs.forEach((a, i) => { const want = r.codes.includes(a.name); if (!!a.estop !== want) sim.setEstop(i, want) })
   estopSynced = S.amrs.filter((a) => a.estop).map((a) => a.name).sort().join(',')
 }, 1500)
+
+/* ── 26.11.02 예지보전 성과 (이번 달 집계, 서버 API · 연결 안 되면 "-") ── */
+async function pollPf() { const r = await amrApi.predictiveSummary(); pfCache = r || null }
+setInterval(pollPf, 30000); setTimeout(pollPf, 1500)
+
+/* ── 26.11.02 화면 방향: 짧은 쪽이 600 미만(휴대폰)이면 세로 고정, 600 이상(태블릿)이면 가로 · 세로 자유. 회전하면 3D 크기를 다시 맞춘다 ── */
+;(async () => {
+  try {
+    const shortSide = Math.min(window.screen.width, window.screen.height)
+    if (shortSide < 600) await ScreenOrientation.lock({ orientation: 'portrait' }); else await ScreenOrientation.unlock()
+  } catch { /* 웹 브라우저 등 지원 안 하는 곳은 무시 */ }
+})()
+window.addEventListener('resize', () => { if (scene) scene.resize() })
+
+// 개발 서버(vite dev)에서만 화면 확인용으로 상태를 열어 둔다 (배포 빌드에는 들어가지 않음)
+if (import.meta.env && import.meta.env.DEV) window.__amr = { S, sim, phaseAt, vehCache, setTab, renderAll, setPf: (v) => { pfCache = v } }

@@ -54,27 +54,36 @@ export function createReport(cols) {
   }
   // 표: columns [{label, type?: 'num'|'text'|'center', sum?: true}] · data [[...]] · total 이 true 면 sum 열만 합계 (수식)
   function table(columns, data, opt = {}) {
-    const hr = add(columns.map((c) => ({ v: c.label, s: 1 })), 44)
+    // 26.11.02 columns[i].span: 그 열이 차지할 칸 수 (표 열이 적을 때 글자가 좁은 칸에 갇히지 않도록 칸을 합친다)
+    // 긴 글이 들어가는 마지막 열은 남은 칸을 모두 차지하게 한다 (칸이 좁아 글자가 작아지거나 겹치는 것 방지)
+    if (!columns.some((c) => c.span) && columns.length < G) {
+      const li = columns.length - 1, lc = columns[li]
+      const mx = Math.max(0, ...data.map((r2) => (typeof r2[li] === 'string' ? textWidth(r2[li]) : 0)))
+      if (lc.type !== 'num' && lc.type !== 'center' && mx > 24) columns = columns.map((c, i) => (i === li ? { ...c, span: G - li } : c))
+    }
+    const starts = []; let used = 0
+    columns.forEach((c) => { starts.push(used); used += c.span || 1 })
+    const flat = (cells) => cells.flatMap((cell, i) => { const n = columns[i].span || 1; return [cell, ...rep(1, n - 1, cell.s)] })
+    const mergeSpans = (r) => columns.forEach((c, i) => { if ((c.span || 1) > 1) merge(starts[i], r, starts[i] + c.span - 1, r) })
+    const hr = add(flat(columns.map((c) => ({ v: c.label, s: 1 }))), 44); mergeSpans(hr)
     const first = rows.length
     data.forEach((row) => {
-      add(columns.map((c, i) => {
+      const r = add(flat(columns.map((c, i) => {
         const v = row[i]
         if (v && typeof v === 'object') return v // {v, s, f} 를 그대로 쓴다 (색 · 수식)
         if (typeof v === 'number' && Number.isFinite(v)) return { v, s: Number.isInteger(v) ? 2 : 7 }
         return { v: v == null ? '' : String(v), s: c.type === 'center' ? 14 : 7 }
-      }), opt.rowHeight || 20)
+      })), opt.rowHeight || 20); mergeSpans(r)
     })
     const last = rows.length - 1
     if (opt.total && data.length) {
-      const n = rows.length
-      add(columns.map((c, i) => {
+      const r = add(flat(columns.map((c, i) => {
         if (i === 0) return { v: opt.totalLabel || '합계', s: 4 }
-        if (c.sum) { const sv = data.reduce((a, r) => a + (Number(r[i]) || 0), 0); return { v: sv, f: `SUM(${colName(i)}${first + 1}:${colName(i)}${last + 1})`, s: 3 } }
+        if (c.sum) { const sv = data.reduce((a, r2) => a + (Number(r2[i]) || 0), 0); return { v: sv, f: `SUM(${colName(starts[i])}${first + 1}:${colName(starts[i])}${last + 1})`, s: 3 } }
         return { v: '', s: 4 }
-      }), 22)
-      void n
+      })), 22); mergeSpans(r)
     }
-    if (!data.length) { const r = add([{ v: opt.empty || '해당 내역이 없습니다.', s: 14 }, ...rep(1, columns.length - 1, 14)], 24); merge(0, r, columns.length - 1, r) }
+    if (!data.length) { const r = add([{ v: opt.empty || '해당 내역이 없습니다.', s: 14 }, ...rep(1, used - 1, 14)], 24); merge(0, r, used - 1, r) }
     add([], 8)
     return hr
   }

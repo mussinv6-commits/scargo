@@ -21,7 +21,6 @@ import java.util.Map;
  *  INCIDENT_HIGH 심각도 높음 사고가 2시간 넘게 미처리(CRITICAL) / 미해결 사고가 24시간 넘음(WARN)
  *  REINSPECT     점검 불합격 후 24시간 안에 재점검이 없음
  *  GATE_NOSHOW   게이트 예약 시각이 30분 지났는데 입차 확인이 없음 (ADMIN · CONTROL 만)
- *  BACKUP        36시간 넘게 백업 파일이 없음 (ADMIN · CONTROL 만)
  * 기준 시간은 application.yml 의 scargo.alerts.* 로 바꿀 수 있다.
  */
 @Service
@@ -119,17 +118,7 @@ public class AlertService {
                         "예약 #" + r.get("reservation_id") + " " + r.get("vehicle_no") + " 입차 미확인",
                         "예약 시각이 30분 지났습니다. 입차 확인 또는 불참 처리가 필요합니다.", null, (Long) r.get("reservation_id"), null));
             }
-            long newest = 0;
-            File[] files = new File(backupDir).listFiles((d, n) -> n.endsWith(".dump"));
-            if (files != null) {
-                for (File f : files) {
-                    newest = Math.max(newest, f.lastModified());
-                }
-            }
-            if (newest == 0 || System.currentTimeMillis() - newest > 36L * 3600 * 1000) {
-                list.add(item("WARN", "BACKUP", "board", "자동 백업이 36시간 넘게 없습니다",
-                        "scargo_backup.bat 실행 상태를 확인하세요.", null, null, null));
-            }
+            // 26.11.02 자동 백업 경보(BACKUP)는 알림 · 경보에 올리지 않는다
         }
         list.sort((a, b) -> Integer.compare("CRITICAL".equals(a.get("level")) ? 0 : 1, "CRITICAL".equals(b.get("level")) ? 0 : 1));
         return list;

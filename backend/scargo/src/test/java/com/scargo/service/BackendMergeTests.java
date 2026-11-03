@@ -41,7 +41,7 @@ class BackendMergeTests {
         loadingRecords = mock(LoadingRecordRepository.class);
         workflow = mock(TruckWorkflowService.class);
         transportOrders = mock(com.scargo.app.service.TransportOrderService.class);
-        gateService = new GateLogService(gateLogs, gates, notifications, loadingRecords, workflow, transportOrders);
+        gateService = new GateLogService(gateLogs, gates, notifications, loadingRecords, workflow, transportOrders, mock(com.scargo.controller.TruckOwnership.class)); // 26.11.02 생성자 인자 추가분 맞춤
         when(gates.findById(1L)).thenReturn(Optional.of(Gate.builder().gateId(1L).gateName("Gate").build()));
         when(gateLogs.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
     }

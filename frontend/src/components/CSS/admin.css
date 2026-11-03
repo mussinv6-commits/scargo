@@ -877,6 +877,8 @@ a.kpi-card:hover { border-color: var(--a-primary); }
   border-color: #112847;
   color: #fff;
 }
+button.ops-day-chip { cursor: pointer; font-family: inherit; }
+button.ops-day-chip:hover { filter: brightness(0.97); }
 .ops-kpis {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));

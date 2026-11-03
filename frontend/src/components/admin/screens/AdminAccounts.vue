@@ -131,7 +131,6 @@ import AdminPageHeader from '@/components/admin/AdminPageHeader.vue'
 import AdminPager from '@/components/admin/AdminPager.vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { rowsForViewDate, viewDate } from '@/components/admin/adminViewDate.js'
 import { adminApi, pickErrorMessage } from '@/utils/adminApi'
 
 const accounts = ref([])
@@ -166,7 +165,7 @@ const page = ref(1)
 
 const filteredAccounts = computed(() => {
   const byType = filter.value === 'ALL' ? accounts.value : accounts.value.filter((a) => a.userType === filter.value)
-  const rows = filter.value === 'CORPORATE_PENDING' ? byType : rowsForViewDate(byType, 'createdAt') // 승인 대기는 날짜와 관계없이 모두
+  const rows = byType // 26.11.02 회원 마스터는 날짜 필터 없음 (승인 대기 포함 전체)
   // 26.10.29 권한 높은 순 (총관리자 → 관제사 → 운송사 → 기사 → 일반), 같은 권한은 이름 가나다순
   const rk = (t) => (ROLE_RANK[t] ?? 99)
   return [...rows].sort((x, y) => rk(x.userType) - rk(y.userType) || String(x.userName || '').localeCompare(String(y.userName || ''), 'ko') || String(x.userId || '').localeCompare(String(y.userId || '')))
@@ -177,7 +176,6 @@ const pagedAccounts = computed(() => {
   return filteredAccounts.value.slice(start, start + PAGE_SIZE)
 })
 watch(filter, () => { page.value = 1 })
-watch(viewDate, () => { page.value = 1 })
 watch(pageCount, (n) => { if (page.value > n) page.value = n })
 
 function typeLabel(t) {

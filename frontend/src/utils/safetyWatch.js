@@ -3,6 +3,7 @@
 //  서버: GET  {base}/api/amr/safety/alert → { active:false } 또는 { active:true, kind:'hub'|'batt', label, stage, since, evac, total, temp }
 //  화면: 활성이면 화면 전체가 붉게(배터리 화재는 주황) 번쩍이고 가운데에 큰 글씨. 종료는 웹 관제의 "화재 종료" 버튼만 가능(서버 값이 꺼지면 같이 꺼짐).
 //  소리 · 진동: 작게. 작은 알림음 3초 간격, 짧은 진동 4초 간격, 처음 한 번만 조금 또렷하게. 🔇 로 소리만 끈다.
+import { onSafetyPoke } from './fireSignal.js'
 const KIND = {
   hub: { title: '허브에 화재가 발생했습니다', sub: '즉시 대피하십시오', col: '255,26,26', steps: ['작업 중단', '비상구 방향으로 이동'] },
   batt: { title: 'AMR 배터리 화재', sub: '접근 금지', col: '255,138,26', steps: ['격리 구역 반경 진입 금지', '허브는 정상 운영 중'] },
@@ -12,7 +13,7 @@ const KIND_CARGO = {
   hub: { title: '허브에 화재가 발생했습니다', sub: '차량 운행에 주의하십시오', col: '255,26,26', steps: ['허브 진입·운행 시 서행', '관제·안전요원 안내에 따라 이동'] },
   batt: { title: 'AMR 배터리 화재', sub: '허브 내 운행에 주의하십시오', col: '255,138,26', steps: ['격리 구역 인근 접근 금지', '허브는 정상 운영 중 · 안내에 따라 운행'] },
 }
-export function startSafetyWatch({ base = '', pollMs = 3000, fetchFn = fetch, getFn, skip, mode = 'full', onChange } = {}) {
+export function startSafetyWatch({ base = '', pollMs = 2000, fetchFn = fetch, getFn, skip, mode = 'full', onChange } = {}) {
   let timer = 0, el = null, last = null, actx = null, muted = false, beepT = 0, vibT = 0, firstDone = false
   const css = document.createElement('style')
   css.textContent = '@keyframes sw-pulse{from{opacity:.55}to{opacity:1}}'
@@ -81,7 +82,8 @@ export function startSafetyWatch({ base = '', pollMs = 3000, fetchFn = fetch, ge
     } catch { /* 서버 연결 실패 시 직전 상태 유지 */ }
   }
   poll(); timer = setInterval(poll, pollMs)
-  return () => { clearInterval(timer); hide(); css.remove() }
+  const offPoke = onSafetyPoke(poll) // 26.11.03 화재 시작 · 종료 직후 바로 다시 조회 (공지가 늦게 뜨던 것)
+  return () => { clearInterval(timer); offPoke(); hide(); css.remove() }
 }
 // 허브 관제(웹)에서 화재 시작 · 단계 · 종료를 서버에 알린다 (관리 권한 필요)
 export async function postSafetyAlert(body, { base = '', fetchFn = fetch } = {}) {

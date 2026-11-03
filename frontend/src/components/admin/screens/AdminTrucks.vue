@@ -104,10 +104,9 @@ import AdminPager from '@/components/admin/AdminPager.vue'
 import { adminApi, pickErrorMessage } from '@/utils/adminApi'
 import { normalizeRows, withBoolAliases, toNum, seg, updateWithFallback , deleteError } from '@/utils/apiHelpers'
 import { VEHICLE_NO_PATTERN, VEHICLE_NO_MESSAGE, normalizeVehicleNo } from '@/utils/validators'
-import { rowsForViewDate } from '@/components/admin/adminViewDate.js'
 
 const rows = ref([])
-const visibleRows = computed(() => rowsForViewDate(rows.value, 'createdAt'))
+const visibleRows = computed(() => rows.value) // 26.11.02 마스터 데이터는 날짜 필터 없음
 const loading = ref(true)
 const companyOptions = ref([])
 const approvalFilter = ref('ALL')

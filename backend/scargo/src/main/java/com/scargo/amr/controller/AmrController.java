@@ -82,6 +82,11 @@ public class AmrController {
         return service.maintenanceList(hubId, limit);
     }
 
+    // 26.11.02 예지보전 성과 · 이번 달 (앱 관제 홈)
+    @GetMapping("/predictive-summary")
+    @PreAuthorize(VIEW)
+    public PredictiveSummary predictiveSummary(@RequestParam(name = "hubId", required = false) Long hubId) { return service.predictiveSummary(hubId); }
+
     @GetMapping("/settings")
     @PreAuthorize(VIEW)
     public SettingsView settings(@RequestParam(name = "hubId", required = false) Long hubId) { return service.settings(hubId); }

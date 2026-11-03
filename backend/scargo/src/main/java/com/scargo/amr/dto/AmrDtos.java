@@ -33,7 +33,8 @@ public class AmrDtos {
     public record SettingsView(Integer rulThresholdHours, Integer chargeAtPct, String updatedBy, OffsetDateTime updatedAt) {}
     public record VehicleView(Long id, String direction, String plate, String photoPlate, String kind, String decision,
                               String lane, Integer dock, Double confidence, String engine, String imageUrl, Integer boxCount,
-                              String destHub, OffsetDateTime createdAt, String sealStatus, String sealInput, String company) {}
+                              String destHub, OffsetDateTime createdAt, String sealStatus, String sealInput, String company,
+                              String blockReason) {}
     public record HourCount(String hour, long count) {}
     public record RobotUtil(String code, int pct) {}
     public record KpiView(long today, long yesterdaySameTime, List<HourCount> hourly, Double avgTransportSec,
@@ -45,5 +46,7 @@ public class AmrDtos {
     public record StateView(boolean producerLive, OffsetDateTime producerAt, Integer phase, List<RobotView> robots,
                             MaintView pending, MaintView active, List<EventView> events, SettingsView settings,
                             List<VehicleView> vehicles) {}
+    // 26.11.02 예지보전 성과 · 이번 달 (앱 관제 홈): 고장 전에 정비한 건수 · 줄인 정지 시간(추정) · 예고 없는 고장 건수
+    public record PredictiveSummary(String month, long preemptive, Double savedHours, long unplanned, Double hoursPerFailure) {}
     public record SensorPoint(OffsetDateTime t, Double vibration, Double health, String state) {}
 }

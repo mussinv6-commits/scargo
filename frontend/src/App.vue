@@ -6,12 +6,14 @@ import Main from "./views/Main.vue";
 import NotificationBell from "@/components/common/NotificationBell.vue";
 import { authState, clearLogin, isDriverType } from "@/auth/authState.js";
 import { API_BASE } from "@/utils/apiBase.js";
+import { onSafetyPoke } from "@/utils/fireSignal.js"; // 26.11.03 화재 경보 즉시 갱신
 // import { ADMIN_MENU } from "@/components/admin/adminMenu.js"; // 26.10.28 상단 역할 드롭다운 삭제로 사용 안 함
 // import { COMPANY_MENU } from "@/components/company/companyMenu.js"; // 26.10.28 상단 역할 드롭다운 삭제로 사용 안 함
 import safeCargoLogo from "@/assets/scargo_logo_4x.png";
 import sbotLogo from "@/assets/sbot_logo.png"; // 26.10.28 S-Bot 화면 상단 로고
 import { staffRole, RN, HOME } from "@/scargo2/roles.js"; // 26.10.29 관제사 상단바
 import { hubAccess } from "@/components/amr/amrAccess.js";
+import ReportPreviewDialog from "@/components/common/ReportPreviewDialog.vue"; // 26.11.02 보고서 미리보기 (PDF 다운로드 · 인쇄 · 닫기)
 
 const router = useRouter();
 const route = useRoute();
@@ -119,8 +121,9 @@ watch(() => route.fullPath, closeMenus);
 function onDocClick(e) {
   if (roleMenuEl.value && !roleMenuEl.value.contains(e.target)) roleOpen.value = false;
 }
-onMounted(() => { document.addEventListener("click", onDocClick); loadSafetyTicker(); safetyTimer = setInterval(loadSafetyTicker, 3000); });
-onBeforeUnmount(() => { document.removeEventListener("click", onDocClick); clearInterval(safetyTimer); });
+let offSafetyPoke = () => {};
+onMounted(() => { document.addEventListener("click", onDocClick); loadSafetyTicker(); safetyTimer = setInterval(loadSafetyTicker, 2000); offSafetyPoke = onSafetyPoke(loadSafetyTicker); }); // 26.11.03 3초 → 2초 + 화재 시작 · 종료 직후 즉시 조회
+onBeforeUnmount(() => { document.removeEventListener("click", onDocClick); clearInterval(safetyTimer); offSafetyPoke(); });
 
 const isDriverApp = computed(() => route.path.startsWith("/driver"));
 const isAdminApp = computed(() => route.path.startsWith("/admin"));
@@ -271,6 +274,7 @@ function scrollToTop() {
         </p>
       </div>
     </footer>
+    <ReportPreviewDialog />
   </div>
 </template>
 
@@ -281,11 +285,13 @@ function scrollToTop() {
 @media (min-width: 992px) {
   .admin-top .main-menu { position: static !important; transform: none !important; flex: 1 1 auto !important; justify-content: flex-start !important; min-width: 0; }
   .admin-top .navbar-collapse { justify-content: space-between !important; }
+  .admin-top .navbar-collapse, .admin-top .navbar-nav { min-width: 0; }
+  .admin-top .navbar-nav:not(.main-menu) { flex: 0 0 auto; flex-wrap: nowrap; white-space: nowrap; } /* 오른쪽 묶음(S-BOT · 알림 · 관리자님 · 사용자)은 줄어들지 않고 항상 보이게 */
 }
 .sbot-sw { background: #EECC83; color: #102644 !important; font-weight: 800; border-radius: 14px; padding: 3px 12px; font-size: 13px; letter-spacing: .03em; text-decoration: none; white-space: nowrap; margin-right: 6px; } /* 26.10.28 S-Bot 의 S CARGO 버튼과 같은 모양 */
 .sbot-sw:hover { filter: brightness(1.05); }
 .admin-top .home-btn { border: 1px solid rgba(255,255,255,.4); border-radius: 16px; padding: 4px 14px !important; font-weight: 700; font-size: 14px; }
-.admin-top .notice-tick { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,.08); border-radius: 16px; padding: 4px 14px !important; margin-left: 8px; max-width: 760px; }
+.admin-top .notice-tick { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,.08); border-radius: 16px; padding: 4px 14px !important; margin-left: 8px; max-width: clamp(240px, 32vw, 760px); } /* 26.11.02 화면 폭에 맞춰 공지 띠가 줄어들어 오른쪽(관리자님 · 사용자 메뉴)이 잘리지 않게 */
 .admin-top .menu-btn { border: 1px solid rgba(255,255,255,.4); border-radius: 16px; padding: 4px 14px !important; font-weight: 700; font-size: 14px; white-space: nowrap; }
 .admin-top .menu-btn.on { background: #c9a03a; border-color: #c9a03a; color: #fff; }
 .admin-drawer-bg { position: fixed; inset: 0; background: rgba(8,16,30,.45); z-index: 1090; }

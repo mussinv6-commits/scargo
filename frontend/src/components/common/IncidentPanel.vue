@@ -77,13 +77,17 @@ import { exportExcel } from '@/utils/exportExcel.js'
 import { friendlyError } from '@/utils/apiHelpers.js'
 import AdminPager from '@/components/admin/AdminPager.vue'
 import { usePaged } from '@/utils/usePaged.js'
+import { rowsForViewDate } from '@/components/admin/adminViewDate.js'
 import { displayAssignee, loadAssignees } from '@/utils/staffLabel.js'
 
-defineProps({ dark: { type: Boolean, default: false } })
+const props = defineProps({ dark: { type: Boolean, default: false }, useViewDate: { type: Boolean, default: false } })
 
 const rows = ref([])
 // 26.10.28 QA#5 최근 접수 순(접수 번호 큰 것부터)으로 정렬해 번호 1부터 표시, 5건씩
-const pg = usePaged(() => [...rows.value].sort((a, b) => (b.incidentId || 0) - (a.incidentId || 0)), 5)
+const pg = usePaged(() => {
+  const list = props.useViewDate ? rowsForViewDate(rows.value, 'createdAt') : rows.value
+  return [...list].sort((a, b) => (b.incidentId || 0) - (a.incidentId || 0))
+}, 5)
 const loading = ref(false)
 const busy = ref(false)
 const filter = ref('')

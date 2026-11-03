@@ -8,6 +8,7 @@ import SbotDashboard from "@/views/SbotDashboard.vue"; // 26.10.22 추가: S-Bot
 import SbotFrame from "@/views/SbotFrame.vue"; // 26.10.22 추가: 택배 이동/물류센터 3D 화면
 import SbotInspections from "@/views/SbotInspections.vue"; // 26.10.23 추가: 허브 도착 · 인계 · 컨테이너 점검
 import SbotAmrAudit from "@/views/SbotAmrAudit.vue"; // 26.10.23 추가: AMR 앱 출입증 감사
+import SbotAmrAlerts from "@/views/SbotAmrAlerts.vue"; // 26.11.01 AMR 알림 내역
 import login from "@/components/member/login.vue";
 import regi from "../../components/member/regi.vue";
 import NotificationHistory from "@/components/common/NotificationHistory.vue"; // 26.10.28 알림 내역 (관리자 외 계정)
@@ -35,6 +36,7 @@ export default [
             { path:'hub', name:'sbot-hub', component:AdminAmrTwin, meta:{ requiresHubControl:true } },
             { path:'inspections', redirect:'/admin/arrivals' }, // 26.10.26 카르고로 이동
             { path:'amr-audit', name:'sbot-amr-audit', component:SbotAmrAudit, meta:{ requiresHubControl:true } }, // 26.10.23 조회는 S-Bot 관리자 · HUB_OP (CONTROL 은 서버 403)
+            { path:'alerts', name:'sbot-alerts', component:SbotAmrAlerts, meta:{ requiresHubControl:true } }, // 26.11.01 AMR 알림 내역 (ADMIN·HUB_OP)
             { path:'tokens', redirect:'/admin/amr-tokens' }, // 26.10.26 카르고로 이동
             { path:'move', redirect:'/admin/move' }, // 26.10.26 카르고로 이동
             { path:'center', redirect: (to) => ({ path:'/admin/center', query: to.query }) }, // 26.10.26 카르고로 이동

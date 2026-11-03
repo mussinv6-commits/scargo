@@ -13,28 +13,32 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * 26.10.29 허브 화재 경보 → 기사 앱 알림
- *  경보가 새로 발령되면 허브로 오는 중이거나 허브에서 일할 기사에게 알림(알림 내역 + 폰 알림)을 보내고,
- *  화재 종료 때 같은 기사들에게 종료 알림을 한 번 더 보낸다.
- *  대상: 승인된 컨테이너 기사 · 지선 기사 전원 (26.10.29 QA: 운행 여부와 상관없이 알림 목록에 남도록)
+ * 26.10.29 허브 화재 경보 → 알림(기사 앱 + 웹 알림 내역)
+ *  경보가 새로 발령되면 대상 계정에 알림을 보내고, 화재 종료 때 같은 대상에게 종료 알림을 한 번 더 보낸다.
+ *  대상: 승인된 컨테이너·지선 기사 + 웹 사용자(ADMIN·CONTROL·HUB_OP·CENTER_OP)
+ *  26.11.01: 예전에는 기사만 넣어서 웹 「알림 내역」에 화재가 안 보였음 → 관제·관리자 계정에도 SYSTEM 알림 저장
  */
 @Component
 public class SafetyDriverNotifier {
     private static final Logger log = LoggerFactory.getLogger(SafetyDriverNotifier.class);
     private final JdbcTemplate jdbc;
     private final NotificationService notificationService;
-    private final Set<Long> notified = new LinkedHashSet<>(); // 이번 경보에 알림을 받은 기사 (종료 알림 대상)
+    private final Set<Long> notified = new LinkedHashSet<>(); // 이번 경보에 알림을 받은 계정 (종료 알림 대상)
 
     public SafetyDriverNotifier(JdbcTemplate jdbc, NotificationService notificationService) {
         this.jdbc = jdbc;
         this.notificationService = notificationService;
     }
 
-    // 26.10.29 QA: 화재는 안전 알림이라 승인된 기사 전원에게 보낸다 (예전: 진행 중 운행이 있는 기사만 → 운행 없는 기사는 알림 목록에 안 남음)
+    // 26.11.01: 기사(앱 알림 목록) + 웹 관제/관리자(알림 내역·종 버튼)
     private List<Long> targets() {
         return jdbc.queryForList("""
                 SELECT account_id FROM accounts
-                 WHERE user_type IN ('CONTAINER_DRIVER','BRANCH_DRIVER') AND approval_status = 'APPROVED'""", Long.class);
+                 WHERE approval_status = 'APPROVED'
+                   AND user_type IN (
+                     'CONTAINER_DRIVER','BRANCH_DRIVER',
+                     'ADMIN','CONTROL','HUB_OP','CENTER_OP'
+                   )""", Long.class);
     }
 
     public synchronized void started(String kind, String label) {

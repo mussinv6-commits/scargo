@@ -87,7 +87,7 @@ public class Account {
     private OffsetDateTime createdAt;
 
     // 통합(26.10.26): scargo_1 7종 + share 회원가입용 GENERAL·CORPORATE_PENDING = DB chk_user_type 9종
-    //  간선 → 지선 이름 변경으로 BRANCH_DRIVER 는 BRANCH_DRIVER 로 통일
+    //  지선 → 지선 이름 변경으로 BRANCH_DRIVER 는 BRANCH_DRIVER 로 통일
     public enum UserType {
         ADMIN,              // 총관리자
         CONTROL,            // 통합 관제사

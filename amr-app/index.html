@@ -10,35 +10,40 @@
 <body>
   <div id="app">
     <main id="pages">
-      <!-- ① 홈: 한 화면에 요약만 (조치가 필요한 것 · 숫자 · 최근 알림 · 기준 · 3D) -->
+      <!-- ① 홈: 대시보드 타일 4개 (운영 단계 · 확인할 일 · 예지보전 성과 · 운영 기준) -->
       <section class="page on" data-page="home">
         <header class="hd"><div><small>S-BOT</small><h2>관제 홈</h2></div><div class="hd-r"><button type="button" class="db-chip" id="db-chip">단독</button><button type="button" class="icb" data-go="alert" aria-label="알림"><span class="bd" id="badge" hidden>0</span><svg viewBox="0 0 24 24"><path d="M18 16V11a6 6 0 1 0-12 0v5l-2 2h16z"/><path d="M10 21h4"/></svg></button><button type="button" class="icb" data-go="settings" aria-label="설정"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button></div></header>
-        <div class="scroll">
-          <div class="step" id="h-step"><b>STEP 01</b><span>정상 운영</span><span class="dots"><i></i><i></i><i></i><i></i><i></i></span></div>
-          <p class="cap" id="h-cap" hidden></p>
-          <div class="kpis">
-            <div class="kpi"><b id="h-act">4/5</b><span>AMR 가동</span></div>
-            <div class="kpi"><b id="h-thru">0</b><span>오늘 처리</span></div>
-            <div class="kpi"><b id="h-gate">0</b><span>입출차</span></div>
-            <div class="kpi"><b class="good" id="h-block">0</b><span>차단</span></div>
-          </div>
-          <div class="todo" id="h-todo"></div>
-          <div class="card">
-            <div class="row-sb"><span class="lbl">Recent · 최근 알림</span><button type="button" class="btn sm" data-go="alert">전체</button></div>
-            <div class="recent" id="h-recent"></div>
-          </div>
-          <div class="card cfg" id="cfg-card">
-            <div class="row-sb cfg-sum"><span>운영 기준 · 정비 <b id="cfg-sum-rul">24</b>시간 · 충전 <b id="cfg-sum-chg">30</b>%</span><button type="button" class="btn sm" id="cfg-toggle">변경</button></div>
-            <div class="cfg-body" id="cfg-body" hidden>
-              <div class="row-sb"><span class="lbl">Control · 운영 기준 (관리자)</span><span class="hint" id="cfg-by">-</span></div>
-              <div class="cfg-row"><div><b>정비 기준</b><small>남은 수명이 이 시간 이하면 자동 정비</small></div><div class="cfg-step"><button type="button" data-k="rul" data-d="-6">−</button><strong id="cfg-rul">24</strong><em>시간</em><button type="button" data-k="rul" data-d="6">+</button></div></div>
-              <div class="cfg-row"><div><b>충전 기준</b><small>배터리가 이 % 이하면 작업 후 충전</small></div><div class="cfg-step"><button type="button" data-k="chg" data-d="-10">−</button><strong id="cfg-chg">30</strong><em>%</em><button type="button" data-k="chg" data-d="10">+</button></div></div>
+        <div class="scroll home">
+          <!-- 26.11.02 관제 홈 = 대시보드 타일 4개: 운영 단계 · 지금 확인할 일 · 예지보전 성과 · 운영 기준 (나머지는 각 탭에서) -->
+          <section class="tile t-st" id="t-step">
+            <div class="tl-h"><span class="lbl">운영 단계 · STEP <b id="t-n">01</b></span><span class="tl-sub" id="t-sub">-</span></div>
+            <ol class="stp" id="t-steps"></ol>
+          </section>
+          <section class="tile t-td" id="t-todo">
+            <div class="tl-h"><span class="lbl">지금 확인할 일</span><span class="tl-sub" id="td-sub"></span></div>
+            <div class="todo" id="h-todo"></div>
+          </section>
+          <section class="tile t-pf" id="t-pf">
+            <div class="tl-h"><span class="lbl">예지보전 성과 · 이번 달</span></div>
+            <div class="pf-row">
+              <div class="pf"><div><b id="pf-pre">-</b><em>건</em></div><span>고장 전에<br>정비</span></div>
+              <div class="pf"><div><b id="pf-save">-</b><em>h</em></div><span>줄인<br>정지 시간</span></div>
+              <div class="pf"><div><b id="pf-un">-</b><em>건</em></div><span>예고 없는<br>고장</span></div>
             </div>
-          </div>
-          <div class="card mini-card">
-            <div class="row-sb"><span class="lbl">3D View · 실시간 트윈</span><button type="button" class="btn sm c" data-go="3d">⤢ 크게 보기</button></div>
-            <div class="mini" id="mini-slot"></div>
-          </div>
+          </section>
+          <section class="tile t-cf" id="cfg-card">
+            <div class="tl-h"><span class="lbl">운영 기준 (관리자)</span><span class="tl-sub" id="cfg-by">-</span></div>
+            <div class="gauges">
+              <div class="gz" style="--gc:var(--cyan)">
+                <div class="gw"><svg class="gsvg" viewBox="0 0 120 68"><path class="gbg" d="M10 62 A50 50 0 0 1 110 62" pathLength="100"/><path class="gfg" id="g-rul" d="M10 62 A50 50 0 0 1 110 62" pathLength="100" stroke-dasharray="0 100"/></svg><div class="gv"><b id="cfg-rul">24</b><small>시간 이하면 정비</small></div></div>
+                <div class="gs"><button type="button" data-k="rul" data-d="-6" aria-label="정비 기준 줄이기">−</button><span>정비 기준</span><button type="button" data-k="rul" data-d="6" aria-label="정비 기준 늘리기">+</button></div>
+              </div>
+              <div class="gz" style="--gc:var(--amber)">
+                <div class="gw"><svg class="gsvg" viewBox="0 0 120 68"><path class="gbg" d="M10 62 A50 50 0 0 1 110 62" pathLength="100"/><path class="gfg" id="g-chg" d="M10 62 A50 50 0 0 1 110 62" pathLength="100" stroke-dasharray="0 100"/></svg><div class="gv"><b id="cfg-chg">30</b><small>% 이하면 충전</small></div></div>
+                <div class="gs"><button type="button" data-k="chg" data-d="-10" aria-label="충전 기준 줄이기">−</button><span>충전 기준</span><button type="button" data-k="chg" data-d="10" aria-label="충전 기준 늘리기">+</button></div>
+              </div>
+            </div>
+          </section>
         </div>
       </section>
 

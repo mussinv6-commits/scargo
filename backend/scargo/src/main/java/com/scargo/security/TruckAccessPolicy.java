@@ -105,7 +105,7 @@ public class TruckAccessPolicy {
                 return count("SELECT COUNT(*) FROM trucks WHERE vehicle_no = ? AND assigned_account_id = ?",
                         vehicleNo, account.getAccountId());
             case CONTROL:
-                // 지역센터 도착 전까지: 간선 ARRIVED는 제외
+                // 지역센터 도착 전까지: 지선 ARRIVED는 제외
                 return count("SELECT COUNT(*) FROM shipment_legs WHERE vehicle_no = ? "
                         + "AND assignment_id = (SELECT MAX(x.assignment_id) FROM shipment_legs x WHERE x.vehicle_no = ?) "
                         + "AND (status IN ('ASSIGNED', 'IN_TRANSIT') "

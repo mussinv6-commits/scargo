@@ -44,6 +44,8 @@
 </template>
 
 <script setup>
+import { onSafetyPoke } from '@/utils/fireSignal.js'
+let offPoke = () => {}
 import { onMounted, onBeforeUnmount, ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { authState } from '@/auth/authState.js'
@@ -232,10 +234,12 @@ onMounted(() => {
   // 26.09.21 수정: 1분 → 5초 폴링으로 단축해서 새로고침 없이도 뱃지 숫자가 자동으로 올라가게 함
   // (백엔드에 WebSocket/SSE 같은 실시간 푸시가 없어서, 짧은 주기로 계속 물어보는 방식으로 "거의 실시간"을 구현)
   pollTimer = setInterval(() => { fetchUnreadCount(); fetchLive() }, 5000)
+  offPoke = onSafetyPoke(() => { fetchUnreadCount(); fetchLive() }) // 26.11.03 화재 시작 · 종료 직후 바로 확인 (공지 · 알림이 늦게 뜨던 것)
 })
 
 onBeforeUnmount(() => {
   if (pollTimer) clearInterval(pollTimer)
+  offPoke()
 })
 </script>
 

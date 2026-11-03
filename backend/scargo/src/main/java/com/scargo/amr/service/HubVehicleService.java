@@ -7,6 +7,7 @@ import com.scargo.amr.repository.HubVehicleLogRepository;
 import com.scargo.amr.repository.HubVehicleRepository;
 import com.scargo.amr.security.AmrAccessPolicy;
 import com.scargo.amr.security.AmrAccessPolicy.Access;
+import com.scargo.ops.VehicleUsePolicy;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
@@ -28,7 +29,8 @@ import java.util.*;
 // 26.10.15 허브 입출차 OCR
 //  1) 웹 관제(현장 역할)가 트럭이 입구 · 출구에 오면 POST /api/amr/vehicles/scan
 //  2) 여기서 1차 OCR 서버(gate_api.py :8001 /hub/scan, YOLO + CRNN)를 호출해 번호판을 읽고
-//  3) hub_vehicles(등록 차량)로 차종 판정: 화물차 → 입고 도크 / 택배차 → 출고 도크 / 미등록 → 차단
+//  3) S카고 차량(trucks)으로 판정 (26.11.02): 진입 허가 차량만 입차, 차량 구분으로 화물차 → 입고 도크 / 택배차 → 출고 도크
+//     미등록 · 심사대기 · 불허 · 판독 불가 → 차단 (block_reason). hub_vehicles 는 허브 등록 목록 화면용으로만 남음
 //  4) hub_vehicle_logs 에 기록 → state 로 앱 · 웹이 2초 안에 같이 본다
 // 26.10.22 허브별 권한: 스캔 · 씰 확인은 MANAGE, 기록 · 사진 조회는 VIEW (AmrAccessPolicy)
 @Service
@@ -42,11 +44,13 @@ public class HubVehicleService implements ApplicationRunner {
     private final String ocrToken; // gate_api.py 의 X-Gate-Token (환경변수 GATE_API_TOKEN 과 같은 값)
     private final RestTemplate rest;
     private final JdbcTemplate jdbc;
+    private final VehicleUsePolicy vehicles; // 26.11.02 입차 허가 판정 (trucks.entry_approval)
 
     public HubVehicleService(AmrService amr, AmrAccessPolicy access, HubVehicleRepository vehicleRepo, HubVehicleLogRepository logRepo, JdbcTemplate jdbc,
+                             VehicleUsePolicy vehicles,
                              @Value("${amr.ocr.base:http://localhost:8001}") String ocrBase,
                              @Value("${amr.ocr.token:${GATE_API_TOKEN:}}") String ocrToken) {
-        this.amr = amr; this.access = access; this.vehicleRepo = vehicleRepo; this.logRepo = logRepo; this.jdbc = jdbc; this.ocrBase = ocrBase; this.ocrToken = ocrToken;
+        this.amr = amr; this.access = access; this.vehicleRepo = vehicleRepo; this.logRepo = logRepo; this.jdbc = jdbc; this.vehicles = vehicles; this.ocrBase = ocrBase; this.ocrToken = ocrToken;
         SimpleClientHttpRequestFactory f = new SimpleClientHttpRequestFactory();
         f.setConnectTimeout(2000);
         f.setReadTimeout(20000); // CPU 인식은 첫 호출에 몇 초 걸릴 수 있음
@@ -82,6 +86,8 @@ public class HubVehicleService implements ApplicationRunner {
     // ── 등록 차량 기본값 (비어 있을 때 한 번만) · 사진 폴더 python/허브_수신함 과 같은 번호 ──
     @Override
     public void run(ApplicationArguments args) {
+        // 26.11.02 입차 차단 사유 칸 (DB/add_14_게이트_진입허가.sql 과 같음). 마이그레이션 전 DB 에서도 기동되게 한 번 맞춘다
+        try { jdbc.execute("ALTER TABLE hub_vehicle_logs ADD COLUMN IF NOT EXISTS block_reason VARCHAR(12)"); } catch (Exception ignored) { }
         try {
             if (vehicleRepo.count() > 0) { // 26.10.20 택배차 사진 추가분: 비어 있는 번호만 더 등록
                 for (String p : List.of("부산90배7690", "부산90배7568", "부산90배9151", "부산90배9517"))
@@ -122,7 +128,7 @@ public class HubVehicleService implements ApplicationRunner {
         String plate = l.getRecognizedPlate() != null ? l.getRecognizedPlate() : l.getPhotoPlate();
         return new VehicleView(l.getLogId(), l.getDirection(), l.getRecognizedPlate(), l.getPhotoPlate(), l.getVehicleKind(),
                 l.getDecision(), l.getLane(), l.getDockNo(), l.getOcrConfidence(), l.getOcrEngine(), l.getImageUrl(), l.getBoxCount(),
-                l.getDestHub(), l.getCreatedAt(), l.getSealStatus(), l.getSealInput(), companyOf(plate));
+                l.getDestHub(), l.getCreatedAt(), l.getSealStatus(), l.getSealInput(), companyOf(plate), l.getBlockReason());
     }
 
     // 26.10.29 구간 관제 연동: 곤지암에 도착했는데 아직 허브 입차 기록이 없는 차량 중 가장 먼저 도착한 번호 (도착 순서 = 입차 순서)
@@ -145,14 +151,6 @@ public class HubVehicleService implements ApplicationRunner {
             }
         } catch (Exception ignore) { /* 구간 관제 테이블이 없으면 연동 없이 */ }
         return null;
-    }
-
-    // S카고 에 등록된 화물차(trucks)인지 — 구간 관제 대기열로 들어온 차량은 hub_vehicles 에 없어도 입차를 허용
-    private boolean truckRegistered(String plate) {
-        try {
-            Integer n = jdbc.queryForObject("SELECT COUNT(*) FROM trucks WHERE REPLACE(vehicle_no, ' ', '') = ?", Integer.class, norm(plate));
-            return n != null && n > 0;
-        } catch (Exception e) { return false; }
     }
 
     // 지금 허브 안에 있는 차 (30분 안에 입차 허용 + 아직 출차 기록 없음) → 같은 사진이 겹치지 않게 OCR 에 넘긴다
@@ -206,33 +204,31 @@ public class HubVehicleService implements ApplicationRunner {
 
         String confTxt = log.getOcrConfidence() == null ? "" : " (" + log.getOcrConfidence() + "%)";
         if ("ENTRY".equals(dir)) {
-            Optional<HubVehicle> reg = plate == null ? Optional.empty() : vehicleRepo.findById(plate);
-            // 26.10.29 구간 관제 대기열로 들어온 차량(번호가 지정한 번호와 같음)은 S카고 등록 화물차이면 허브 등록이 없어도 허용
-            boolean viaQueue = wantPlate != null && plate != null && plate.equals(norm(wantPlate));
-            if (reg.isEmpty() && viaQueue && truckRegistered(plate)) {
-                String co = companyOf(plate);
-                reg = Optional.of(new HubVehicle(plate, "CARGO", co == null ? "S카고" : co, "구간 관제 연동 화물차"));
-            }
-            log.setVehicleKind(reg.map(HubVehicle::getVehicleKind).orElse("UNKNOWN"));
+            // 26.11.02 입차 판정: S카고 등록 차량(trucks)이고 진입 허가(APPROVED)여야 통과. 레인(화물차/택배차)도 trucks.vehicle_category 기준
+            //  (예전: hub_vehicles 에 있으면 심사대기 · 불허여도 통과, S카고 등록 · 허가 차량도 hub_vehicles 에 없으면 '미등록' 차단)
+            VehicleUsePolicy.GateEntry g = VehicleUsePolicy.gateEntry(plate, plate == null ? null : vehicles.truck(plate), kind);
+            log.setVehicleKind(g.kind());
+            log.setBlockReason(g.blockReason());
             // 26.10.20 등록 화물차인데 기준 씰 번호가 없으면 게이트에서 대기 + 긴급 알림
-            boolean sealMissing = reg.isPresent() && "CARGO".equals(reg.get().getVehicleKind())
-                    && refSeal(plate) == null;
-            log.setDecision(!reg.isPresent() ? "BLOCK" : sealMissing ? "HOLD" : "ALLOW");
+            boolean sealMissing = g.allowed() && "CARGO".equals(g.kind()) && refSeal(plate) == null;
+            log.setDecision(!g.allowed() ? "BLOCK" : sealMissing ? "HOLD" : "ALLOW");
             if (sealMissing) {
                 log.setSealStatus("MISSING");
                 amr.event(hub, null, "CRIT", "씰 미등록 차량 게이트 대기 · " + plate + confTxt + " (기사 앱에서 씰 등록 필요)");
-            } else if (reg.isPresent()) {
-                boolean courier = "COURIER".equals(reg.get().getVehicleKind());
+            } else if (g.allowed()) {
+                boolean courier = "COURIER".equals(g.kind());
                 if (!courier) log.setSealStatus("PENDING"); // 도크 도착 후 씰 확인 대기
                 String to = courier ? "출고 D" + (req.dock() == null ? "" : req.dock() + 4) : "입고 D" + (req.dock() == null ? "" : req.dock() + 1);
                 amr.event(hub, null, "INFO", "입차 OCR " + plate + confTxt + " · " + (courier ? "택배차" : "화물차") + " → " + to);
             } else {
                 amr.event(hub, null, "CRIT", plate == null ? "입차 번호판 판독 불가 · 차단 (사진 " + log.getPhotoPlate() + ")"
-                        : "미등록 차량 차단 · " + plate + confTxt);
+                        : VehicleUsePolicy.reasonText(g.blockReason()) + " 차단 · " + plate + confTxt);
             }
         } else {
             String expected = norm(req.vehicleNo());
-            log.setVehicleKind(vehicleRepo.findById(expected).map(HubVehicle::getVehicleKind).orElse("UNKNOWN"));
+            // 26.11.02 출차 기록의 차량 종류도 trucks.vehicle_category 기준 (출차 통과 판정 = 번호 일치, 예전 그대로)
+            VehicleUsePolicy.TruckInfo et = vehicles.truck(expected);
+            log.setVehicleKind(et == null ? "UNKNOWN" : VehicleUsePolicy.kindOf(et.category(), kind));
             log.setBoxCount(req.boxCount());
             log.setBarcodes(req.barcodes() == null ? null : String.join(",", req.barcodes()));
             log.setDestHub(req.destHub());

@@ -961,13 +961,14 @@ function hhmm(iso) {
   return d.toDateString() === new Date().toDateString() ? t : `${d.getMonth() + 1}/${d.getDate()} ${t}`
 }
 function hhmmss(iso) {
-  const d = iso ? new Date(iso) : new Date()
+  const d = iso ? toDate(iso) : new Date() // 26.11.02 서버 시각(epoch 초 · 배열)도 올바르게
   return d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
 }
 const nowTick = ref(Date.now())
 function elapsed(iso) {
   if (!iso) return ''
-  const min = Math.max(0, Math.floor((nowTick.value - new Date(iso).getTime()) / 60000))
+  const t0 = toDate(iso) // 26.11.02 epoch 초를 밀리초로 잘못 읽어 '497722시간 대기'가 나오던 것 수정
+  const min = t0 && !isNaN(t0) ? Math.max(0, Math.floor((nowTick.value - t0.getTime()) / 60000)) : 0
   if (min < 1) return '방금'
   if (min < 60) return `${min}분 대기`
   return `${Math.floor(min / 60)}시간 ${min % 60}분 대기`

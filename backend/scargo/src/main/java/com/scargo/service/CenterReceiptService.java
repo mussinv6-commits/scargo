@@ -23,7 +23,7 @@ import java.util.Set;
  * 지선(허브 → 지역센터, shipment_legs.leg_type = HUB_TO_CENTER) 운행이 센터에 도착(ARRIVED)한 뒤
  * 센터가 물량을 넘겨받았음을 확정하면 RECEIVED + received_at 을 기록한다.
  *
- *   권한 (승인 명세 "권한별 관리 구간": CENTER_OP = 소속 센터의 간선 도착 ~ 인수 확정,
+ *   권한 (승인 명세 "권한별 관리 구간": CENTER_OP = 소속 센터의 지선 도착 ~ 인수 확정,
  *         ADMIN = 운영 업무 없음 · 운영 처리 권한 자동 부여 안 함, CONTROL = 지역센터 도착 전까지)
  *   조회: ADMIN(전체 센터 · 조회만), CONTROL(도착 전 IN_TRANSIT 만 — TruckAccessPolicy 의 관제 범위와 같음), CENTER_OP(소속 센터)
  *   확정: CENTER_OP(소속 센터)만

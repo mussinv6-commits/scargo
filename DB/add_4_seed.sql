@@ -108,12 +108,12 @@ UPDATE container_inspections SET record_status = 'FINALIZED', finalized_by_accou
 -- (5) 예외·사고
 INSERT INTO ops_incidents (incident_type, severity, title, detail, hub_id, status, assignee, resolution, reported_by_account_id, reported_by_user_id, created_at, updated_at, resolved_at)
 SELECT * FROM (VALUES
-  ('DAMAGE','HIGH','[시연] 컨테이너 우측 패널 파손','하역 중 우측 패널 변형 발견, 사진 첨부 필요',1,'OPEN',NULL,NULL,5,'hubop01', now() - interval '3 hours', now() - interval '3 hours', NULL::timestamptz),
-  ('SEAL','MEDIUM','[시연] 씰 번호 불일치','도착 씰과 서류 번호 다름',1,'IN_PROGRESS','관제 담당',NULL,4,'control01', now() - interval '26 hours', now() - interval '20 hours', NULL),
-  ('DELAY','LOW','[시연] 항만 반출 지연','게이트 혼잡으로 40분 지연',1,'RESOLVED','관제 담당','혼잡 해소 후 정상 반출',4,'control01', now() - interval '2 days', now() - interval '2 days' + interval '1 hour', now() - interval '2 days' + interval '1 hour'),
-  ('VEHICLE','MEDIUM','[시연] 트레일러 타이어 경고','주행 중 타이어 공기압 경고',1,'RESOLVED','허브 담당','타이어 교체 완료',5,'hubop01', now() - interval '4 days', now() - interval '4 days' + interval '3 hours', now() - interval '4 days' + interval '3 hours')
+  ('DAMAGE','HIGH','컨테이너 우측 패널 파손','하역 중 우측 패널 변형 발견, 사진 첨부 필요',1,'OPEN',NULL,NULL,5,'hubop01', now() - interval '3 hours', now() - interval '3 hours', NULL::timestamptz),
+  ('SEAL','MEDIUM','씰 번호 불일치','도착 씰과 서류 번호 다름',1,'IN_PROGRESS','관제 담당',NULL,4,'control01', now() - interval '26 hours', now() - interval '20 hours', NULL),
+  ('DELAY','LOW','항만 반출 지연','게이트 혼잡으로 40분 지연',1,'RESOLVED','관제 담당','혼잡 해소 후 정상 반출',4,'control01', now() - interval '2 days', now() - interval '2 days' + interval '1 hour', now() - interval '2 days' + interval '1 hour'),
+  ('VEHICLE','MEDIUM','트레일러 타이어 경고','주행 중 타이어 공기압 경고',1,'RESOLVED','허브 담당','타이어 교체 완료',5,'hubop01', now() - interval '4 days', now() - interval '4 days' + interval '3 hours', now() - interval '4 days' + interval '3 hours')
 ) v(incident_type, severity, title, detail, hub_id, status, assignee, resolution, reported_by_account_id, reported_by_user_id, created_at, updated_at, resolved_at)
-WHERE NOT EXISTS (SELECT 1 FROM ops_incidents WHERE title LIKE '[시연]%');
+WHERE NOT EXISTS (SELECT 1 FROM ops_incidents WHERE title LIKE '%');
 
 -- (6) 게이트 예약 (예약 시각이 지난 미확인 2건 → 경보)
 INSERT INTO gate_reservations (company_id, vehicle_no, container_no, direction, planned_at, status, memo, created_by_account_id)

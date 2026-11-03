@@ -337,6 +337,22 @@ public class AmrService {
         return maintRepo.findByRobotIdInOrderByMaintIdDesc(ids, PageRequest.of(0, Math.max(1, Math.min(limit, 100)))).stream().map(this::view).toList();
     }
 
+    // 26.11.02 예지보전 성과 · 이번 달
+    //  고장 전에 정비 = 이번 달 AI 예측(prediction_id 있음)으로 시작해 완료된 정비 건수
+    //  예고 없는 고장 = 이번 달 예측 없이 생긴 고장 정비(CORRECTIVE) 건수
+    //  줄인 정지 시간 = 고장 전에 정비한 건수 × 건당 예상 고장 정지 시간 (가정값 4시간: 예고 없이 고장 나면 부품 수급 · 수리로 반나절 가까이 서는 것으로 가정. 팀에서 바꿀 수 있음)
+    static final double EST_DOWNTIME_PER_FAILURE_H = 4.0;
+    @Transactional(readOnly = true)
+    public PredictiveSummary predictiveSummary(Long hubId) {
+        List<Long> ids = robotIds(hub(hubId, Access.VIEW));
+        java.time.ZoneId zone = java.time.ZoneId.of("Asia/Seoul");
+        java.time.LocalDate first = java.time.LocalDate.now(zone).withDayOfMonth(1);
+        OffsetDateTime from = first.atStartOfDay(zone).toOffsetDateTime(), to = first.plusMonths(1).atStartOfDay(zone).toOffsetDateTime();
+        long pre = ids.isEmpty() ? 0 : maintRepo.countPreemptiveDone(ids, from, to);
+        long un = ids.isEmpty() ? 0 : maintRepo.countUnplanned(ids, from, to);
+        return new PredictiveSummary(first.toString().substring(0, 7), pre, Math.round(pre * EST_DOWNTIME_PER_FAILURE_H * 10) / 10.0, un, EST_DOWNTIME_PER_FAILURE_H);
+    }
+
     private MaintView view(AmrMaintenance m) {
         Double rul = null, vib = null;
         if (m.getPredictionId() != null) {
@@ -370,6 +386,6 @@ public class AmrService {
         }
         return new VehicleView(l.getLogId(), l.getDirection(), l.getRecognizedPlate(), l.getPhotoPlate(), l.getVehicleKind(),
                 l.getDecision(), l.getLane(), l.getDockNo(), l.getOcrConfidence(), l.getOcrEngine(), l.getImageUrl(), l.getBoxCount(),
-                l.getDestHub(), l.getCreatedAt(), l.getSealStatus(), l.getSealInput(), company);
+                l.getDestHub(), l.getCreatedAt(), l.getSealStatus(), l.getSealInput(), company, l.getBlockReason());
     }
 }

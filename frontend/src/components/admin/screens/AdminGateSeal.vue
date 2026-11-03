@@ -16,13 +16,14 @@
             <td>{{ tm(v) }}</td>
             <td>{{ v.direction === 'EXIT' ? '출차' : '입차' }}</td>
             <td><b>{{ fmt(v.plate) || '판독불가' }}</b></td>
-            <td>{{ KIND[v.kind] || '' }}</td>
+            <td>{{ KIND[v.kind] || '' }} <span v-if="v.decision === 'BLOCK'" class="gs-chip bad">{{ REASON[v.blockReason] || '진입 차단' }}</span></td>
             <td><span class="gs-chip" :class="chip(v).c">{{ chip(v).t }}</span></td>
           </tr>
         </tbody>
       </table>
       <aside class="gs-det" v-if="pick">
-        <b class="gs-t">{{ fmt(pick.plate) || '판독불가' }}<template v-if="seal"> · {{ seal.a }}</template></b>
+        <b class="gs-t">{{ fmt(pick.plate) || '판독불가' }}<template v-if="seal"> · {{ seal.a }}</template><template v-else-if="pick.decision === 'BLOCK'"> · 진입 차단</template></b>
+        <p class="gs-s" v-if="pick.decision === 'BLOCK'">{{ REASON_MSG[pick.blockReason] || '진입이 차단된 기록입니다' }}</p>
         <p class="gs-s" v-if="seal">{{ sealMsg || seal.b }}</p>
         <!-- 26.10.29 QA: 등록 씰 번호는 대조 전에 보여 주지 않는다(현장에서 실제 씰을 보고 입력). 미등록이면 입력칸 대신 대기 안내, 일치하면 입력칸을 닫는다 -->
         <div v-if="seal && pick.sealInput && pick.sealStatus !== 'MISSING'" class="gs-res" :class="pick.sealStatus === 'OK' ? 'ok' : 'bad'">
@@ -52,6 +53,14 @@ import { authState } from "@/auth/authState.js";
 import { hubAccess } from "@/components/amr/amrAccess.js";
 
 const KIND = { CARGO: "화물차", COURIER: "택배차", UNKNOWN: "미등록" };
+// 26.11.02 입차 차단 사유 (hub_vehicle_logs.block_reason). 예전 기록은 사유가 없어 '진입 차단'만 표시
+const REASON = { UNREADABLE: "판독 불가", UNREGISTERED: "미등록", PENDING: "심사대기", REJECTED: "불허" };
+const REASON_MSG = {
+  UNREADABLE: "번호판을 읽지 못해 진입을 막았습니다",
+  UNREGISTERED: "S카고에 등록되지 않은 차량이라 진입을 막았습니다",
+  PENDING: "차량 진입 허가 심사가 끝나지 않아 진입을 막았습니다 (차량 관리 → 진입 허가 심사)",
+  REJECTED: "진입 불허된 차량이라 진입을 막았습니다",
+};
 const rows = ref([]); const pick = ref(null); const msg = ref(""); const sealNo = ref(""); const sealMsg = ref(""); const photo = ref("");
 let timer = null;
 const canManage = computed(() => { try { return !!hubAccess(authState.user).canManage; } catch { return true; } });

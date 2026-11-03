@@ -15,6 +15,9 @@
   // 26.10.25 시간대별 운행량: 택배 간선 운송은 심야에 몰린다 (22~05시 3배 · 05~09시 1.5배 · 낮 0.7배 · 저녁 1.2배). 출발 간격을 이 값으로 나눈다
   function flow() { var h = clockTod(); return (h >= 22 || h < 5) ? 3 : h < 9 ? 1.5 : h < 18 ? .7 : 1.2; }
   function rateNow() { var h = clockTod(); return h >= 21 ? .3 : h < 6 ? .5 : 0; }
+  // 26.11.02 통행료는 할인 후에도 10원 단위 (1원 단위로 나오던 것 수정). toll_demo 의 FARE_UNIT 과 같은 값
+  function fare10(x) { return Math.round(x / 10) * 10; }
+  function finOf(b) { return fare10(b * (1 - rateNow())); }
   // 센터별 심야할인 누적(오늘): 서버(DB)는 실제 시각만 알아서, 화면 시계 기준 할인액은 여기에 쌓는다
   var DK = KEY + '_disc';
   function discGet() { var d = null; try { d = JSON.parse(localStorage.getItem(DK) || 'null'); } catch (e) { /* 새로 */ } if (!d || d.day !== day()) d = { day: day() }; ['GGI', 'SEL', 'ICN'].forEach(function (k) { if (!d[k] || typeof d[k] !== 'object') d[k] = { n: 0, b: 0, d: 0 }; }); return d; }
@@ -52,7 +55,7 @@
     var c = s.centers[key]; if (!c) return null;
     var items = info.items || 0, h = clockTod(), b = Math.max(0, Math.min(7, Math.floor((h - 6) / 2))); // 시간대 칸도 3D 하루 시계 기준 (통행료와 같은 시각)
     var part = [Math.round(items * .4), Math.round(items * .3), Math.round(items * .2)]; part.push(Math.max(0, items - part[0] - part[1] - part[2]));
-    var b0 = info.base || BASE[key], f0 = info.fin != null ? info.fin : Math.round(b0 * (1 - rateNow()));
+    var b0 = info.base || BASE[key], f0 = info.fin != null ? info.fin : finOf(b0);
     rec(key, b0, b0 - f0);
     c.trips++; c.items += items; c.base += b0; c.fin += f0; c.hr[b] += items;
     for (var i = 0; i < 4; i++) c.cat[i] += part[i];
@@ -70,7 +73,7 @@
     post('dispatch', { region: key, items: items }).then(function (j) { if (j) setTimeout(sync, 300); cb(j); });
   }
   function arrive(key, info) {
-    if (info && info.asg) { rec(key, info.base != null ? info.base : BASE[key], info.base != null && info.fin != null ? info.base - info.fin : BASE[key] * rateNow()); post('arrive', { assignmentId: info.asg }).then(function () { setTimeout(sync, 300); }); return info.no || null; } // DB 에 도착 기록
+    if (info && info.asg) { rec(key, info.base != null ? info.base : BASE[key], info.base != null && info.fin != null ? info.base - info.fin : BASE[key] - finOf(BASE[key])); post('arrive', { assignmentId: info.asg }).then(function () { setTimeout(sync, 300); }); return info.no || null; } // DB 에 도착 기록
     var s = load();
     if (s.src === 'db') { var c0 = s.centers[key]; return c0 && c0.trucks && c0.trucks.length ? c0.trucks[0].no : null; } // DB 모드: 값은 서버가 정한다 (3D 화면은 보여주기만)
     var t = arriveOn(s, key, info); save(s); return t ? t.no : null;
@@ -93,7 +96,7 @@
     ['GGI', 'SEL', 'ICN'].forEach(function (k) {
       var q = DBSIM[k] || (DBSIM[k] = { next: 0 });
       if (q.asg && now >= q.arrAt) {
-        rec(k, BASE[k], BASE[k] * rateNow()); post('arrive', { assignmentId: q.asg }).then(function () { setTimeout(sync, 300); });
+        rec(k, BASE[k], BASE[k] - finOf(BASE[k])); post('arrive', { assignmentId: q.asg }).then(function () { setTimeout(sync, 300); });
         q.asg = null; q.next = now + rnd(DBGAP[k][0], DBGAP[k][1]) * 1000 / sp / flow();
       } else if (!q.asg && !q.busy && now >= q.next) {
         q.busy = true;
@@ -123,7 +126,7 @@
         c.trucks.forEach(function (t) { if (t.until && now >= t.until) { t.state = '이동 중'; t.status = 'IN_TRANSIT'; delete t.until; } });
         if (!c.next) c.next = now + rnd(GAP[k][0], GAP[k][1]) * 1000 / flow();
         if (now >= c.next && c.trips < MAXTRIPS) { // 하루 상한: 숫자가 끝없이 커지지 않게
-          var t = arriveOn(s, k, { items: 4 + Math.floor(Math.random() * 9), base: BASE[k], fin: Math.round(BASE[k] * (1 - rateNow())) });
+          var t = arriveOn(s, k, { items: 4 + Math.floor(Math.random() * 9), base: BASE[k], fin: finOf(BASE[k]) });
           if (t) t.until = now + HOLD;
           c.next = now + rnd(GAP[k][0], GAP[k][1]) * 1000 / flow();
         }
@@ -143,11 +146,11 @@
   function dispatchNow(key, items) {
     items = items || 4 + Math.floor(Math.random() * 9);
     if (API_OK) return post('dispatch', { region: key, items: items }).then(function (j) { sync(); return j; });
-    arrive(key, { items: items, base: BASE[key], fin: Math.round(BASE[key] * (1 - rateNow())) }); return Promise.resolve(null);
+    arrive(key, { items: items, base: BASE[key], fin: finOf(BASE[key]) }); return Promise.resolve(null);
   }
   function arriveOne(key) {
     var s = load(), c = s.centers[key], t = c && c.trucks.filter(function (x) { return x.status !== 'ARRIVED' && x.assignmentId; })[0];
-    if (t && API_OK) { rec(key, BASE[key], BASE[key] * rateNow()); return post('arrive', { assignmentId: t.assignmentId }).then(function (j) { sync(); return j; }); }
+    if (t && API_OK) { rec(key, BASE[key], BASE[key] - finOf(BASE[key])); return post('arrive', { assignmentId: t.assignmentId }).then(function (j) { sync(); return j; }); }
     return Promise.resolve(null);
   }
   // 26.10.25 시연 모드: 시연을 시작한 시각 이후의 기록만 가져온다 (DB 는 지우지 않는다). 시연이 끝나면 지워진다

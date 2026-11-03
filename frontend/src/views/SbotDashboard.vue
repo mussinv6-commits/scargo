@@ -11,8 +11,8 @@
       <div class="tools">
         <label class="dsel"><i class="bi bi-calendar3"></i> <input v-model="pickDate" type="date" :max="todayStr()" /><button v-if="pickDate" type="button" class="dclr" @click="pickDate = ''">오늘</button></label>
         <label class="dsel">보고 구분 <select v-model="pickPeriod"><option value="day">일간</option><option value="week">주간</option><option value="month">월간</option><option value="year">연간</option></select><span v-if="pickPeriod !== 'day'" class="dclr" style="pointer-events:none">{{ pickRange.from }} ~ {{ pickRange.to }}</span></label>
-        <button type="button" class="csv" @click="exportAmr"><i class="bi bi-file-earmark-excel"></i> AMR 일일 보고서</button>
-        <button type="button" class="csv" @click="exportSafety"><i class="bi bi-file-earmark-excel"></i> 안전사고 보고서</button>
+        <button type="button" class="csv" @click="previewReport(exportAmr)"><i class="bi bi-file-earmark-pdf"></i> AMR 일일 보고서</button>
+        <button type="button" class="csv" @click="previewReport(exportSafety)"><i class="bi bi-file-earmark-pdf"></i> 안전사고 보고서</button>
       </div>
     </div>
 
@@ -149,7 +149,7 @@
       <header class="ph"><span class="pi r"><i class="bi bi-fire"></i></span><h3>화재 · 안전 기록</h3><span class="pr">{{ dateLabel }} {{ fireToday.length }}건 · AMR 관제에서 기록</span></header>
       <table v-if="fireToday.length" class="rtab ftab">
         <thead><tr><th>시작</th><th>해제</th><th>구분</th><th>구역·장비</th><th>대피 / 소요</th><th>내용</th></tr></thead>
-        <tbody><tr v-for="(f, i) in fireToday" :key="i"><td>{{ hhmm(f.start) }}</td><td>{{ hhmm(f.end) }}</td><td><span class="tg" :class="f.kind === 'batt' ? 'chg' : 'fault'">{{ f.kind === "batt" ? "배터리 화재" : "허브 화재" }}</span></td><td>{{ f.label }}</td><td>{{ f.kind === "hub" ? "AMR " + f.evac + "/" + f.total + "대 대피 · " : "" }}{{ fmtDur(f.secs) }}</td><td class="l is-left">{{ f.note }}</td></tr></tbody>
+        <tbody><tr v-for="(f, i) in fireToday" :key="i"><td>{{ hhmm(f.start) }}</td><td>{{ f.ongoing ? "진행 중" : hhmm(f.end) }}</td><td><span class="tg" :class="f.kind === 'batt' ? 'chg' : 'fault'">{{ f.kind === "batt" ? "배터리 화재" : "허브 화재" }}</span></td><td>{{ f.label }}</td><td>{{ f.kind === "hub" ? "AMR " + f.evac + "/" + f.total + "대 대피 · " : "" }}{{ fmtDur(f.secs) }}</td><td class="l is-left">{{ f.note }}</td></tr></tbody>
       </table>
       <div v-else class="dim empty">{{ dateLabel }} 화재 · 안전 기록이 없습니다</div>
     </section>
@@ -162,8 +162,8 @@
 import { ref, computed, onMounted, onBeforeUnmount } from "vue";
 import { amrApi } from "@/components/amr/amrApi.js";
 import { useRouter } from "vue-router";
-import { buildXlsx, downloadBlob } from "@/utils/xlsxLite.js";
-import { readFire } from "@/utils/fireLog.js"; // 26.10.29 화재 기록 (AMR 관제에서 기록)
+import { buildXlsx, downloadBlob, previewReport } from "@/utils/xlsxLite.js"; // 26.11.02 previewReport: 보고서 미리보기 (PDF 다운로드 · 인쇄 · 닫기)
+import { readFire, ongoingRow, settleActiveFire } from "@/utils/fireLog.js"; import { onSafetyPoke } from "@/utils/fireSignal.js"; // 26.10.29 화재 기록 (AMR 관제에서 기록)
 import { createReport, nowInfo } from "@/utils/reportXlsx.js"; // 26.10.28 보고서 공통 양식
 const router = useRouter();
 const go = (p) => router.push(p);
@@ -249,7 +249,11 @@ const dayKey = () => { const d = new Date(); return `${d.getFullYear()}-${d.getM
 const rulRange = (h) => { const x = Number(h); if (!isFinite(x)) return "?시간"; const lo = Math.max(0, Math.floor(x * 0.8)), hi = Math.max(lo + 1, Math.ceil(x * 1.2)); return `약 ${lo}~${hi}시간`; };
 const fire = ref({ active: null, log: [] });
 const srvAlert = ref(null); // 서버의 경보 상태 (기준). 서버가 "경보 없음"이면 이 브라우저에 남은 진행 중 표시는 무시 · null = 서버 연결 불가
-async function loadSrvAlert() { try { const a = await amrApi.safetyNow(); srvAlert.value = a || null; } catch { srvAlert.value = null; } }
+async function loadSrvAlert() {
+  try { const a = await amrApi.safetyNow(); srvAlert.value = a || null; } catch { srvAlert.value = null; }
+  // 26.11.03 서버가 "경보 없음"인데 이 브라우저에 진행 중 기록이 남아 있으면(관리자 종료 신호를 놓침) 기록 목록으로 확정 → 보고서 · 화재 기록에 남는다
+  if (srvAlert.value && srvAlert.value.active === false && fire.value.active && settleActiveFire("경보 종료 후 자동 기록 (관리자 종료 신호를 받지 못함)")) readShared();
+}
 const fireNow = computed(() => { void nowTick.value; const a = fire.value.active; return a ? Math.max(0, Math.round((Date.now() - a.since) / 1000)) : 0; });
 const fmtDur = (sec) => (sec >= 60 ? Math.floor(sec / 60) + "분 " + (sec % 60) + "초" : sec + "초");
 const hhmm = (t) => { const d = new Date(t); return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); };
@@ -269,7 +273,8 @@ const pickRange = computed(() => {
   return { s, e, from: f(s), to: f(e) };
 });
 const dateLabel = computed(() => (pickPeriod.value !== "day" ? pickRange.value.from + " ~ " + pickRange.value.to : pickDate.value && pickDate.value !== todayStr() ? pickDate.value : "오늘"));
-const fireToday = computed(() => { const a = pickRange.value.s.getTime(), b = pickRange.value.e.getTime() + 86400000; return fire.value.log.filter((x) => x.end >= a && x.end < b); });
+// 26.11.03 종료 전(진행 중)인 화재도 표 · 보고서에 "진행 중"으로 포함한다 (예전: 종료 버튼을 눌러야만 기록이 생겨 보고서에 안 나왔다)
+const fireToday = computed(() => { void nowTick.value; const a = pickRange.value.s.getTime(), b = pickRange.value.e.getTime() + 86400000; const rows = fire.value.log.filter((x) => x.end >= a && x.end < b); const o = fireOn.value ? ongoingRow(fire.value.active) : null; return o && o.start >= a && o.start < b ? [o, ...rows] : rows; });
 // 알림 처리 상태: 미확인 → 확인 → 조치 중 → 완료 (이 브라우저에 저장). 완료된 알림은 흐리게 아래로 보낸다
 const AKEY = "sbot_alert_state_v1", ASTEP = ["", "확인", "조치 중", "완료"];
 const astate = ref((() => { try { const o = JSON.parse(localStorage.getItem(AKEY)); return o && o.day === todayStr() ? o.m || {} : {}; } catch { return {}; } })());
@@ -279,10 +284,10 @@ function readShared() {
   fire.value = readFire();
   try { const s = JSON.parse(localStorage.getItem(SKEY)); shared.value = s && s.day === dayKey() && s.centers ? s : null; } catch { shared.value = null; }
 }
-let sTimer, aTimer;
+let sTimer, aTimer, offPoke = () => {};
 const onStorage = (e) => { if (!e.key || e.key === SKEY || e.key === "sbot_fire_v1") readShared(); };
-onMounted(() => { if (speed.value > 1) setSpeed(speed.value); readShared(); sTimer = setInterval(readShared, 1000); loadSrvAlert(); aTimer = setInterval(loadSrvAlert, 3000); window.addEventListener("storage", onStorage); });
-onBeforeUnmount(() => { clearInterval(sTimer); clearInterval(aTimer); window.removeEventListener("storage", onStorage); });
+onMounted(() => { if (speed.value > 1) setSpeed(speed.value); readShared(); sTimer = setInterval(readShared, 1000); loadSrvAlert(); aTimer = setInterval(loadSrvAlert, 3000); window.addEventListener("storage", onStorage); offPoke = onSafetyPoke(() => { loadSrvAlert(); readShared(); }); });
+onBeforeUnmount(() => { clearInterval(sTimer); clearInterval(aTimer); window.removeEventListener("storage", onStorage); offPoke(); });
 const CATL = ["전자제품", "의류", "식품", "기타"];
 // 허브 → 물류센터 운송 현황: 택배 이동 화면의 택배차 상태(이동 중/입고 완료)와 물품 구성을 그대로 읽는다 (DB: shipment_legs.status, hub_dispatches)
 const transport = computed(() => [["SEL", "서울", 38, "#f0a800"], ["GGI", "경기", 55, "#4aa3ff"], ["ICN", "인천", 75, "#4cc38a"]].map(([q, n, km, c]) => {
@@ -357,19 +362,19 @@ function exportSafety() {
   rp.paragraph(list.length ? `${day} 화재 · 안전 사고 ${list.length}건 (허브 화재 경보 ${nHub}건, AMR 배터리 화재 ${nBatt}건). 총 소요 ${fmtDur(secs)}.` : `${day} 접수된 화재 · 안전 사고가 없음.`, 2);
   rp.section("2. 사고 목록");
   rp.table([{ label: "번호", type: "center" }, { label: "발생", type: "center" }, { label: "종료", type: "center" }, { label: "구분" }, { label: "구역 · 장비" }, { label: "소요(초)", type: "num", sum: true }, { label: "AMR 대피(대)", type: "num" }, { label: "AMR 전체(대)", type: "num" }, { label: "내용" }],
-    list.map((f, i) => [i + 1, hhmm(f.start), hhmm(f.end), KIND[f.kind] || f.kind, f.label, f.secs || 0, f.kind === "hub" ? f.evac || 0 : "", f.kind === "hub" ? f.total || 0 : "", f.note || ""]), { total: list.length > 0, totalLabel: "합계", empty: "해당 날짜의 사고 기록이 없습니다." });
+    list.map((f, i) => [i + 1, hhmm(f.start), f.ongoing ? "진행 중" : hhmm(f.end), KIND[f.kind] || f.kind, f.label, f.secs || 0, f.kind === "hub" ? f.evac || 0 : "", f.kind === "hub" ? f.total || 0 : "", f.note || ""]), { total: list.length > 0, totalLabel: "합계", empty: "해당 날짜의 사고 기록이 없습니다." });
   rp.section("3. 대응 절차 기록  (시스템이 자동 수행한 조치)");
-  rp.table([{ label: "구분" }, { label: "단계", type: "center" }, { label: "조치" }, { label: "담당" }],
+  rp.table([{ label: "구분", span: 2 }, { label: "단계", type: "center" }, { label: "조치", span: 4 }, { label: "담당", span: 2 }],
     [["허브 화재", 1, "경보 발령 · 안내방송 · 신규 작업 중단", "시스템"], ["허브 화재", 2, "입차 게이트 차단 · AMR 전원 대피 구역 이동", "시스템"], ["허브 화재", 3, "스프링클러 작동 확인 · 소방차 전용 구역 확보", "시스템 / 담당자"], ["허브 화재", 4, "화재 종료(관리자 확인) · 장비 복귀 · 게이트 재개", "관리자"],
       ["배터리 화재", 1, "온도 이상 감지 · 해당 AMR 작업 중단", "시스템"], ["배터리 화재", 2, "격리 구역 이동 · 충전 차단 · 주변 장비 접근 금지", "시스템"], ["배터리 화재", 3, "소화 설비 작동 · 허브 운영은 유지", "시스템"], ["배터리 화재", 4, "진압 확인 · 관리자 확인 후 배터리 교체 · 복귀", "관리자"]]);
   rp.section("4. 영향 평가");
   const evacRate = nHub && list.filter((f) => f.kind === "hub").reduce((a, f) => a + (f.total || 0), 0) ? Math.round((list.filter((f) => f.kind === "hub").reduce((a, f) => a + (f.evac || 0), 0) / list.filter((f) => f.kind === "hub").reduce((a, f) => a + (f.total || 0), 0)) * 100) : null;
-  rp.table([{ label: "항목" }, { label: "내용" }],
+  rp.table([{ label: "항목", span: 3 }, { label: "내용", span: 6 }],
     [["총 중단·대응 시간", list.length ? fmtDur(secs) : "-"], ["AMR 대피율", evacRate == null ? "-" : evacRate + "%"], ["입차 게이트", nHub ? `허브 화재 ${nHub}건 동안 차단` : "영향 없음"], ["허브 운영", nBatt && !nHub ? "배터리 화재는 격리 구역에서 처리 · 허브 운영 유지" : nHub ? "허브 화재 중 신규 작업 중단" : "영향 없음"], ["인명 피해", "기록 없음 (담당자 확인)"]]);
   rp.section("5. 원인 분석 · 재발 방지  (담당자 작성)");
   rp.paragraph("원인:\n\n재발 방지 대책:", 4);
   rp.section("6. 후속 조치 확인");
-  rp.table([{ label: "조치 항목" }, { label: "담당" }, { label: "기한", type: "center" }, { label: "완료", type: "center" }], [["", "", "", ""], ["", "", "", ""], ["", "", "", ""]]);
+  rp.table([{ label: "조치 항목", span: 4 }, { label: "담당", span: 2 }, { label: "기한", type: "center", span: 2 }, { label: "완료", type: "center" }], [["", "", "", ""], ["", "", "", ""], ["", "", "", ""]]);
   rp.note("※ 이 문서는 S-Bot 에서 자동 작성되었습니다. 원인 · 후속 조치는 담당자가 직접 기입해 결재를 받으십시오.");
   downloadBlob(buildXlsx([rp.sheet("안전사고 보고서", [10, 11, 11, 16, 16, 12, 13, 13, 30])]), `S봇_안전사고보고서_${day === "오늘" ? tn.day : day}.xlsx`);
 }
@@ -384,6 +389,12 @@ function taskSheet(det, tn, dk) {
   rp2.note("※ 건별 기록은 로봇 시뮬레이터가 DB에 남긴 작업 로그이며, 허브 처리 물품(오늘 투입 물량)과 출처가 다릅니다.");
   return rp2.sheet("건별 운반 내역", [8, 12, 11, 8, 18, 12, 12, 11, 14, 14, 10]);
 }
+// 26.11.02 충전 이력 로봇별 요약 (AMR 대수가 많아도 한눈에 보이도록): 로봇 · 충전 횟수 · 최초 · 최종 시각
+function chargeByRobot(list) {
+  const m = new Map();
+  list.forEach((c) => { const t = String(c.at).slice(11, 16), e = m.get(c.code) || { n: 0, a: t, b: t }; e.n++; if (t < e.a) e.a = t; if (t > e.b) e.b = t; m.set(c.code, e); });
+  return [...m.entries()].sort((x, y) => String(x[0]).localeCompare(String(y[0]), "ko", { numeric: true })).map(([code, e]) => [code, e.n, e.a, e.b]);
+}
 async function exportAmrPast(tn, dk) {
   const pn = PNAME[pickPeriod.value], ranged = pickPeriod.value !== "day";
   let det = null; try { det = await amrApi.reportDetail(ranged ? pickRange.value.from : pickDate.value, ranged ? pickRange.value.to : ""); } catch { det = null; }
@@ -395,11 +406,12 @@ async function exportAmrPast(tn, dk) {
   rp.paragraph(`${dk.kor} 기준 곤지암 허브 AMR ${pn} 운영 기록을 보고함 (데이터: DB 기록). 건별 운반 ${tasks.toLocaleString("ko-KR")}건, 충전 ${chg.length}회, 화재 · 안전 기록 ${list.length}건임.`, 2);
   rp.section("2. 처리 요약");
   rp.table([{ label: "건별 운반(건)" }, { label: "충전(회)" }, { label: "화재 · 안전 기록(건)" }], [[tasks, chg.length, list.length]]);
-  rp.section("3. 충전 이력  (해당 날짜 충전소 이동 기록)");
+  rp.section("3. 충전 이력  (로봇별 요약 → 시간순 기록)");
+  if (chg.length) rp.table([{ label: "로봇", type: "center", span: 2 }, { label: "충전(회)", type: "num" }, { label: "최초 시각", type: "center", span: 2 }, { label: "최종 시각", type: "center", span: 2 }], chargeByRobot(chg));
   rp.table([{ label: "시각", type: "center" }, { label: "로봇", type: "center" }, { label: "내용" }], chg.map((c) => [String(c.at).slice(11, 16), c.code, c.msg]), { empty: det ? "해당 날짜 충전 기록이 없습니다." : "충전 기록을 불러오지 못했습니다 (백엔드 재시작 후 사용 가능)." });
   rp.section(`4. 화재 · 안전 기록  (AMR 관제 화면 기록 · ${dateLabel.value})`);
   rp.table([{ label: "시작", type: "center" }, { label: "해제", type: "center" }, { label: "구분", type: "center" }, { label: "구역·장비" }, { label: "대피(대)", type: "num" }, { label: "소요(초)", type: "num" }, { label: "내용" }],
-    list.map((f) => [hhmm(f.start), hhmm(f.end), f.kind === "batt" ? "배터리 화재" : "허브 화재", f.label, f.kind === "hub" ? f.evac : "", f.secs, f.note]), { empty: dateLabel.value + " 화재 · 안전 기록이 없습니다." });
+    list.map((f) => [hhmm(f.start), f.ongoing ? "진행 중" : hhmm(f.end), f.kind === "batt" ? "배터리 화재" : "허브 화재", f.label, f.kind === "hub" ? f.evac : "", f.secs, f.note]), { empty: dateLabel.value + " 화재 · 안전 기록이 없습니다." });
   rp.note("※ 이 문서는 S-Bot 에서 자동 작성되었습니다.");
   downloadBlob(buildXlsx([rp.sheet(`AMR ${pn} 보고서`, [14, 14, 14, 16, 14, 12, 12, 18, 26]), taskSheet(det, tn, dk)]), `S봇_AMR${pn}운영보고서_${dk.day}.xlsx`);
 }
@@ -472,13 +484,14 @@ async function exportAmr() {
   rp.section("7. 정비 이력  (오늘 건 + 진행 중 · 예약 건)");
   rp.table([{ label: "시각", type: "center" }, { label: "로봇", type: "center" }, { label: "정비 부품" }, { label: "상태", type: "center" }, { label: "승인" }, { label: "소요(분)" }, { label: "메모" }], mtRows, { empty: "오늘 정비 기록이 없습니다." });
 
-  rp.section("8. 충전 이력  (오늘 충전소 이동 기록)");
+  rp.section("8. 충전 이력  (로봇별 요약 → 시간순 기록)");
+  if (((det && det.charges) || []).length) rp.table([{ label: "로봇", type: "center", span: 2 }, { label: "충전(회)", type: "num" }, { label: "최초 시각", type: "center", span: 2 }, { label: "최종 시각", type: "center", span: 2 }], chargeByRobot(det.charges));
   const chRows = ((det && det.charges) || []).map((c) => [String(c.at).slice(11, 16), c.code, c.msg]);
   rp.table([{ label: "시각", type: "center" }, { label: "로봇", type: "center" }, { label: "내용" }], chRows, { empty: det ? "오늘 충전 기록이 없습니다." : "충전 기록을 불러오지 못했습니다 (백엔드 재시작 후 사용 가능)." });
 
   rp.section(`9. 화재 · 안전 기록  (AMR 관제 화면 기록 · ${dateLabel.value})`);
   rp.table([{ label: "시작", type: "center" }, { label: "해제", type: "center" }, { label: "구분", type: "center" }, { label: "구역·장비" }, { label: "대피(대)", type: "num" }, { label: "소요(초)", type: "num" }, { label: "내용" }],
-    fireToday.value.map((f) => [hhmm(f.start), hhmm(f.end), f.kind === "batt" ? "배터리 화재" : "허브 화재", f.label, f.kind === "hub" ? f.evac : "", f.secs, f.note]), { empty: dateLabel.value + " 화재 · 안전 기록이 없습니다." });
+    fireToday.value.map((f) => [hhmm(f.start), f.ongoing ? "진행 중" : hhmm(f.end), f.kind === "batt" ? "배터리 화재" : "허브 화재", f.label, f.kind === "hub" ? f.evac : "", f.secs, f.note]), { empty: dateLabel.value + " 화재 · 안전 기록이 없습니다." });
 
   rp.section("10. 특이사항 및 조치");
   const lines = [];
