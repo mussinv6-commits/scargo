@@ -84,6 +84,31 @@ public interface OverloadCheckRepository
             Pageable pageable
     );
 
+    // 26.11.03 출처별 조회: road = true 구간 관제 도로 계측(check_type = HIGHWAY), false 항만 검사소 계량(그 밖)
+    @Query("SELECT o FROM OverloadCheck o WHERE (:road = true AND o.checkType = 'HIGHWAY') "
+            + "OR (:road = false AND (o.checkType IS NULL OR o.checkType <> 'HIGHWAY'))")
+    Page<OverloadCheck> findBySource(
+            @Param("road") boolean road,
+            Pageable pageable
+    );
+
+    @Query("SELECT o FROM OverloadCheck o WHERE ((:road = true AND o.checkType = 'HIGHWAY') "
+            + "OR (:road = false AND (o.checkType IS NULL OR o.checkType <> 'HIGHWAY'))) AND o.vehicleNo IN "
+            + "(SELECT t.vehicleNo FROM Truck t WHERE t.company.companyId = :companyId)")
+    Page<OverloadCheck> findBySourceAndTruckCompanyId(
+            @Param("road") boolean road,
+            @Param("companyId") Long companyId,
+            Pageable pageable
+    );
+
+    @Query("SELECT o FROM OverloadCheck o WHERE o.vehicleNo = :vehicleNo AND ((:road = true AND o.checkType = 'HIGHWAY') "
+            + "OR (:road = false AND (o.checkType IS NULL OR o.checkType <> 'HIGHWAY')))")
+    Page<OverloadCheck> findByVehicleNoAndSource(
+            @Param("vehicleNo") String vehicleNo,
+            @Param("road") boolean road,
+            Pageable pageable
+    );
+
     // 동일한 ENTRY gateLog가 이미 계량됐는지 확인
     boolean existsByGateLogId(Long gateLogId);
 

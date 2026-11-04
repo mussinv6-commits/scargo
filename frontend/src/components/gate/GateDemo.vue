@@ -276,7 +276,7 @@ async function fetchLoadingMap() {
 async function fetchOverload(vno) {
   try {
     const res = await axios.get(`${API_BASE}/api/overload-checks/vehicle`, {
-      params: { vehicleNo: vno, page: 0, size: 50 },
+      params: { vehicleNo: vno, page: 0, size: 50, source: 'PORT' }, // 26.11.03 출차 판정은 항만 검사소 계량만 (구간 관제 도로 계측 제외)
       withCredentials: true,
     })
     const key = String(vno).replace(/\s/g, '')

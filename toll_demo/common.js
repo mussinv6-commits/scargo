@@ -151,19 +151,19 @@ function setupChrome(active, opts) {
 //  공용 시계 = 택배 이동 · 물류센터 관제와 같은 하루 시계(sbot_clock). 이 화면은 다른 주소(8002)라 저장소를 같이 못 쓰므로
 //  S카고 웹 화면(부모 창)이 1초마다 postMessage({type:'sbot-clock', tod, rate}) 로 보내 준다. 부모가 없으면(직접 열었을 때) PC 시각.
 //  이 시각을 서버(/api/clock)에도 알려 새 차량의 출차 시각 · 심야할인 판정이 택배 이동과 같은 시각을 따른다.
-function todText(t) { const h = Math.floor(t) % 24, m = Math.floor((t % 1) * 60); return `${p2(h)}:${p2(m)} · ${h >= 6 && h < 18 ? '주간' : '야간'}`; }
-// 자동 운행 표시줄: 서버가 알려 준 상태를 그대로 보여 준다 (원인을 알 수 없는 '준비 중' 같은 말은 쓰지 않는다)
+function todText(t) { const h = Math.floor(t) % 24, m = Math.floor((t % 1) * 60); return `${p2(h)}:${p2(m)} · ${h >= 6 && h < 18 ? '주간' : '야간'}`; }   // 26.11.02 QA: 낮/밤 → 주간/야간
+// 게이트 연동 표시줄: 서버가 알려 준 상태를 그대로 보여 준다 (원인을 알 수 없는 '준비 중' 같은 말은 쓰지 않는다)
+// 26.11.03 구간 관제에는 항만 게이트에서 출차(EXIT)한 차량만 나온다. 화면의 자동 출차 ON/OFF 버튼은 없앴다 (사진 폴더 자동 출차는 서버 환경변수 TOLL_AUTO=1 일 때만)
 function paintAuto() {
   const ac = document.getElementById('autoChip'), am = document.getElementById('autoMsg'); if (!ac) return;
-  const A = window.__auto || {}, playing = !!window.__simPlaying;
+  const A = window.__auto || {};
   let t, bg = '#e3f6ec', fg = '#12814a', m = '';
   if (A.ok === false) {
     t = A.old ? '⚠ 서버 재시작 필요' : '⚠ 서버 연결 실패'; bg = '#fde8e6'; fg = '#b42318';
     m = A.old ? '구간 관제 서버가 예전 버전입니다. run_toll.bat 창을 닫고 다시 실행해 주세요.' : '구간 관제 서버(8002)에 연결할 수 없습니다. run_toll.bat 이 켜져 있는지 확인해 주세요.';
-  } else if (A.state === 'model_loading') { t = '● 번호판 인식 모델 불러오는 중'; bg = '#fff0d0'; fg = '#8a4b00'; m = '10~30초 걸립니다. 끝나면 차량이 자동으로 출차합니다.'; }
-  else if (A.state === 'model_error' || A.state === 'no_db') { t = '⚠ 자동 운행 불가'; bg = '#fde8e6'; fg = '#b42318'; m = A.state === 'no_db' ? 'DB 주소(db_url.txt)가 비어 있습니다.' : '번호판 인식 모델 오류: ' + (A.err || ''); }
-  else if (A.state === 'off') { t = '○ 자동 운행 꺼짐'; bg = '#eceff5'; fg = '#475069'; m = '서버에서 자동 운행을 껐습니다 (TOLL_AUTO=0).'; }
-  else { t = playing ? '● 자동 운행 중' : '● 첫 차량 출차 중'; if (A.err) { bg = '#fff0d0'; fg = '#8a4b00'; m = '출차 재시도 중: ' + A.err; } }
+  } else if (A.state === 'no_db') { t = '⚠ 게이트 연동 불가'; bg = '#fde8e6'; fg = '#b42318'; m = 'DB 주소(db_url.txt)가 비어 있습니다.'; }
+  else if (A.on) { t = '● 자동 출차 ON (TOLL_AUTO=1)'; bg = '#fff0d0'; fg = '#8a4b00'; m = '사진 폴더 차량도 함께 출차됩니다. 시연은 TOLL_AUTO 없이 서버를 켜세요.'; }
+  else { t = '● 항만 게이트 출차 연동'; m = A.live ? `운행 중 ${A.live}대 · 항만 게이트에서 출차한 차량만 표시됩니다` : '항만 게이트에서 출차하면 차량이 여기서 출발합니다.'; }
   ac.textContent = t; ac.style.background = bg; ac.style.color = fg; if (am) am.textContent = m;
 }
 function autoChrome(active) {
@@ -179,7 +179,7 @@ function autoChrome(active) {
   const ping = async () => {
     try {
       const r = await api('/api/clock', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tod: cur(), rate: base ? base.rate : 1 / 3600 }) });
-      window.__auto = { ok: true, state: r && r.state, live: r && r.live, err: r && r.err };
+      window.__auto = { ok: true, on: r && r.on, state: r && r.state, live: r && r.live, err: r && r.err };
     } catch (e) {
       // 404 = 서버가 자동 운행 기능이 없는 예전 버전(재시작 전). 그 밖에는 연결 실패
       window.__auto = { ok: false, old: /404/.test(String(e.message)), msg: String(e.message) };

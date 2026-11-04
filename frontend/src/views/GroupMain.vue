@@ -7,6 +7,8 @@
         <a href="#" @click.prevent="logout">로그아웃</a>
       </template>
     </div>
+    <!-- 26.11.03 회사 홍보영상: 왼쪽 위 버튼 → 재생 창 (로그인 · 로고 화면은 그대로) -->
+    <button type="button" class="promo-btn" @click="openPromo"><i>▶</i>회사 홍보영상<em>50초</em></button>
     <svg class="emb" viewBox="-150 -150 300 300" aria-label="S GROUP">
       <defs>
         <linearGradient id="gg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f6e4b0"/><stop offset=".45" stop-color="#d8a94e"/><stop offset="1" stop-color="#8f6420"/></linearGradient>
@@ -62,6 +64,12 @@
       <button type="button" class="card" @click="go('/sbot')">
         <div class="ti"><svg class="ic" viewBox="-24 -24 48 48"><circle r="22" fill="#0b1d36" stroke="url(#gg)" stroke-width="1.6"/><g transform="translate(-15,-14) scale(.26)"><path d="M18 52 A47 47 0 0 1 112 52" fill="none" stroke="#ff9f1c" stroke-width="9" stroke-linecap="round" transform="translate(0,-4)"/><rect x="46" y="30" width="38" height="26" rx="4" fill="#fff"/><path d="M46 43h38M65 30v26" stroke="#0b1d36" stroke-width="3"/><rect x="22" y="58" width="86" height="30" rx="9" fill="#fff"/><circle cx="40" cy="96" r="11" fill="#fff"/><circle cx="90" cy="96" r="11" fill="#fff"/></g></svg><b>S-BOT</b></div><span>허브 자율 이송 로봇 관제</span>
       </button>
+    </div>
+    <div v-if="promo" ref="promoBox" class="promo-ov" tabindex="-1" @click.self="promo=false" @keydown.esc="promo=false">
+      <div class="promo-box">
+        <div class="promo-hd"><span>S GROUP · 회사 홍보영상</span><button type="button" @click="promo=false">닫기 ✕</button></div>
+        <video class="promo-vd" src="/video/s_group_promo.mp4" controls autoplay playsinline preload="metadata"></video>
+      </div>
     </div>
     <div v-if="credits" class="cred" @click="credits=false">
       <canvas ref="fx" class="fx"></canvas>
@@ -183,6 +191,11 @@ const scopeLabel = computed(() => {
   return u.adminScope === "SBOT" ? "S-Bot 관리자" : "S Cargo 관리자";
 });
 
+// 26.11.03 회사 홍보영상 재생 창 (영상 파일: public/video/s_group_promo.mp4)
+const promo = ref(false);
+const promoBox = ref(null);
+function openPromo() { promo.value = true; nextTick(() => promoBox.value && promoBox.value.focus()); }
+
 function go(p) {
   msg.value = "";
   if (p === "/sbot") {
@@ -277,4 +290,13 @@ function logout() {
 .c-row { display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center; margin: 18px 0 !important; }
 .c-row b { min-width: 0; font-weight: 500; letter-spacing: .25em; color: #f1e2b8; }
 .c-row span { color: #c9d3e3; font-size: 15px; }
+.promo-btn { position: absolute; top: 14px; left: 26px; display: flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 999px; border: 1px solid rgba(216,169,78,.7); background: rgba(11,29,54,.6); color: #f6e4b0; font-size: 13px; font-weight: 600; letter-spacing: .06em; cursor: pointer; }
+.promo-btn:hover { background: rgba(216,169,78,.18); }
+.promo-btn i { display: grid; place-items: center; width: 22px; height: 22px; padding-left: 2px; border-radius: 50%; background: linear-gradient(135deg,#f6e4b0,#d8a94e,#8f6420); color: #0b1d36; font-style: normal; font-size: 10px; }
+.promo-btn em { font-style: normal; font-weight: 500; color: #9fb0c8; }
+.promo-ov { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; background: rgba(3,10,22,.82); outline: none; }
+.promo-box { width: fit-content; max-width: 92vw; border-radius: 14px; overflow: hidden; border: 1px solid rgba(216,169,78,.6); background: #06101f; box-shadow: 0 20px 60px rgba(0,0,0,.6); }
+.promo-hd { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; color: #f6e4b0; font-size: 14px; font-weight: 600; letter-spacing: .06em; }
+.promo-hd button { background: none; border: 0; color: #9fb0c8; font-size: 12px; cursor: pointer; }
+.promo-vd { display: block; height: min(78vh, 820px); max-width: 92vw; background: #000; }
 </style>

@@ -202,7 +202,7 @@ def db_status():
 # 번호판 OCR 은 인천항 출차에서 한 번만 한다. 이후 지점 계측 결과는 도로공사 연계(시연은 toll_trip.py 의 Mock)로 받아 차량 번호로 매칭한다.
 trips = {}                                                    # trip_key -> 시연 진행 상태 (메모리). 기록은 지점마다 DB 에 저장
 trips_lock = threading.RLock()
-MAX_PICK_TRIES = 15
+MAX_PICK_TRIES = 30                                           # 26.11.02 택배차 사진을 건너뛰므로 15 → 30
 POINT_KM = None
 
 
@@ -314,58 +314,62 @@ def start_trip(scenario, dep=None, route='BASIC'):
                 except Exception as e:
                     print('[DB] 미등록 기록 저장 실패:', e)
             continue
-        if _ < MAX_PICK_TRIES // 2:                              # 항만 게이트(과적 검사)를 통과한 차량을 먼저 출차시킨다 -> 게이트 기록과 구간 관제가 같은 차량
-            try:
-                cleared = {r['vehicle_no'] for r in db_rows("SELECT DISTINCT vehicle_no FROM overload_checks WHERE is_passed AND checked_at > now() - interval '24 hours'", ())}
-            except Exception:
-                cleared = set()
-            if cleared and v['vehicle_no'] not in cleared:
-                skipped.append((f"{path.name} -> {v['vehicle_no']}", '항만 게이트 통과 기록 없음'))
-                continue
-        with trips_lock:
-            if any(t['status'] == 'RUNNING' and t['plate'] == v['vehicle_no'] for t in trips.values()):
-                skipped.append((path.name, '이미 운행 중인 차량'))
-                continue
-        if not v.get('gross_weight_kg') and v.get('empty_weight_kg') and v.get('max_payload_kg'):
-            v['gross_weight_kg'] = int(v['empty_weight_kg']) + int(v['max_payload_kg'])      # 총중량이 비어 있으면 공차+최대적재량으로 대신함
-        if not v.get('gross_weight_kg'):
-            skipped.append((f"{path.name} -> DB 번호 {v.get('vehicle_no')}", '제원(총중량) 없음'))
+        res, why = launch_trip(scenario, dep, route, v, rec, crop, path.name)
+        if res is None:
+            skipped.append(why)
             continue
-        ok_sc, why = toll_trip.eligible(scenario, v)
-        if not ok_sc:
-            skipped.append((f"{path.name} -> {v.get('vehicle_no')}", why))
-            continue
-        tid = format(random.getrandbits(40), 'x')
-        try:
-            fined = toll_db.fined_trips_1y(DB_URL, v['vehicle_no'])         # 최근 1년 과태료 통보 통행 수 (2회 이상이면 심야할인 제외)
-        except Exception:
-            fined = 0
-        trip = toll_trip.new_trip(tid, scenario, v['vehicle_no'], v, parse_depart(dep), fined, route)
-        trip['recognition'] = rec
-        trip['vehicle_info'] = v
-        CROP_DIR.mkdir(parents=True, exist_ok=True)
-        if crop is not None and getattr(crop, 'size', 0):
-            cv2.imwrite(str(CROP_DIR / f'{tid}.jpg'), crop)
-            trip['crop_url'] = f'/api/crop/{tid}.jpg'
-        trip['watch'] = route_watch.Watch(v['vehicle_no'], route, 'NORMAL')
-        try:
-            trip['departure_id'] = toll_db.save_departure(DB_URL, rec.get('plate'), rec.get('confidence'), 'DEPARTED', v['vehicle_no'], trip.get('crop_url'))
-            w = trip['watch']
-            first_km = toll_trip.POINTS[0]['km']
-            for _i in range(20):                                           # 출차 후 첫 계측 지점(검문소 18)까지 이동
-                w.step(1)
-                if w.last and w.last['km'] >= first_km:
-                    break
-            sync_trip(trip)
-        except Exception as e:
-            return dict(error=f'DB 저장에 실패했습니다: {type(e).__name__}: {e}'), 500
-        with trips_lock:
-            trips[trip['trip_key']] = trip
-            while len(trips) > 30:
-                trips.pop(next(iter(trips)))
-        return dict(trip_id=trip['trip_key'], plate=trip['plate'], scenario=scenario, route=route), 200
+        return res
     return dict(error='시연에 쓸 수 있는 사진을 찾지 못했습니다 (인식 실패/미등록/제원 없음). 건너뛴 사진: ' +
                       ', '.join(f'{n}({r})' for n, r in skipped[:6])), 404
+
+
+def launch_trip(scenario, dep, route, v, rec, crop=None, src='', front_url=None, gate_log_id=None):
+    """번호판이 확인된 등록 차량을 인천항에서 출차시킨다 -> ((응답 dict, 상태 코드), None) / 출차 못 하면 (None, (출처, 이유))"""
+    import toll_trip
+    import route_watch
+    import toll_db
+    # 26.11.02 QA: 이 구간(인천항 → 곤지암 허브)은 항만 게이트를 지나는 컨테이너 화물차만. 일반 화물차(허브 → 물류센터 택배차)는 항만 게이트 OCR 목록에 없으므로 출차시키지 않는다
+    if v.get('vehicle_category') and v['vehicle_category'] != 'CONTAINER_TRUCK':
+        return None, (f"{src} -> {v.get('vehicle_no')}", '항만 → 허브 화물차 아님 (택배차)')
+    with trips_lock:
+        if any(t['status'] == 'RUNNING' and t['plate'] == v['vehicle_no'] for t in trips.values()):
+            return None, (src, '이미 운행 중인 차량')
+    if not v.get('gross_weight_kg') and v.get('empty_weight_kg') and v.get('max_payload_kg'):
+        v['gross_weight_kg'] = int(v['empty_weight_kg']) + int(v['max_payload_kg'])      # 총중량이 비어 있으면 공차+최대적재량으로 대신함
+    if not v.get('gross_weight_kg'):
+        return None, (f"{src} -> DB 번호 {v.get('vehicle_no')}", '제원(총중량) 없음')
+    ok_sc, why = toll_trip.eligible(scenario, v)
+    if not ok_sc:
+        return None, (f"{src} -> {v.get('vehicle_no')}", why)
+    tid = format(random.getrandbits(40), 'x')
+    try:
+        fined = toll_db.fined_trips_1y(DB_URL, v['vehicle_no'])         # 최근 1년 과태료 통보 통행 수 (2회 이상이면 심야할인 제외)
+    except Exception:
+        fined = 0
+    trip = toll_trip.new_trip(tid, scenario, v['vehicle_no'], v, parse_depart(dep), fined, route)
+    trip['recognition'] = rec
+    trip['vehicle_info'] = v
+    CROP_DIR.mkdir(parents=True, exist_ok=True)
+    if crop is not None and getattr(crop, 'size', 0):
+        cv2.imwrite(str(CROP_DIR / f'{tid}.jpg'), crop)
+        trip['crop_url'] = f'/api/crop/{tid}.jpg'
+    trip['watch'] = route_watch.Watch(v['vehicle_no'], route, 'NORMAL')
+    try:
+        trip['departure_id'] = toll_db.save_departure(DB_URL, rec.get('plate'), rec.get('confidence'), 'DEPARTED', v['vehicle_no'], trip.get('crop_url'), front_url, gate_log_id)
+        w = trip['watch']
+        first_km = toll_trip.POINTS[0]['km']
+        for _i in range(20):                                           # 출차 후 첫 계측 지점(검문소 18)까지 이동
+            w.step(1)
+            if w.last and w.last['km'] >= first_km:
+                break
+        sync_trip(trip)
+    except Exception as e:
+        return (dict(error=f'DB 저장에 실패했습니다: {type(e).__name__}: {e}'), 500), None
+    with trips_lock:
+        trips[trip['trip_key']] = trip
+        while len(trips) > 30:
+            trips.pop(next(iter(trips)))
+    return (dict(trip_id=trip['trip_key'], plate=trip['plate'], scenario=scenario, route=route), 200), None
 
 
 def find_trip(key):
@@ -412,31 +416,34 @@ def _sync_safe(trip):
 sim = dict(playing=False, tick=1.2, pause_on_dev=True, notice=None, seen=set())   # 1.2초/칸: 3대 시연이 약 2분. pause_on_dev: 경로 이탈이 처음 감지되면 재생을 멈추고 안내를 띄운다
 
 
-AVG_KMH_SIM = 60.0          # 평균 속도 가정(km/h): 공용 시계가 흐른 시간만큼만 이동한다 (시계 x배속이면 이동도 x배)
+MAX_KM_PER_SEC = float(os.environ.get('TOLL_MAX_KMPS', '2.2'))   # 화면 이동 상한(실제 1초당 km). 2.2 면 66km 구간 약 30초. 바꾸려면 환경변수 TOLL_MAX_KMPS (1.5 = 약 45초)
 
 
-def sim_steps():
-    """이번 틱에 옮길 칸 수. 공용 시계가 있으면 60km/h x 흐른 시뮬레이션 시간 / 관측 간격(STEP_KM), 없으면 1칸"""
+def clock_km(dt):
+    """26.11.02 QA: 공용 하루 시계가 dt 실제 초 동안 흐른 시간 x 평균 속도(60km/h) = 이번에 갈 거리(km).
+       시계가 빨리 가면 차량도 그만큼 빨리 간다 (통과 예정 시각 = 출발 + 거리/60km/h 와 맞음). 화면이 시계를 안 보내면 None"""
+    import toll_trip as T
+    c = AUTO['clock']
+    if not c or time.time() - AUTO['seen'] > 20:
+        return None
+    # 26.11.03: 공용 시계 기본 속도(0.2시간/초)면 초당 12km 라 66km 구간을 5초 만에 지나간다 → 화면에서 따라갈 수 있게 실제 초당 최대 거리로 제한
+    return min(max(0.0, float(c['rate'])) * dt * T.AVG_KMH, MAX_KM_PER_SEC * dt)
+
+
+def sim_tick(dt=None):
     import route_watch
-    now = time.time()
-    last, sim['last'] = sim.get('last'), now
-    c = AUTO.get('clock')
-    if not c or now - c['at'] > 20 or last is None:
-        return 1 if not c or now - c['at'] > 20 else 0
-    dt = min(now - last, sim['tick'] * 3)
-    sim['acc'] = sim.get('acc', 0.0) + AVG_KMH_SIM * float(c['rate']) * dt / route_watch.STEP_KM
-    n = int(sim['acc'])
-    sim['acc'] -= n
-    return min(n, 60)
-
-
-def sim_tick():
-    n = sim_steps()
+    km = clock_km(dt if dt is not None else sim['tick'])
     with trips_lock:
         live = [t for t in trips.values() if not finished(t)]
         for t in live:
-            if n:
-                move_trip(t, n)
+            if km is None:                                  # 시계 없음(?dev=1 시연 컨트롤 등): 예전처럼 한 틱에 한 칸
+                move_trip(t, 1)
+                continue
+            t['odo_km'] = t.get('odo_km', 0.0) + km         # 칸(0.8km)보다 짧게 간 거리는 모아 두었다가 한 칸이 되면 움직인다
+            n = int(t['odo_km'] // route_watch.STEP_KM)
+            if n > 0:
+                t['odo_km'] -= n * route_watch.STEP_KM
+                move_trip(t, min(n, 200))
         if sim['pause_on_dev']:
             for t in live:
                 k = t['trip_key']
@@ -450,13 +457,14 @@ def sim_tick():
 
 
 async def sim_loop():
+    last = time.monotonic()
     while True:
         await asyncio.sleep(sim['tick'])
-        if not sim['playing']:
-            sim['last'] = None
+        now = time.monotonic()
+        dt, last = now - last, now                          # 실제 흐른 초 (틱 처리 시간 포함)
         if sim['playing']:
             try:
-                await asyncio.to_thread(sim_tick)
+                await asyncio.to_thread(sim_tick, dt)
             except Exception as e:
                 print('[시뮬레이션 오류]', e)
 
@@ -469,8 +477,8 @@ def sim_state():
 #  · 구간 관제 화면이 열려 있는 동안만(화면이 20초 안에 서버를 불렀을 때) 새 차량을 출차시킨다 → 아무도 안 볼 때 DB 기록이 쌓이지 않는다
 #  · 출차 시각은 택배 이동 · 물류센터 관제와 같은 '공용 하루 시계'. 화면(iframe)이 /api/clock 으로 알려 주고, 없으면 PC 시각
 #  · 3대 중 3번째마다 우회(이탈) 차량 1대. 이탈이 감지돼도 멈추지 않고 안내만 표시한다 (pause_on_dev 끔)
-#  · 끄려면 환경변수 TOLL_AUTO=0 (또는 POST /api/auto?on=0)
-AUTO = dict(on=os.environ.get('TOLL_AUTO', '1') != '0', target=3, gap=(6.0, 14.0), next=0.0, n=0, err=None, seen=0.0, clock=None)
+#  · 26.11.03 구간 관제에는 항만 게이트에서 출차한 차량만 나온다: 사진 폴더 자동 출차는 기본 꺼짐, 화면 버튼도 없앴다. 개발용으로 켜려면 환경변수 TOLL_AUTO=1
+AUTO = dict(on=os.environ.get('TOLL_AUTO', '0') == '1', target=3, gap=(6.0, 14.0), next=0.0, n=0, err=None, seen=0.0, clock=None)
 
 
 def auto_dep():
@@ -485,17 +493,65 @@ def auto_dep():
         return 'now'
 
 
+# ---- 26.11.03 항만 게이트 출차 연동: 시연에서 항만 게이트 OCR 화면에서 출차(EXIT)시킨 차량을, 구간 관제 화면을 여는 순간 인천항에서 출발시킨다
+#  · 게이트 서버(gate_api.py)가 남긴 gate_logs 의 EXIT 기록(ocr_raw_data.scanType)을 읽는다. 번호판 OCR 은 게이트에서 이미 했으므로 다시 하지 않는다
+#  · 최근 GATE_RECENT_MIN 분 안의 출차 중 아직 구간 관제에 출차시키지 않은 것(departure_logs.gate_log_id 로 확인)만. 서버를 다시 켜도 게이트 로그의 차량이 나온다
+#  · 같은 번호가 이미 운행 중이면 그 차량이 도착한 뒤 다시 시도한다
+GATE_RECENT_MIN = int(os.environ.get('TOLL_GATE_RECENT_MIN', '30'))
+GATE_EXIT_SQL = """SELECT g.gate_log_id, g.actual_vehicle_no, g.recognized_plate_no, g.plate_confidence, g.front_image_url
+                   FROM gate_logs g WHERE g.actual_vehicle_no IS NOT NULL AND g.ocr_raw_data->>'scanType' = 'EXIT'
+                    AND g.pass_at > now() - make_interval(mins => %s)
+                    AND NOT EXISTS (SELECT 1 FROM departure_logs d WHERE d.gate_log_id = g.gate_log_id)
+                   ORDER BY g.gate_log_id"""
+GATE = dict(failed=set())                                     # 출차시킬 수 없는 기록(미등록 · 택배차 · 제원 없음 등): 다시 시도하지 않는다
+
+
+def gate_exit_trips():
+    """아직 구간 관제에 없는 최근 항만 게이트 출차 차량을 출차시킨다 -> 출차시킨 대수"""
+    n = 0
+    for g in db_rows(GATE_EXIT_SQL, (GATE_RECENT_MIN,)):
+        gid = g['gate_log_id']
+        if gid in GATE['failed']:
+            continue
+        look = lookup_vehicle(g['actual_vehicle_no'])
+        if not look['registered']:
+            GATE['failed'].add(gid)
+            print('[게이트 연동] 차량 조회 실패:', g['actual_vehicle_no'], look.get('error'))
+            continue
+        conf = float(g['plate_confidence']) if g['plate_confidence'] is not None else None
+        rec = dict(status='SUCCESS', plate=g['recognized_plate_no'] or g['actual_vehicle_no'], confidence=conf)
+        res, why = launch_trip('A', auto_dep(), 'BASIC', look['vehicle'], rec, None, '항만 게이트 출차', g['front_image_url'], gid)
+        if res is None:
+            if why[1] != '이미 운행 중인 차량':                    # 운행 중이면 도착 후 다시
+                GATE['failed'].add(gid)
+                print('[게이트 연동] 출차 못 함:', g['actual_vehicle_no'], why[1])
+            continue
+        if res[1] != 200:
+            GATE['failed'].add(gid)
+            print('[게이트 연동] 출차 못 함:', g['actual_vehicle_no'], res[0].get('error'))
+            continue
+        n += 1
+        print('[게이트 연동] 출차:', g['actual_vehicle_no'])
+    return n
+
+
 async def auto_loop():
     while True:
         await asyncio.sleep(2)
         try:
-            if not AUTO['on'] or not DB_URL or model_state['state'] != 'ready':
-                continue
-            if time.time() - AUTO['seen'] > 20:             # 화면이 열려 있지 않으면 새 차량을 내보내지 않는다
+            if not DB_URL or time.time() - AUTO['seen'] > 20:   # 화면이 열려 있지 않으면 새 차량을 내보내지 않는다
                 continue
             sim['playing'] = True                           # 일시정지 버튼이 없다: 항상 재생
             sim['pause_on_dev'] = False
             sim['notice'] = None
+            try:
+                if await asyncio.to_thread(gate_exit_trips):        # 게이트 출차 차량은 간격 · 대수 제한 없이 바로 출발
+                    AUTO['next'] = max(AUTO['next'], time.time() + random.uniform(*AUTO['gap']))
+                    continue
+            except Exception as e:                              # gate_logs 가 없는 DB 등: 연동 없이 자동 운행만
+                print('[게이트 연동 오류]', type(e).__name__, e)
+            if not AUTO['on'] or model_state['state'] != 'ready':  # 자동 출차 OFF: 게이트 출차 차량만 (26.11.03)
+                continue
             if time.time() < AUTO['next']:
                 continue
             with trips_lock:
@@ -522,6 +578,19 @@ async def auto_loop():
 async def lifespan(_app):
     asyncio.create_task(sim_loop())
     asyncio.create_task(auto_loop())
+    if DB_URL:
+        def gate_col():                                        # 게이트 출차 연동용 칸 (1030 DB 수정분 4번과 같음). 이미 있으면 아무 일도 안 한다
+            c = db_connect()
+            try:
+                cur = c.cursor()
+                cur.execute('ALTER TABLE departure_logs ADD COLUMN IF NOT EXISTS gate_log_id BIGINT REFERENCES gate_logs(gate_log_id)')
+                cur.execute('CREATE UNIQUE INDEX IF NOT EXISTS uk_departure_logs_gate_log ON departure_logs (gate_log_id) WHERE gate_log_id IS NOT NULL')
+            finally:
+                c.close()
+        try:
+            await asyncio.to_thread(gate_col)
+        except Exception as e:
+            print('[게이트 연동] departure_logs.gate_log_id 준비 실패:', type(e).__name__, e)
     async def warm():                                          # 모델을 미리 불러 첫 클릭이 느리지 않게
         try:
             import toll_recognize
@@ -723,12 +792,6 @@ async def api_clock(request: Request):
 @app.get('/api/auto')
 async def api_auto_get():
     return dict(on=AUTO['on'], target=AUTO['target'], err=AUTO['err'], dep=auto_dep())
-
-
-@app.post('/api/auto')
-async def api_auto_set(on: int = 1):
-    AUTO['on'] = bool(on)
-    return dict(on=AUTO['on'])
 
 
 @app.get('/api/sim')

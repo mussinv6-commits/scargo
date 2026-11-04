@@ -198,11 +198,12 @@ def _exec(url, sql, args=None, returning=False):
 
 
 # ------------------------------- 출차 · 경로 이벤트 · 위치 · 관제 조치 저장 -------------------------------
-def save_departure(url, plate, confidence, result, vehicle_no=None, crop_url=None, front_url=None):
-    """인천항 출차 OCR 기록. result: DEPARTED / OCR_FAILED / UNREGISTERED -> departure_id"""
-    return _exec(url, """INSERT INTO departure_logs (recognized_plate_no, vehicle_no, plate_confidence, result, plate_crop_url, front_image_url)
-                         VALUES (%s, %s, %s, %s, %s, %s) RETURNING departure_id""",
-                 (plate or None, vehicle_no, confidence, result, crop_url, front_url), returning=True)
+def save_departure(url, plate, confidence, result, vehicle_no=None, crop_url=None, front_url=None, gate_log_id=None):
+    """인천항 출차 OCR 기록. result: DEPARTED / OCR_FAILED / UNREGISTERED -> departure_id
+       gate_log_id: 항만 게이트 출차(gate_logs)로 출발한 차량이면 그 기록 번호 (26.11.03 같은 출차를 두 번 내보내지 않게)"""
+    return _exec(url, """INSERT INTO departure_logs (recognized_plate_no, vehicle_no, plate_confidence, result, plate_crop_url, front_image_url, gate_log_id)
+                         VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING departure_id""",
+                 (plate or None, vehicle_no, confidence, result, crop_url, front_url, gate_log_id), returning=True)
 
 
 def save_progress(url, trip_key, events, first_seq, pos):

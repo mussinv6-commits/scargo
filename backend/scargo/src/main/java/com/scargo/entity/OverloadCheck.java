@@ -140,6 +140,13 @@ public class OverloadCheck {
     @Column(name = "station_code", length = 20)
     private String stationCode;
 
+    // 26.11.03 기록 출처 구분 (읽기 전용): 구간 관제(toll_demo)가 도로 지점(검문소 · 톨게이트)에서 계측한 기록은 HIGHWAY + 지점(station_id), 항만 검사소 계량은 NULL
+    @Column(name = "check_type", insertable = false, updatable = false)
+    private String checkType;
+
+    @Column(name = "station_id", insertable = false, updatable = false)
+    private Long stationId;
+
     // 오기 정정용 도메인 메서드
     public void updateCorrection(String vehicleNo, String containerNo, String usagePurpose, 
                                  Boolean isViolation, String violationReason, 

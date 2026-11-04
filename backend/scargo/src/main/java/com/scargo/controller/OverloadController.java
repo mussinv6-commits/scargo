@@ -42,12 +42,14 @@ public class OverloadController {
 
     // 2. 과적 검사 전체 목록 조회 (페이징, 관리자 전용)
     // 예시: GET /api/overload-checks?page=0&size=10&sort=checkId,desc
+    // 26.11.03 source=PORT 항만 검사소 계량만 / source=ROAD 구간 관제 도로 계측만 (없으면 전부)
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMIN', 'CORPORATE_APPROVED')") // 26.09.30 병합: 사업자 허용(백엔드.zip)
     public ResponseEntity<Page<OverloadCheckResponse>> getAllChecks(
+            @RequestParam(value = "source", required = false) String source,
             @PageableDefault(size = 10, sort = "checkId", direction = Sort.Direction.DESC) Pageable pageable,
             Authentication authentication) {
-        Page<OverloadCheckResponse> responses = overloadService.getAllChecks(companyScope(authentication), pageable);
+        Page<OverloadCheckResponse> responses = overloadService.getAllChecks(companyScope(authentication), source, pageable);
         return ResponseEntity.ok(responses);
     }
 
@@ -66,10 +68,11 @@ public class OverloadController {
     @PreAuthorize("hasAnyRole('ADMIN', 'CONTROL', 'HUB_OP', 'CENTER_OP', 'CONTAINER_DRIVER', 'BRANCH_DRIVER', 'CORPORATE_APPROVED')")
     public ResponseEntity<Page<OverloadCheckResponse>> getChecksByVehicleNo(
             @RequestParam("vehicleNo") String vehicleNo,
+            @RequestParam(value = "source", required = false) String source, // 26.11.03 PORT / ROAD (없으면 전부)
             @PageableDefault(size = 10, sort = "checkId", direction = Sort.Direction.DESC) Pageable pageable,
             Authentication authentication) {
         truckAccessPolicy.requireRead(authentication, vehicleNo);
-        Page<OverloadCheckResponse> responses = overloadService.getChecksByVehicleNo(vehicleNo, pageable);
+        Page<OverloadCheckResponse> responses = overloadService.getChecksByVehicleNo(vehicleNo, source, pageable);
         return ResponseEntity.ok(responses);
     }
 

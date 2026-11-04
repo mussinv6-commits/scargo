@@ -69,7 +69,7 @@ export function mountAuthGate(host, opt = {}) {
       <button class="otpg-btn otpg-scan" type="button" hidden>QR 찍어서 로그인</button>
       <div class="otpg-or otpg-scan-or" hidden>또는 6자리 입력</div>
       <div class="otpg-code"><b></b><b></b><b></b><b></b><b></b><b></b><input inputmode="numeric" autocomplete="one-time-code" maxlength="6" aria-label="OTP 6자리"></div>
-      <div class="otpg-t">웹의 코드는 30초마다 바뀝니다 <i><u></u></i></div>
+      <div class="otpg-t">웹의 QR · 코드는 <b>30초</b>마다 바뀌고 한 번만 쓸 수 있습니다 <i><u></u></i></div>
       <div class="otpg-keep">통과하면 이 기기에서 <b>24시간</b> 로그인 유지</div>
       <div class="otpg-msg"></div>
       <button class="otpg-btn otpg-go" type="button" disabled>확인</button>
@@ -140,7 +140,7 @@ export function mountAuthGate(host, opt = {}) {
     if (destroyed) return
     if (r.data) { msg(views[view], '인증 완료', true); setTimeout(hide, 350); return }
     el.classList.remove('err'); void el.offsetWidth; el.classList.add('err')
-    box.clear(); msg(views[view], r.error || '인증 실패')
+    box.clear(); msg(views[view], (r.error || '인증 실패') + (r.status === 401 ? ' · QR과 6자리는 30초마다 바뀌고 한 번만 쓸 수 있습니다. 웹에서 새로 뜬 것을 다시 찍어 주세요' : ''))
   }
 
   async function refresh() {

@@ -71,6 +71,11 @@ public class OverloadCheckResponse {
     private Long gateLogId;
     private String stationCode;
 
+    // 26.11.03 과적 검사 관리 '항만 검사소 계량 / 구간 관제 계측' 분리: 출처(HIGHWAY = 구간 관제) · 도로 계측 지점
+    private String checkType;
+    private Long stationId;
+    private String stationName;
+
     // Entity -> DTO 매핑 생성자
     public OverloadCheckResponse(OverloadCheck check) {
         this.checkId = check.getCheckId();
@@ -118,5 +123,7 @@ public class OverloadCheckResponse {
         this.checkedAt = check.getCheckedAt();
         this.gateLogId = check.getGateLogId();
         this.stationCode = check.getStationCode();
+        this.checkType = check.getCheckType();
+        this.stationId = check.getStationId();
     }
 }

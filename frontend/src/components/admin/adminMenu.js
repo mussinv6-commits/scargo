@@ -39,9 +39,9 @@ export const ADMIN_MENU = {
     { to: '/w/W-07', label: '운송오더·물품 관리', icon: 'bi-boxes' },
     { to: '/admin/gates', label: '검문소 관리', icon: 'bi-shield-check', img: dashIcons.sidebar.검문소관리 }, // 26.10.28 안전·기타 → 항만 → 허브
     { to: '/admin/gate-ocr', label: '항만 게이트 OCR 검사', icon: 'bi-upc-scan', img: dashIcons.sidebar.검문소관리 }, // 26.10.28 안전·기타 → 항만 → 허브
-    { to: '/w/W-12', label: '구간 관제', icon: 'bi-signpost' }, // 26.10.29 구간 관제 지도 · 차량 관제 · 계측 이력을 메뉴 1개로 합침 (화면 안 버튼으로 전환)
     { to: '/admin/weighbridge', label: '검사소 계량', icon: 'bi-truck-front', img: dashIcons.sidebar.과적검사관리 }, // 26.10.28 안전·기타 → 항만 → 허브
     { to: '/admin/overload-checks', label: '과적 검사 관리', icon: 'bi-speedometer', img: dashIcons.sidebar.과적검사관리 }, // 26.10.28 안전·기타 → 항만 → 허브
+    { to: '/w/W-12', label: '구간 관제', icon: 'bi-signpost' }, // 26.10.29 구간 관제 지도 · 차량 관제 · 계측 이력을 메뉴 1개로 합침 (화면 안 버튼으로 전환) / 26.11.03 시연 흐름(게이트 입차 → 계량 → 과적 판정 → 게이트 출차 → 구간 운행)에 맞춰 과적 검사 관리 아래로
     { to: '/admin/arrivals', label: '허브 입고 관리', icon: 'bi-clipboard-check', img: dashIcons.sidebar.적재기록조회 }, // 26.10.28 안전·기타 → 항만 → 허브
     { to: '/admin/handovers', label: '인수 내역', icon: 'bi-file-earmark-check', img: dashIcons.sidebar.적재기록조회 }, // 26.10.29 허브 인계 기록 · 인수증 PDF
   ],

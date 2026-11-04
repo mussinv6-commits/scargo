@@ -762,8 +762,11 @@ async function scanQr() {
 }
 function renderAuth() {
   const ok = amrApi.authed
-  $('au-status').textContent = ok ? '● 인증됨 · ' + hoursLeft() + '시간 남음' : '○ 인증 필요'
-  $('au-status').style.color = ok ? 'var(--green)' : 'var(--amber)'
+  // 26.11.03 만료 시각까지 보여 준다 (로그인은 24시간 유지 · 3시간 미만이면 곧 만료 안내)
+  const exp = amrApi.tokenExpiresAt, left = ok ? (exp - Date.now()) / 3600e3 : 0
+  const d = new Date(exp), when = (d.getMonth() + 1) + '/' + d.getDate() + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0')
+  $('au-status').textContent = ok ? '● 인증됨 · ' + when + '까지 (' + (left >= 1 ? Math.floor(left) + '시간' : Math.max(1, Math.ceil(left * 60)) + '분') + ' 남음)' + (left < 3 ? ' · 곧 만료 · 웹의 QR로 다시 로그인하세요' : '') : '○ 인증 필요 · 로그인하면 24시간 유지'
+  $('au-status').style.color = ok ? (left < 3 ? 'var(--amber)' : 'var(--green)') : 'var(--amber)'
   $('au-out').hidden = !ok
 }
 startSafetyWatch({ getFn: () => amrApi.safetyNow(), skip: () => tab === '3d' }) // 3D 탭에는 자체 경보 카드 · 훈련 버튼이 있어 전체 붉은 화면은 숨김 // 종료는 웹의 "화재 종료" 버튼

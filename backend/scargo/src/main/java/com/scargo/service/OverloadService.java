@@ -1,6 +1,8 @@
 package com.scargo.service;
 
 import com.scargo.Enum.NotificationType;
+import com.scargo.app.entity.OverloadCheckpoint;
+import com.scargo.app.repository.OverloadCheckpointRepository;
 import com.scargo.dto.NotificationCreateRequest;
 import com.scargo.dto.OverloadCheckCreateRequest;
 import com.scargo.dto.OverloadCheckResponse;
@@ -18,6 +20,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 
 @Slf4j
@@ -29,6 +33,7 @@ public class OverloadService {
     private final OverloadCheckRepository overloadCheckRepository;
     private final NotificationService notificationService; // 알림 서비스 주입
     private final TruckRepository truckRepository; // 트럭 정보 조회를 위한 리포지토리 주입
+    private final OverloadCheckpointRepository checkpointRepository; // 26.11.03 도로 계측 지점 이름
 
     // 1. 과적 검사 기록 생성
     @Transactional
@@ -165,16 +170,50 @@ public class OverloadService {
     // 3. 전체 목록 조회 (페이징)
     // 26.10.22 수정: companyId가 있으면 그 업체 차량의 검사만 (null = 전체, 관리자용)
     public Page<OverloadCheckResponse> getAllChecks(Long companyId, Pageable pageable) {
-        return (companyId == null
-                ? overloadCheckRepository.findAll(pageable)
-                : overloadCheckRepository.findByTruckCompanyId(companyId, pageable))
-                .map(OverloadCheckResponse::new);
+        return getAllChecks(companyId, null, pageable);
+    }
+
+    // 26.11.03 source: PORT = 항만 검사소 계량, ROAD = 구간 관제 도로 계측(검문소 · 톨게이트), 그 밖 = 전부
+    public Page<OverloadCheckResponse> getAllChecks(Long companyId, String source, Pageable pageable) {
+        Boolean road = roadSource(source);
+        Page<OverloadCheck> page;
+        if (road == null) {
+            page = companyId == null ? overloadCheckRepository.findAll(pageable) : overloadCheckRepository.findByTruckCompanyId(companyId, pageable);
+        } else {
+            page = companyId == null ? overloadCheckRepository.findBySource(road, pageable)
+                    : overloadCheckRepository.findBySourceAndTruckCompanyId(road, companyId, pageable);
+        }
+        Map<Long, String> names = stationNames();
+        return page.map(c -> withStationName(new OverloadCheckResponse(c), names));
+    }
+
+    private static Boolean roadSource(String source) {
+        if ("ROAD".equalsIgnoreCase(source)) return true;
+        if ("PORT".equalsIgnoreCase(source)) return false;
+        return null;
+    }
+
+    private Map<Long, String> stationNames() {
+        return checkpointRepository.findAll().stream()
+                .collect(Collectors.toMap(OverloadCheckpoint::getCheckpointId, OverloadCheckpoint::getCheckpointName, (a, b) -> a));
+    }
+
+    private static OverloadCheckResponse withStationName(OverloadCheckResponse r, Map<Long, String> names) {
+        if (r.getStationId() != null) r.setStationName(names.get(r.getStationId()));
+        return r;
     }
 
     // 4. 차량 번호별 조회 (페이징)
     // 26.10.22 수정: 부분 검색 → 완전 일치. 권한 확인한 차량 외의 기록이 섞여 나오지 않게 함
     public Page<OverloadCheckResponse> getChecksByVehicleNo(String vehicleNo, Pageable pageable) {
-        return overloadCheckRepository.findByVehicleNo(vehicleNo, pageable)
+        return getChecksByVehicleNo(vehicleNo, null, pageable);
+    }
+
+    // 26.11.03 source=PORT: 항만 게이트 출차 판정은 검사소 계량만 본다 (구간 관제 도로 계측이 섞이지 않게)
+    public Page<OverloadCheckResponse> getChecksByVehicleNo(String vehicleNo, String source, Pageable pageable) {
+        Boolean road = roadSource(source);
+        return (road == null ? overloadCheckRepository.findByVehicleNo(vehicleNo, pageable)
+                : overloadCheckRepository.findByVehicleNoAndSource(vehicleNo, road, pageable))
                 .map(OverloadCheckResponse::new);
     }
 
